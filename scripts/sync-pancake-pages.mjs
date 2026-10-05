@@ -66,35 +66,53 @@ function normalize(raw){
 
 async function discoverShopId(){if(SHOP_ID)return SHOP_ID;const url=new URL('https://pos.pages.fm/api/v1/shops');url.searchParams.set('api_key',API_KEY);const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error(`Pancake shops ${r.status}: ${(await r.text()).slice(0,180)}`);const body=await r.json();const shops=Array.isArray(body.shops)?body.shops:Array.isArray(body.data)?body.data:[];if(!shops.length)throw new Error('API Key hợp lệ nhưng không tìm thấy shop Pancake nào.');if(shops.length>1)console.log(`API Key trả về ${shops.length} shop; dùng shop đầu tiên: ${shops[0].id} - ${shops[0].name||''}`);SHOP_ID=String(shops[0].id);return SHOP_ID}
 
+async function fetchOrderPage(from,to,page){
+  const url=new URL(`https://pos.pages.fm/api/v1/shops/${encodeURIComponent(SHOP_ID)}/orders`);
+  url.searchParams.set('api_key',API_KEY);
+  url.searchParams.set('from_date',from);
+  url.searchParams.set('to_date',to);
+  url.searchParams.set('page_number',String(page));
+  url.searchParams.set('page_size','100');
+  const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
+  if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
+  const body=await r.json();
+  const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
+  const totalPages=num(get(body,'total_pages|pagination.total_pages|paging.total_pages|meta.total_pages'));
+  return {data,totalPages,body}
+}
+
 async function fetchOrders(from,to){
-  const rows=[];
-  const seenPages=new Set();
-  for(let page=1;page<=60;page++){
-    const url=new URL(`https://pos.pages.fm/api/v1/shops/${encodeURIComponent(SHOP_ID)}/orders`);
-    url.searchParams.set('api_key',API_KEY);
-    url.searchParams.set('from_date',from);
-    url.searchParams.set('to_date',to);
-    url.searchParams.set('page_number',String(page));
-    url.searchParams.set('page_size','100');
-    const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
-    if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
-    const body=await r.json();
-    const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
-    const first=data[0]||{}, last=data[data.length-1]||{};
-    const firstId=str(get(first,'id|display_id|order_id|code'));
-    const lastId=str(get(last,'id|display_id|order_id|code'));
-    const signature=`${data.length}:${firstId}:${lastId}`;
-    if(seenPages.has(signature)){
-      console.log(`Pagination repeated at page ${page}; stopping to avoid duplicate loop.`);
-      break;
+  const first=await fetchOrderPage(from,to,1);
+  const rows=[...first.data.map(normalize).filter(x=>x.totalAmount>=0)];
+  console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''}`);
+  if(!first.data.length||first.data.length<100)return rows;
+
+  if(first.totalPages){
+    const maxPages=Math.min(60,first.totalPages);
+    for(let fromPage=2;fromPage<=maxPages;fromPage+=5){
+      const pages=Array.from({length:Math.min(5,maxPages-fromPage+1)},(_,i)=>fromPage+i);
+      const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
+      for(let i=0;i<batch.length;i++){
+        const page=pages[i],data=batch[i].data;
+        console.log(`Orders page ${page}: ${data.length} rows / ${maxPages} pages`);
+        rows.push(...data.map(normalize).filter(x=>x.totalAmount>=0));
+      }
     }
-    seenPages.add(signature);
+    return rows
+  }
+
+  const seenPages=new Set();
+  const firstA=first.data[0]||{},firstB=first.data[first.data.length-1]||{};
+  seenPages.add(`${first.data.length}:${str(get(firstA,'id|display_id|order_id|code'))}:${str(get(firstB,'id|display_id|order_id|code'))}`);
+  for(let page=2;page<=40;page++){
+    const res=await fetchOrderPage(from,to,page),data=res.data;
+    const a=data[0]||{},b=data[data.length-1]||{};
+    const sig=`${data.length}:${str(get(a,'id|display_id|order_id|code'))}:${str(get(b,'id|display_id|order_id|code'))}`;
+    if(seenPages.has(sig)){console.log(`Pagination repeated at page ${page}; stopping.`);break}
+    seenPages.add(sig);
+    console.log(`Orders page ${page}: ${data.length} rows`);
     rows.push(...data.map(normalize).filter(x=>x.totalAmount>=0));
-    const totalPages=num(get(body,'total_pages|pagination.total_pages|paging.total_pages|meta.total_pages'));
-    const hasNext=get(body,'has_next|pagination.has_next|paging.has_next|meta.has_next');
-    console.log(`Orders page ${page}: ${data.length} rows${totalPages?' / '+totalPages+' pages':''}`);
-    if(!data.length || data.length<100 || (totalPages&&page>=totalPages) || hasNext===false)break;
-    await new Promise(resolve=>setTimeout(resolve,120));
+    if(!data.length||data.length<100)break;
   }
   return rows
 }
