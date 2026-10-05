@@ -188,17 +188,17 @@
 
   <dialog id="unlockDialog">
     <form method="dialog" id="unlockForm" class="dialogForm">
-      <div class="dialogHead"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button value="cancel" class="x">×</button></div>
+      <div class="dialogHead"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button type="button" class="x" data-close-dialog="unlockDialog">×</button></div>
       <p>Dữ liệu công khai trên GitHub Pages đã được mã hoá. Nhập mật khẩu dashboard để giải mã ngay trên máy của bạn.</p>
       <label class="field"><span>Mật khẩu dashboard</span><input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" /></label>
       <div class="dialogError" id="unlockError"></div>
-      <div class="dialogActions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primaryBtn">Mở dữ liệu</button></div>
+      <div class="dialogActions"><button type="button" data-close-dialog="unlockDialog">Đóng</button><button type="submit" value="default" class="primaryBtn">Mở dữ liệu</button></div>
     </form>
   </dialog>
 
   <dialog id="settingsDialog">
     <form method="dialog" id="settingsForm" class="dialogForm settingsForm">
-      <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Mục tiêu doanh thu</h2></div><button value="cancel" class="x">×</button></div>
+      <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Mục tiêu doanh thu</h2></div><button type="button" class="x" data-close-dialog="settingsDialog">×</button></div>
       <p>Các giá trị này được lưu trên trình duyệt hiện tại và áp dụng ngay vào biểu đồ.</p>
       <div class="settingsGrid">
         <label class="field"><span>Target tháng</span><input id="targetMonthInput" type="number" min="0" step="1000000" /></label>
@@ -209,7 +209,7 @@
         <b>Target thực/ngày = Target ngày + Gap bù/ngày.</b>
         <span>Gap thực tế trên dashboard vẫn được tính tự động: Doanh số − Target thực/ngày.</span>
       </div>
-      <div class="dialogActions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
+      <div class="dialogActions"><button type="button" data-close-dialog="settingsDialog">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
     </form>
   </dialog>
 
