@@ -17,7 +17,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: sevenam-pages
+  group: sevenam-pages-v2
   cancel-in-progress: true
 
 jobs:
