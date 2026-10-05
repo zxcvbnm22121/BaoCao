@@ -4,32 +4,51 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#111111" />
-  <title>Seven.AM · Live Sales Dashboard</title>
+  <title>Seven.AM · Revenue Command Center</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <aside class="side">
-    <div class="brand"><div class="logo">7A</div><div><b>SEVEN.AM</b><small>LIVE SALES</small></div></div>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brandMark">7A</div>
+      <div class="brandText"><b>SEVEN.AM</b><small>REVENUE COMMAND</small></div>
+    </div>
+
     <nav class="nav">
-      <button class="on" data-view="live">▣ <span>Dashboard Live</span></button>
-      <button data-view="channels">◫ <span>Theo kênh</span></button>
-      <button data-view="sales">◎ <span>Sale Online</span></button>
-      <button data-view="monthly">◒ <span>Tiến độ tháng</span></button>
+      <button class="navBtn active" data-view="overview"><span>▦</span><b>Tổng quan</b></button>
+      <button class="navBtn" data-view="channels"><span>◫</span><b>Theo kênh</b></button>
+      <button class="navBtn" data-view="sales"><span>◎</span><b>Sale Online</b></button>
+      <button class="navBtn" data-view="monthly"><span>◒</span><b>Tiến độ tháng</b></button>
     </nav>
-    <div class="source"><div id="sourceText">GITHUB PAGES</div><small>Sync tối đa 5 phút/lần</small></div>
+
+    <div class="sideBottom">
+      <button class="sideAction" id="settingsBtn">⚙ <span>Mục tiêu & KPI</span></button>
+      <div class="sourceBox">
+        <div class="sourceDot"></div>
+        <div><b id="sourceText">GITHUB PAGES</b><small id="sourceSub">Đang kiểm tra dữ liệu</small></div>
+      </div>
+    </div>
   </aside>
 
   <main class="main" id="app">
-    <header class="head">
-      <div><div class="eyebrow">SEVEN.AM / LIVE SALES</div><h1>Dashboard doanh thu</h1><p id="subTitle">GitHub Pages · dữ liệu mã hoá · Pancake POS</p></div>
-      <div class="head-actions"><span class="pill demo" id="modePill">DEMO</span><button class="icon-btn" id="unlockBtn" title="Mở dữ liệu LIVE">🔐</button><button class="icon-btn" id="reloadBtn" title="Làm mới">↻</button></div>
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">SEVEN.AM · LIVE SALES</div>
+        <h1 id="pageTitle">Tổng quan doanh thu</h1>
+        <p id="pageSub">Dữ liệu Pancake POS · cập nhật tự động qua GitHub Actions</p>
+      </div>
+      <div class="topActions">
+        <span class="liveBadge demo" id="modePill">DEMO</span>
+        <button class="squareBtn" id="unlockBtn" title="Mở dữ liệu LIVE">🔒</button>
+        <button class="squareBtn" id="reloadBtn" title="Làm mới">↻</button>
+      </div>
     </header>
 
     <div class="notice" id="notice"></div>
     <div class="error" id="error"></div>
 
-    <section class="filters">
-      <div class="presets">
+    <section class="filterBar">
+      <div class="presetGroup">
         <button data-range="today" class="active">Hôm nay</button>
         <button data-range="yesterday">Hôm qua</button>
         <button data-range="7d">7 ngày</button>
@@ -39,31 +58,158 @@
       <label><span>Đến ngày</span><input type="date" id="to" /></label>
       <label><span>Kênh</span><select id="channel"><option>Tất cả</option></select></label>
       <label><span>Sale</span><select id="staff"><option>Tất cả</option></select></label>
-      <label><span>Trạng thái</span><select id="status"><option>Tất cả</option><option>TREO</option><option>DANG_GIAO</option><option>THANH_CONG</option><option>HOAN</option><option>HUY</option></select></label>
+      <label><span>Trạng thái</span>
+        <select id="status">
+          <option value="Tất cả">Tất cả</option>
+          <option value="TREO">Treo</option>
+          <option value="DANG_GIAO">Đang giao</option>
+          <option value="THANH_CONG">Thành công</option>
+          <option value="HOAN">Hoàn</option>
+          <option value="HUY">Huỷ / xoá</option>
+        </select>
+      </label>
     </section>
 
-    <section class="kpi-grid" id="kpis"></section>
+    <section id="view-overview" class="view active">
+      <div class="sectionHead">
+        <div><span class="sectionEyebrow">LIVE OVERVIEW</span><h2>Doanh thu & trạng thái</h2></div>
+        <div class="periodStat" id="periodStat">—</div>
+      </div>
+      <section class="kpiGrid" id="kpis"></section>
 
-    <section class="layout-2">
-      <article class="panel"><div class="panel-head"><div><h2>Doanh thu theo giờ</h2><p>Tạo đơn và thành công · mốc 12h / 17h / 19h</p></div><div class="legend"><i></i>Tạo đơn <i></i>Thành công</div></div><div class="chart" id="hourlyChart"></div></article>
-      <article class="panel"><div class="panel-head"><div><h2>Tiến độ tháng</h2><p>So doanh thu với tiến độ thời gian</p></div></div><div class="target" id="targetPanel"></div></article>
+      <section class="chartGrid bigFirst">
+        <article class="panel">
+          <div class="panelHead">
+            <div><h3>Xu hướng doanh thu</h3><p>Tạo đơn và thành công theo ngày</p></div>
+            <div class="legend"><i class="red"></i>Tạo đơn <i class="dark"></i>Thành công <i class="target"></i>Target/ngày</div>
+          </div>
+          <div class="chart chartLarge" id="trendChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>Trạng thái phễu</h3><p>Phân bổ doanh số theo trạng thái</p></div></div>
+          <div class="statusViz" id="statusViz"></div>
+        </article>
+      </section>
+
+      <section class="chartGrid">
+        <article class="panel">
+          <div class="panelHead"><div><h3>Doanh thu theo kênh</h3><p>So sánh tạo đơn và thành công</p></div></div>
+          <div class="chart" id="channelChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>Tiến độ mục tiêu</h3><p>Target tháng, target ngày và gap</p></div><button class="miniBtn" id="openSettingsInline">Chỉnh target</button></div>
+          <div class="targetBoard" id="targetPanel"></div>
+        </article>
+      </section>
     </section>
 
-    <section class="layout-2 tables">
-      <article class="panel"><div class="panel-head"><div><h2>Doanh thu theo kênh</h2><p>Phân bổ doanh số tạo đơn</p></div></div><div class="scroll"><table><thead><tr><th>Kênh</th><th>Tạo đơn</th><th>Thành công</th><th>Đơn</th><th>Tỷ trọng</th><th>AOV</th></tr></thead><tbody id="channelRows"></tbody></table></div></article>
-      <article class="panel"><div class="panel-head"><div><h2>Hiệu suất Sale</h2><p>Xếp theo doanh số tạo đơn</p></div></div><div class="scroll"><table><thead><tr><th>Nhân viên</th><th>Tạo đơn</th><th>TC</th><th>Đơn</th><th>Hoàn</th><th>AOV</th></tr></thead><tbody id="staffRows"></tbody></table></div></article>
+    <section id="view-channels" class="view">
+      <div class="sectionHead">
+        <div><span class="sectionEyebrow">CHANNEL PERFORMANCE</span><h2>Hiệu quả theo kênh</h2><p>Nhập Data từng kênh → Enter để tính CR chốt ngay</p></div>
+      </div>
+      <section class="chartGrid">
+        <article class="panel">
+          <div class="panelHead"><div><h3>So sánh doanh số kênh</h3><p>Tạo đơn vs thành công</p></div></div>
+          <div class="chart chartTall" id="channelCompareChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>CR chốt theo kênh</h3><p>CR = Số đơn tạo / Data đã nhập</p></div></div>
+          <div class="chart chartTall" id="channelCrChart"></div>
+        </article>
+      </section>
+      <article class="panel tablePanel">
+        <div class="panelHead">
+          <div><h3>Bảng hiệu quả kênh</h3><p>Data được lưu trên trình duyệt theo đúng khoảng ngày đang chọn</p></div>
+          <div class="summaryChip" id="channelDataSummary">Data: —</div>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Kênh</th><th>Tạo đơn</th><th>Thành công</th><th>Số đơn</th><th>Data</th><th>CR chốt</th><th>Tỷ trọng</th><th>AOV</th><th>Hoàn</th></tr></thead>
+            <tbody id="channelRows"></tbody>
+          </table>
+        </div>
+      </article>
     </section>
 
-    <footer><span>Seven.AM · Internal Sales Dashboard</span><span id="updatedAt">—</span></footer>
+    <section id="view-sales" class="view">
+      <div class="sectionHead">
+        <div><span class="sectionEyebrow">SALE ONLINE</span><h2>Hiệu suất nhân viên</h2><p>Doanh số, thành công, hoàn và AOV</p></div>
+      </div>
+      <section class="chartGrid">
+        <article class="panel">
+          <div class="panelHead"><div><h3>Doanh số theo Sale</h3><p>Xếp hạng theo tạo đơn</p></div></div>
+          <div class="chart chartTall" id="staffChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>Tỷ lệ hoàn</h3><p>Cảnh báo nhân sự có tỷ lệ hoàn cao</p></div></div>
+          <div class="chart chartTall" id="staffReturnChart"></div>
+        </article>
+      </section>
+      <article class="panel tablePanel">
+        <div class="panelHead"><div><h3>Bảng Sale Online</h3><p>Tạo đơn · thành công · treo · đang giao · hoàn</p></div></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Nhân viên</th><th>Tạo đơn</th><th>Thành công</th><th>Đơn</th><th>TC</th><th>Treo</th><th>Đang giao</th><th>Hoàn</th><th>Tỷ lệ hoàn</th><th>AOV</th></tr></thead>
+            <tbody id="staffRows"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section id="view-monthly" class="view">
+      <div class="sectionHead">
+        <div><span class="sectionEyebrow">MONTHLY PACING</span><h2>Tiến độ tháng</h2><p>Nhìn ngay nhịp doanh thu, target và gap từng ngày</p></div>
+        <button class="primaryBtn" id="openSettingsMonthly">Nhập mục tiêu</button>
+      </div>
+      <section class="miniKpiGrid" id="monthlyKpis"></section>
+      <section class="chartGrid bigFirst">
+        <article class="panel">
+          <div class="panelHead"><div><h3>Lũy kế tháng vs Target</h3><p>Đường thực tế so với nhịp target tuyến tính</p></div></div>
+          <div class="chart chartLarge" id="cumulativeChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>Gap theo ngày</h3><p>Dương = vượt · Âm = thiếu</p></div></div>
+          <div class="chart chartLarge" id="dailyGapChart"></div>
+        </article>
+      </section>
+      <article class="panel tablePanel">
+        <div class="panelHead"><div><h3>Chi tiết ngày</h3><p>Doanh số từng ngày và gap so với target/ngày</p></div></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Ngày</th><th>Tạo đơn</th><th>Thành công</th><th>Target ngày</th><th>Gap</th><th>% đạt</th><th>Số đơn</th></tr></thead>
+            <tbody id="dailyRows"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <footer><span>Seven.AM · Internal Revenue Dashboard</span><span id="updatedAt">—</span></footer>
   </main>
 
   <dialog id="unlockDialog">
-    <form method="dialog" id="unlockForm">
-      <div class="dialog-head"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button value="cancel" class="x">×</button></div>
-      <p>Dữ liệu trên GitHub Pages đã được mã hoá. Nhập mật khẩu dashboard để giải mã ngay trên máy của bạn.</p>
-      <label class="password"><span>Mật khẩu dashboard</span><input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" /></label>
-      <div class="dialog-error" id="unlockError"></div>
-      <div class="dialog-actions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primary">Mở dữ liệu</button></div>
+    <form method="dialog" id="unlockForm" class="dialogForm">
+      <div class="dialogHead"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button value="cancel" class="x">×</button></div>
+      <p>Dữ liệu công khai trên GitHub Pages đã được mã hoá. Nhập mật khẩu dashboard để giải mã ngay trên máy của bạn.</p>
+      <label class="field"><span>Mật khẩu dashboard</span><input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" /></label>
+      <div class="dialogError" id="unlockError"></div>
+      <div class="dialogActions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primaryBtn">Mở dữ liệu</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" id="settingsForm" class="dialogForm settingsForm">
+      <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Mục tiêu doanh thu</h2></div><button value="cancel" class="x">×</button></div>
+      <p>Các giá trị này được lưu trên trình duyệt hiện tại và áp dụng ngay vào biểu đồ.</p>
+      <div class="settingsGrid">
+        <label class="field"><span>Target tháng</span><input id="targetMonthInput" type="number" min="0" step="1000000" /></label>
+        <label class="field"><span>Target ngày</span><input id="targetDayInput" type="number" min="0" step="100000" /></label>
+        <label class="field"><span>Gap bù/ngày</span><input id="gapDayInput" type="number" step="100000" /></label>
+      </div>
+      <div class="settingsHint">
+        <b>Target thực/ngày = Target ngày + Gap bù/ngày.</b>
+        <span>Gap thực tế trên dashboard vẫn được tính tự động: Doanh số − Target thực/ngày.</span>
+      </div>
+      <div class="dialogActions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
     </form>
   </dialog>
 
