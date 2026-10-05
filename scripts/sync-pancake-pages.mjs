@@ -85,6 +85,14 @@ async function fetchOrders(from,to){
   const first=await fetchOrderPage(from,to,1);
   const rows=[...first.data.map(normalize).filter(x=>x.totalAmount>=0)];
   console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''}`);
+  if(first.data[0]){
+    const raw=first.data[0];
+    const nested=Object.entries(raw).filter(([,v])=>v&&typeof v==='object'&&!Array.isArray(v)).slice(0,20).map(([k,v])=>[k,Object.keys(v).sort().slice(0,40)]);
+    console.log('ORDER_SCHEMA_KEYS:',JSON.stringify(Object.keys(raw).sort()));
+    console.log('ORDER_NESTED_SCHEMA_KEYS:',JSON.stringify(nested));
+    const norm=normalize(raw);
+    console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
+  }
   if(!first.data.length||first.data.length<100)return rows;
 
   if(first.totalPages){
