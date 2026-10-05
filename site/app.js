@@ -179,7 +179,10 @@ function renderStatus(rows){
   $('statusViz').innerHTML=order.map(s=>{const rr=g[s]||[],v=sum(rr,x=>x.totalAmount),share=v/total*100;return `<div class="statusItem"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`}).join('')
 }
 function channelStats(rows){
-  return Object.entries(group(rows,x=>x.channel||'Khác')).map(([name,r])=>({name,...overview(r),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
+  const grouped=group(rows,x=>x.channel||'Khác');
+  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo/CSKH'];
+  const names=Array.from(new Set([...canonical,...Object.keys(grouped)]));
+  return names.map(name=>({name,...overview(grouped[name]||[]),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
 }
 function renderChannelChart(rows,id){
   const stats=channelStats(rows);drawGroupedBars($(id),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true)
