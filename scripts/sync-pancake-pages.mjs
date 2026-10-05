@@ -28,13 +28,19 @@ function mapStatus(code,name=''){
   return'TREO'
 }
 function mapChannel(raw,source='',rawOrder={}){
-  const liveFlag=get(rawOrder,'is_live|is_livestream|livestream_id|live_id|live_video_id');
-  const v=`${str(raw)} ${str(source)} ${str(liveFlag)}`.toLowerCase();
+  const liveFlag=get(rawOrder,'is_live|is_livestream|is_live_shopping|livestream_id|live_id|live_video_id');
+  const marketplace=get(rawOrder,'marketplace_id|partner|system_id');
+  const utm=get(rawOrder,'p_utm_source|p_utm_medium|p_utm_campaign|ads_source');
+  const page=get(rawOrder,'page.name|page.username');
+  const v=`${str(raw)} ${str(source)} ${str(marketplace)} ${str(utm)} ${str(page)}`.toLowerCase();
   if(liveFlag===true||liveFlag===1||liveFlag==='1'||/live|livestream/.test(v))return'Livestream';
   if(/shopee/.test(v))return'Shopee';
-  if(/web|website|storecake/.test(v))return'Website';
+  if(/tiktok/.test(v))return'TikTok Shop';
+  if(/lazada/.test(v))return'Lazada';
+  if(/webcake|website|web site|shopify|woocommerce/.test(v))return'Website';
   if(/zalo|cskh|crm/.test(v))return'Zalo/CSKH';
-  if(/facebook|ads|meta|mess|page/.test(v))return'Facebook Ads';
+  if(/facebook|messenger|meta|fb|page/.test(v))return'Facebook Ads';
+  if(/pos|offline|showroom|tại quầy|tai quay|cửa hàng|cua hang/.test(v))return'Showroom/POS';
   return'Khác'
 }
 function normalize(raw){
@@ -43,7 +49,7 @@ function normalize(raw){
   const status=mapStatus(statusCode,statusName);
   const total=num(get(raw,'total_amount|total|total_price|cod'));
   const cod=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
-  const source=get(raw,'order_source|source|page_id|conversation_type');
+  const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
   const created=str(get(raw,'inserted_at|created_at|creation_time'),new Date().toISOString());
   let iso;try{iso=new Date(created).toISOString()}catch{iso=new Date().toISOString()}
   const partial=statusCode===15||/part_returned|partial/i.test(statusName)||Boolean(get(raw,'is_partial_return|partial_return'));
@@ -54,7 +60,7 @@ function normalize(raw){
   return{
     createdAt:iso,
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
-    channel:mapChannel(get(raw,'order_source_name|channel|source_name|page_name'),source,raw),
+    channel:mapChannel(get(raw,'order_sources_name|order_sources|ads_source|p_utm_source|page.name'),source,raw),
     status,
     statusCode,
     statusName,
@@ -96,7 +102,7 @@ async function fetchOrders(from,to){
   if(!first.data.length||first.data.length<100)return rows;
 
   if(first.totalPages){
-    const maxPages=Math.min(60,first.totalPages);
+    const maxPages=Math.min(200,first.totalPages);
     for(let fromPage=2;fromPage<=maxPages;fromPage+=5){
       const pages=Array.from({length:Math.min(5,maxPages-fromPage+1)},(_,i)=>fromPage+i);
       const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
@@ -134,6 +140,8 @@ console.log(`Sync Pancake shop ${SHOP_ID}: ${from} -> ${today}`);
 const orders=await fetchOrders(from,today);
 const statusDistribution=orders.reduce((m,o)=>{const k=`${o.statusCode}:${o.status}`;m[k]=(m[k]||0)+1;return m},{});
 const channelDistribution=orders.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||0)+1;return m},{});
+const dates=orders.map(o=>String(o.createdAt||'')).filter(Boolean).sort();
+console.log('Seven.AM date coverage:',JSON.stringify({min:dates[0]||null,max:dates[dates.length-1]||null,count:orders.length}));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
