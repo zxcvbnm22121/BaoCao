@@ -87,10 +87,24 @@ async function fetchOrderPage(from,to,page){
   return {data,totalPages,body}
 }
 
+function normalizedDateKey(order){
+  try{return dateKey(new Date(order.createdAt))}catch{return String(order.createdAt||'').slice(0,10)}
+}
+function keepInRange(order,from,to){
+  const d=normalizedDateKey(order);
+  return d>=from&&d<=to
+}
+function pageDateBounds(data){
+  const dates=data.map(normalize).map(normalizedDateKey).filter(Boolean).sort();
+  return {min:dates[0]||null,max:dates[dates.length-1]||null}
+}
+
 async function fetchOrders(from,to){
   const first=await fetchOrderPage(from,to,1);
-  const rows=[...first.data.map(normalize).filter(x=>x.totalAmount>=0)];
-  console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''}`);
+  const firstNorm=first.data.map(normalize).filter(x=>x.totalAmount>=0);
+  const rows=firstNorm.filter(x=>keepInRange(x,from,to));
+  const firstBounds=pageDateBounds(first.data);
+  console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''} · ${firstBounds.min||'?'} → ${firstBounds.max||'?'}`);
   if(first.data[0]){
     const raw=first.data[0];
     const nested=Object.entries(raw).filter(([,v])=>v&&typeof v==='object'&&!Array.isArray(v)).slice(0,20).map(([k,v])=>[k,Object.keys(v).sort().slice(0,40)]);
@@ -99,17 +113,19 @@ async function fetchOrders(from,to){
     const norm=normalize(raw);
     console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
   }
-  if(!first.data.length||first.data.length<100)return rows;
+  if(!first.data.length||firstBounds.max<from)return rows;
 
   if(first.totalPages){
     const maxPages=Math.min(200,first.totalPages);
-    for(let fromPage=2;fromPage<=maxPages;fromPage+=5){
+    let stop=false;
+    for(let fromPage=2;fromPage<=maxPages&&!stop;fromPage+=5){
       const pages=Array.from({length:Math.min(5,maxPages-fromPage+1)},(_,i)=>fromPage+i);
       const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
       for(let i=0;i<batch.length;i++){
-        const page=pages[i],data=batch[i].data;
-        console.log(`Orders page ${page}: ${data.length} rows / ${maxPages} pages`);
-        rows.push(...data.map(normalize).filter(x=>x.totalAmount>=0));
+        const page=pages[i],data=batch[i].data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
+        console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
+        rows.push(...norm.filter(x=>keepInRange(x,from,to)));
+        if(!data.length||(bounds.max&&bounds.max<from)){stop=true;break}
       }
     }
     return rows
@@ -118,15 +134,15 @@ async function fetchOrders(from,to){
   const seenPages=new Set();
   const firstA=first.data[0]||{},firstB=first.data[first.data.length-1]||{};
   seenPages.add(`${first.data.length}:${str(get(firstA,'id|display_id|order_id|code'))}:${str(get(firstB,'id|display_id|order_id|code'))}`);
-  for(let page=2;page<=40;page++){
-    const res=await fetchOrderPage(from,to,page),data=res.data;
+  for(let page=2;page<=200;page++){
+    const res=await fetchOrderPage(from,to,page),data=res.data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
     const a=data[0]||{},b=data[data.length-1]||{};
     const sig=`${data.length}:${str(get(a,'id|display_id|order_id|code'))}:${str(get(b,'id|display_id|order_id|code'))}`;
     if(seenPages.has(sig)){console.log(`Pagination repeated at page ${page}; stopping.`);break}
     seenPages.add(sig);
-    console.log(`Orders page ${page}: ${data.length} rows`);
-    rows.push(...data.map(normalize).filter(x=>x.totalAmount>=0));
-    if(!data.length||data.length<100)break;
+    console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
+    rows.push(...norm.filter(x=>keepInRange(x,from,to)));
+    if(!data.length||data.length<100||(bounds.max&&bounds.max<from))break;
   }
   return rows
 }
