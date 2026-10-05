@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111111" />
+  <title>Seven.AM · Live Sales Dashboard</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <aside class="side">
+    <div class="brand"><div class="logo">7A</div><div><b>SEVEN.AM</b><small>LIVE SALES</small></div></div>
+    <nav class="nav">
+      <button class="on" data-view="live">▣ <span>Dashboard Live</span></button>
+      <button data-view="channels">◫ <span>Theo kênh</span></button>
+      <button data-view="sales">◎ <span>Sale Online</span></button>
+      <button data-view="monthly">◒ <span>Tiến độ tháng</span></button>
+    </nav>
+    <div class="source"><div id="sourceText">GITHUB PAGES</div><small>Sync tối đa 5 phút/lần</small></div>
+  </aside>
+
+  <main class="main" id="app">
+    <header class="head">
+      <div><div class="eyebrow">SEVEN.AM / LIVE SALES</div><h1>Dashboard doanh thu</h1><p id="subTitle">GitHub Pages · dữ liệu mã hoá · Pancake POS</p></div>
+      <div class="head-actions"><span class="pill demo" id="modePill">DEMO</span><button class="icon-btn" id="unlockBtn" title="Mở dữ liệu LIVE">🔐</button><button class="icon-btn" id="reloadBtn" title="Làm mới">↻</button></div>
+    </header>
+
+    <div class="notice" id="notice"></div>
+    <div class="error" id="error"></div>
+
+    <section class="filters">
+      <div class="presets">
+        <button data-range="today" class="active">Hôm nay</button>
+        <button data-range="yesterday">Hôm qua</button>
+        <button data-range="7d">7 ngày</button>
+        <button data-range="month">Tháng này</button>
+      </div>
+      <label><span>Từ ngày</span><input type="date" id="from" /></label>
+      <label><span>Đến ngày</span><input type="date" id="to" /></label>
+      <label><span>Kênh</span><select id="channel"><option>Tất cả</option></select></label>
+      <label><span>Sale</span><select id="staff"><option>Tất cả</option></select></label>
+      <label><span>Trạng thái</span><select id="status"><option>Tất cả</option><option>TREO</option><option>DANG_GIAO</option><option>THANH_CONG</option><option>HOAN</option><option>HUY</option></select></label>
+    </section>
+
+    <section class="kpi-grid" id="kpis"></section>
+
+    <section class="layout-2">
+      <article class="panel"><div class="panel-head"><div><h2>Doanh thu theo giờ</h2><p>Tạo đơn và thành công · mốc 12h / 17h / 19h</p></div><div class="legend"><i></i>Tạo đơn <i></i>Thành công</div></div><div class="chart" id="hourlyChart"></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>Tiến độ tháng</h2><p>So doanh thu với tiến độ thời gian</p></div></div><div class="target" id="targetPanel"></div></article>
+    </section>
+
+    <section class="layout-2 tables">
+      <article class="panel"><div class="panel-head"><div><h2>Doanh thu theo kênh</h2><p>Phân bổ doanh số tạo đơn</p></div></div><div class="scroll"><table><thead><tr><th>Kênh</th><th>Tạo đơn</th><th>Thành công</th><th>Đơn</th><th>Tỷ trọng</th><th>AOV</th></tr></thead><tbody id="channelRows"></tbody></table></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>Hiệu suất Sale</h2><p>Xếp theo doanh số tạo đơn</p></div></div><div class="scroll"><table><thead><tr><th>Nhân viên</th><th>Tạo đơn</th><th>TC</th><th>Đơn</th><th>Hoàn</th><th>AOV</th></tr></thead><tbody id="staffRows"></tbody></table></div></article>
+    </section>
+
+    <footer><span>Seven.AM · Internal Sales Dashboard</span><span id="updatedAt">—</span></footer>
+  </main>
+
+  <dialog id="unlockDialog">
+    <form method="dialog" id="unlockForm">
+      <div class="dialog-head"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button value="cancel" class="x">×</button></div>
+      <p>Dữ liệu trên GitHub Pages đã được mã hoá. Nhập mật khẩu dashboard để giải mã ngay trên máy của bạn.</p>
+      <label class="password"><span>Mật khẩu dashboard</span><input id="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" /></label>
+      <div class="dialog-error" id="unlockError"></div>
+      <div class="dialog-actions"><button value="cancel">Đóng</button><button type="submit" value="default" class="primary">Mở dữ liệu</button></div>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
