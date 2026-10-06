@@ -96,3 +96,74 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100vw - 24px));max-heigh
   .quickDialogActions{justify-content:stretch}
   .quickDialogActions button{flex:1}
 }
+
+
+/* Android / mobile Pancake dashboard */
+.mobileCommandBar,.mobileBottomNav,.mobileFilterHead,.mobileFilterBackdrop{display:none}
+@media(max-width:720px){
+  html,body{max-width:100%;overflow-x:hidden}
+  body{padding-bottom:calc(72px + env(safe-area-inset-bottom));overscroll-behavior-y:none}
+  .main{margin:0;padding:12px 9px calc(92px + env(safe-area-inset-bottom));max-width:none}
+  .topbar{position:sticky;top:0;z-index:18;background:rgba(245,242,238,.96);backdrop-filter:blur(12px);margin:-12px -9px 0;padding:12px 9px 9px;border-bottom:1px solid var(--line);align-items:center}
+  .topbar h1{font-size:20px;margin:3px 0 0}
+  .topbar p{display:none}
+  .eyebrow{font-size:8px}
+  .topActions{gap:5px}
+  .squareBtn{width:34px;height:34px;border-radius:9px}
+  .liveBadge{padding:8px 9px;font-size:8px}
+  .mobileCommandBar{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0 3px}
+  .mobileCommandBar button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;min-height:42px;font-size:10px;font-weight:850}
+  .mobileCommandBar #mobileQuickBtn{background:var(--red);border-color:var(--red);color:#fff}
+  .mobileFilterBackdrop{position:fixed;inset:0;background:rgba(17,15,14,.46);z-index:69}
+  body.mobileFilterOpen .mobileFilterBackdrop{display:block}
+  .filterBar{position:fixed;left:8px;right:8px;bottom:calc(74px + env(safe-area-inset-bottom));top:auto;z-index:70;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:stretch;background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px;max-height:72vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.24);transform:translateY(calc(100% + 120px));transition:transform .22s ease;margin:0}
+  body.mobileFilterOpen .filterBar{transform:translateY(0)}
+  .mobileFilterHead{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:1px 2px 3px}
+  .mobileFilterHead b{font-size:12px}
+  .mobileFilterHead button{border:0;background:#f1ece7;width:32px;height:32px;border-radius:9px;font-size:18px}
+  .presetGroup{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+  .presetGroup button{padding:9px 5px}
+  .filterBar label{min-width:0;width:100%;display:grid}
+  .filterBar label span{font-size:7px}
+  .filterBar input,.filterBar select{width:100%;min-width:0}
+  .filterBar label:nth-of-type(3),.filterBar label:nth-of-type(4),.filterBar label:nth-of-type(5){grid-column:1/-1}
+  .quickReportBarBtn{grid-column:1/-1;width:100%;min-height:40px}
+  .sectionHead{margin:14px 0 8px;align-items:flex-start}
+  .sectionHead h2{font-size:16px}
+  .sectionHead p{font-size:9px}
+  .periodStat{font-size:8px;padding:6px 7px;white-space:nowrap}
+  .kpiGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .card{min-height:88px;padding:11px}
+  .cardLabel{font-size:7px}
+  .cardValue{font-size:19px;margin-top:8px}
+  .cardSub{font-size:8px}
+  .chartGrid,.chartGrid.bigFirst{grid-template-columns:1fr;gap:7px}
+  .panel{border-radius:12px}
+  .panelHead{padding:11px 11px 7px}
+  .chart,.chartLarge,.chartTall{height:230px;padding-left:4px;padding-right:4px}
+  .statusDetailWrap{margin-left:10px;margin-right:10px}
+  .targetStats{grid-template-columns:1fr}
+  .miniKpiGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .miniKpi{padding:10px}
+  .tablePanel .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tablePanel table{min-width:680px}
+  .tablePanel th:first-child,.tablePanel td:first-child{position:sticky;left:0;background:#fff;z-index:1;box-shadow:4px 0 8px rgba(0,0,0,.025)}
+  .tablePanel th:first-child{background:#faf8f5;z-index:2}
+  footer{padding-bottom:8px;gap:8px;flex-direction:column}
+  dialog{width:calc(100vw - 16px)!important;max-width:none!important;max-height:84vh;position:fixed;inset:auto 8px calc(8px + env(safe-area-inset-bottom)) 8px;margin:0;border-radius:18px;overflow:auto}
+  dialog .dialogForm{padding:15px}
+  .settingsGrid{grid-template-columns:1fr}
+  .quickExactRow{grid-template-columns:1fr;gap:6px}
+  .quickExactRow input,.quickExactRow strong{text-align:left}
+  .mobileBottomNav{position:fixed;left:0;right:0;bottom:0;z-index:75;display:grid;grid-template-columns:repeat(4,1fr);background:rgba(20,20,20,.98);padding:6px 5px calc(6px + env(safe-area-inset-bottom));border-top:1px solid #303030;box-shadow:0 -8px 24px rgba(0,0,0,.14)}
+  .mobileNavBtn{border:0;background:transparent;color:#8d8985;border-radius:9px;min-height:54px;display:grid;place-items:center;align-content:center;gap:3px;padding:5px 2px}
+  .mobileNavBtn span{font-size:15px;line-height:1}
+  .mobileNavBtn b{font-size:8px;font-weight:750}
+  .mobileNavBtn.active{background:#2a2a2a;color:#fff}
+}
+@media(max-width:390px){
+  .main{padding-left:7px;padding-right:7px}
+  .kpiGrid,.miniKpiGrid{grid-template-columns:1fr 1fr}
+  .cardValue{font-size:17px}
+  .liveBadge{display:none}
+}
