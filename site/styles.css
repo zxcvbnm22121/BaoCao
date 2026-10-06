@@ -73,28 +73,47 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100vw - 24px));max-heigh
 .quickReportBarBtn{flex:none;align-self:end;border:0;background:var(--red);color:#fff;border-radius:9px;min-height:33px;padding:8px 13px;font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap;box-shadow:0 8px 18px rgba(167,25,46,.16)}.quickReportBarBtn:hover{background:var(--red2)}
 
 
-#quickReportDialog{width:min(560px,calc(100vw - 24px));max-width:560px;overflow-x:hidden}
+
+#quickReportDialog{width:min(760px,calc(100vw - 24px));max-width:760px;overflow-x:hidden}
 .quickReportForm{width:100%;max-width:100%;min-width:0;overflow:hidden}
 .quickPeriod{font-size:9px!important;color:#918a83!important;margin:3px 0 0!important;overflow-wrap:anywhere}
-.quickReportList{display:grid;gap:7px;margin-top:13px}
-.quickReportRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;border:1px solid #ece6df;background:#faf8f5;border-radius:11px;padding:11px 12px;min-width:0}
-.quickReportRow>div{min-width:0}
-.quickReportRow span{display:block;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#807972}
-.quickReportRow small{display:block;font-size:8px;color:#99918a;margin-top:3px;white-space:normal}
-.quickReportRow strong{font-size:19px;letter-spacing:-.035em;text-align:right;white-space:nowrap}
-.quickReportRow input{width:150px;max-width:42vw;border:1px solid #ddd6cf;background:#fff;border-radius:8px;padding:9px 10px;text-align:right;font-size:11px;outline:none}
-.quickReportRow input:focus{border-color:var(--red);box-shadow:0 0 0 2px rgba(167,25,46,.08)}
-.quickReportRow.accent{background:linear-gradient(145deg,#7d1020,#a7192e);border:0;color:#fff}
-.quickReportRow.accent span,.quickReportRow.accent small{color:#efc7ce}
-.quickTextBox{margin-top:10px;background:#171717;color:#f2f0ed;border-radius:11px;padding:11px 12px;font:500 10px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%;overflow:hidden}
+.quickTotalBox{display:grid;grid-template-columns:1.2fr .8fr .65fr;gap:7px;margin-top:13px}
+.quickTotalBox>.field,.quickTotalMetric{background:#faf8f5;border:1px solid #ece6df;border-radius:11px;padding:10px 11px;min-width:0}
+.quickTotalBox>.field input{width:100%;margin-top:5px}
+.quickTotalMetric span{display:block;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#8a837c}
+.quickTotalMetric strong{display:block;font-size:18px;letter-spacing:-.035em;margin-top:8px}
+.quickChannelHead{display:flex;justify-content:space-between;align-items:end;margin-top:14px;margin-bottom:6px}
+.quickChannelHead b{display:block;font-size:8px;letter-spacing:.08em;color:#77716a}
+.quickChannelHead small{display:block;font-size:8px;color:#a09891;margin-top:2px}
+.quickChannelTable{border:1px solid #e9e3dc;border-radius:11px;overflow:hidden;background:#fff}
+.quickChannelHeader,.quickChannelRow{display:grid;grid-template-columns:minmax(120px,1.25fr) 90px 64px 72px minmax(115px,1fr);gap:8px;align-items:center;padding:8px 10px}
+.quickChannelHeader{background:#f4f0eb;border-bottom:1px solid #e7e0d9}
+.quickChannelHeader span{font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#8d857e;text-align:right}
+.quickChannelHeader span:first-child{text-align:left}
+.quickChannelRow{border-bottom:1px solid #f0ebe6}
+.quickChannelRow:last-child{border-bottom:0}
+.quickChannelRow .channelName{font-size:9px;font-weight:850;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quickChannelRow input{width:100%;min-width:0;border:1px solid #ddd6cf;background:#fff;border-radius:7px;padding:7px 6px;text-align:right;font-size:9px;outline:none}
+.quickChannelRow input:focus{border-color:var(--red);box-shadow:0 0 0 2px rgba(167,25,46,.07)}
+.quickChannelRow .channelOrders,.quickChannelRow .channelCr,.quickChannelRow .channelRevenue{text-align:right;font-size:9px}
+.quickChannelRow .channelCr{font-weight:900}
+.quickChannelRow .channelRevenue{font-weight:850}
+.quickChannelRow.zero{opacity:.6}
+.quickTextBox{margin-top:10px;background:#171717;color:#f2f0ed;border-radius:11px;padding:11px 12px;font:500 9px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%;overflow:hidden}
 .quickDialogActions{flex-wrap:wrap}
 .copyDone{background:#27764d!important;border-color:#27764d!important;color:#fff!important}
-@media(max-width:560px){
+.quickReportBarBtn{flex:none;align-self:end;border:0;background:var(--red);color:#fff;border-radius:9px;min-height:33px;padding:8px 13px;font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap;box-shadow:0 8px 18px rgba(167,25,46,.16)}
+.quickReportBarBtn:hover{background:var(--red2)}
+@media(max-width:720px){
   #quickReportDialog{width:calc(100vw - 16px)}
-  .quickReportRow{grid-template-columns:1fr;gap:7px}
-  .quickReportRow strong{text-align:left}
-  .quickReportRow input{width:100%;max-width:none;text-align:left}
+  .quickTotalBox{grid-template-columns:1fr 1fr}
+  .quickTotalBox>.field{grid-column:1/-1}
+  .quickChannelTable{overflow-x:auto}
+  .quickChannelHeader,.quickChannelRow{grid-template-columns:130px 85px 60px 65px 120px;min-width:500px}
   .quickDialogActions{justify-content:stretch}
   .quickDialogActions button{flex:1}
 }
-
+@media(max-width:420px){
+  .quickTotalBox{grid-template-columns:1fr}
+  .quickTotalBox>.field{grid-column:auto}
+}
