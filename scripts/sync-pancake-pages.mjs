@@ -47,26 +47,51 @@ function normalize(raw){
   const statusCode=num(get(raw,'status|order_status|status_id'));
   const statusName=str(get(raw,'status_name|order_status_name|shipping_status_name'));
   const status=mapStatus(statusCode,statusName);
-  const total=num(get(raw,'total_amount|total|total_price|cod'));
-  const cod=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
+
+  const grossAmount=num(get(raw,'total_price|total_amount|total'));
+  const afterDiscountField=num(get(raw,'total_price_after_sub_discount|buyer_total_amount'));
+  const codAmount=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
+  const prepaidAmount=num(get(raw,'prepaid|prepaid_amount'));
+  const derivedPaid=codAmount+prepaidAmount;
+  const netAmount=afterDiscountField||derivedPaid||grossAmount;
+  const discountAmount=Math.max(0,grossAmount-netAmount);
+
+  const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
   const created=str(get(raw,'inserted_at|created_at|creation_time'),new Date().toISOString());
-  let iso;try{iso=new Date(created).toISOString()}catch{iso=new Date().toISOString()}
+  let dt;try{dt=new Date(created)}catch{dt=new Date()}
+  const iso=dt.toISOString();
+  const createdDate=dateKey(dt);
+
   const partial=statusCode===15||/part_returned|partial/i.test(statusName)||Boolean(get(raw,'is_partial_return|partial_return'));
   const explicitSuccess=num(get(raw,'successful_amount|received_amount|collected_amount|paid_amount'));
   let successfulAmount=0;
-  if(status==='THANH_CONG')successfulAmount=explicitSuccess||total;
-  else if(partial)successfulAmount=cod||explicitSuccess||0;
+  if(status==='THANH_CONG')successfulAmount=explicitSuccess||netAmount;
+  else if(partial)successfulAmount=codAmount||explicitSuccess||0;
+
+  const excludedStatus=[6,7].includes(statusCode);
+  const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
+
   return{
     createdAt:iso,
+    createdDate,
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
     channel:mapChannel(get(raw,'order_sources_name|order_sources|ads_source|p_utm_source|page.name'),source,raw),
+    sourceName,
     status,
     statusCode,
     statusName,
-    totalAmount:total,
+    grossAmount,
+    netAmount,
+    discountAmount,
+    codAmount,
+    prepaidAmount,
+    totalAmount:netAmount,
     successfulAmount,
-    isPartialReturn:partial
+    isPartialReturn:partial,
+    excludedStatus,
+    excludedExchangeSource,
+    excludedFromDefaultReport:excludedStatus||excludedExchangeSource
   }
 }
 
@@ -88,7 +113,7 @@ async function fetchOrderPage(from,to,page){
 }
 
 function normalizedDateKey(order){
-  try{return dateKey(new Date(order.createdAt))}catch{return String(order.createdAt||'').slice(0,10)}
+  return order.createdDate||dateKey(new Date(order.createdAt))
 }
 function keepInRange(order,from,to){
   const d=normalizedDateKey(order);
@@ -112,23 +137,6 @@ async function fetchOrders(from,to){
     console.log('ORDER_NESTED_SCHEMA_KEYS:',JSON.stringify(nested));
     const norm=normalize(raw);
     console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
-    console.log('ORDER_MONEY_DIAGNOSTIC:',JSON.stringify({
-      total_price:num(raw.total_price),
-      total_price_after_sub_discount:num(raw.total_price_after_sub_discount),
-      total_discount:num(raw.total_discount),
-      cod:num(raw.cod),
-      prepaid:num(raw.prepaid),
-      shipping_fee:num(raw.shipping_fee),
-      surcharge:num(raw.surcharge),
-      buyer_total_amount:num(raw.buyer_total_amount)
-    }));
-    console.log('ORDER_SOURCE_DIAGNOSTIC:',JSON.stringify({
-      order_sources:raw.order_sources,
-      order_sources_name:raw.order_sources_name,
-      ads_source:raw.ads_source,
-      is_livestream:raw.is_livestream,
-      is_live_shopping:raw.is_live_shopping
-    }));
   }
   if(!first.data.length||firstBounds.max<from)return rows;
 
@@ -175,6 +183,23 @@ const statusDistribution=orders.reduce((m,o)=>{const k=`${o.statusCode}:${o.stat
 const channelDistribution=orders.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||0)+1;return m},{});
 const dates=orders.map(o=>String(o.createdAt||'')).filter(Boolean).sort();
 console.log('Seven.AM date coverage:',JSON.stringify({min:dates[0]||null,max:dates[dates.length-1]||null,count:orders.length}));
+
+const yesterday=dateKey(new Date(Date.now()-86400000));
+const yAll=orders.filter(o=>o.createdDate===yesterday);
+const yRows=yAll.filter(o=>!o.excludedFromDefaultReport);
+const recon={
+  date:yesterday,
+  orders:yRows.length,
+  total_after_discount:yRows.reduce((a,o)=>a+o.netAmount,0),
+  cod:yRows.reduce((a,o)=>a+o.codAmount,0),
+  prepaid:yRows.reduce((a,o)=>a+o.prepaidAmount,0),
+  gross_before_discount:yRows.reduce((a,o)=>a+o.grossAmount,0),
+  discount:yRows.reduce((a,o)=>a+o.discountAmount,0),
+  excluded_status:yAll.filter(o=>o.excludedStatus).length,
+  excluded_exchange_source:yAll.filter(o=>o.excludedExchangeSource).length,
+  source_names_excluded:Array.from(new Set(yAll.filter(o=>o.excludedExchangeSource).map(o=>o.sourceName))).sort()
+};
+console.log('YESTERDAY_RECONCILIATION:',JSON.stringify(recon));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
