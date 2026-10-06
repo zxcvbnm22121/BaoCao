@@ -84,3 +84,5 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100% - 28px));padding:0;
 .quickTextBox{margin-top:10px;background:#171717;color:#f2f0ed;border-radius:11px;padding:11px 12px;font:500 10px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
 .copyDone{background:#27764d!important}
 @media(max-width:720px){.quickReportBtn{padding:9px 10px}.quickInputRow,.quickMetrics{grid-template-columns:1fr}.quickReportForm{width:100%}}
+
+.quickReportBarBtn{flex:none;align-self:end;border:0;background:var(--red);color:#fff;border-radius:9px;min-height:33px;padding:8px 13px;font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap;box-shadow:0 8px 18px rgba(167,25,46,.16)}.quickReportBarBtn:hover{background:var(--red2)}
