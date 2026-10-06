@@ -48,7 +48,7 @@ button{cursor:pointer}
 .dataInput{width:78px;border:1px solid #dfd8d1;border-radius:7px;padding:6px 7px;text-align:right;font-size:9px;background:#fffdfb}.dataInput:focus{outline:2px solid #e9c3ca;border-color:var(--red)}
 .miniKpiGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.miniKpi{padding:12px}.miniKpi span{font-size:7px;color:#8e8781;text-transform:uppercase;letter-spacing:.06em}.miniKpi b{display:block;font-size:17px;margin-top:6px;letter-spacing:-.04em}
 footer{display:flex;justify-content:space-between;color:#99928b;font-size:8px;padding:12px 1px}
-dialog{border:0;border-radius:16px;width:min(510px,calc(100% - 28px));padding:0;box-shadow:0 28px 90px rgba(0,0,0,.25)}dialog::backdrop{background:rgba(16,14,13,.62)}
+dialog{border:0;border-radius:16px;width:min(510px,calc(100vw - 24px));max-height:calc(100vh - 24px);padding:0;overflow-x:hidden;overflow-y:auto;box-shadow:0 28px 90px rgba(0,0,0,.25)}dialog::backdrop{background:rgba(16,14,13,.62)}
 .dialogForm{padding:18px}.dialogHead{display:flex;justify-content:space-between;gap:12px}.dialogHead h2{font-size:20px;margin:3px 0}.x{border:0;background:#f0ece8;width:34px;height:34px;border-radius:10px;font-size:18px}.dialogForm>p{font-size:10px;color:#766f68;line-height:1.5}.field{display:grid;gap:5px}.field span{font-size:8px;font-weight:900;text-transform:uppercase;color:#807972}.field input{border:1px solid var(--line);border-radius:9px;padding:10px;font-size:11px}.dialogError{display:none;background:#fff0ef;color:#932f2f;padding:9px;border-radius:9px;margin-top:9px;font-size:9px}.dialogActions{display:flex;justify-content:flex-end;gap:7px;margin-top:14px}.dialogActions button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 12px}.dialogActions .primaryBtn{background:var(--red);border-color:var(--red);color:#fff}
 .settingsGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.settingsHint{margin-top:12px;background:#faf6f1;border-radius:10px;padding:10px;font-size:9px;color:#746d67}.settingsHint b,.settingsHint span{display:block}.settingsHint span{margin-top:3px;color:#948c84}
 .loading{opacity:.5;pointer-events:none}
@@ -69,20 +69,32 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100% - 28px));padding:0;
 .statusDetailRow.zero{opacity:.58}
 @media(max-width:720px){.statusDetailRow{grid-template-columns:1fr 46px 92px}.statusDetailTitle small{display:none}}
 
-.quickReportBtn{border:0;background:#181818;color:#fff;border-radius:10px;padding:10px 12px;font-size:9px;font-weight:850;letter-spacing:.02em;white-space:nowrap}
-.quickReportBtn:hover{background:#2b2b2b}
-.quickReportForm{width:min(620px,calc(100vw - 28px))}
-.quickPeriod{font-size:9px!important;color:#918a83!important;margin:3px 0 0!important}
-.quickInputRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
-.quickMetrics{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-top:10px}
-.quickMetric{background:#faf8f5;border:1px solid #ece6df;border-radius:11px;padding:11px 12px;min-height:82px}
-.quickMetric.accent{background:linear-gradient(145deg,#7d1020,#a7192e);border:0;color:#fff}
-.quickMetric span{display:block;font-size:7px;text-transform:uppercase;letter-spacing:.07em;font-weight:900;color:#8c857e}
-.quickMetric.accent span,.quickMetric.accent small{color:#edc5cd}
-.quickMetric strong{display:block;font-size:20px;letter-spacing:-.04em;margin-top:8px}
-.quickMetric small{display:block;font-size:7px;color:#99918a;margin-top:3px}
-.quickTextBox{margin-top:10px;background:#171717;color:#f2f0ed;border-radius:11px;padding:11px 12px;font:500 10px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
-.copyDone{background:#27764d!important}
-@media(max-width:720px){.quickReportBtn{padding:9px 10px}.quickInputRow,.quickMetrics{grid-template-columns:1fr}.quickReportForm{width:100%}}
 
 .quickReportBarBtn{flex:none;align-self:end;border:0;background:var(--red);color:#fff;border-radius:9px;min-height:33px;padding:8px 13px;font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap;box-shadow:0 8px 18px rgba(167,25,46,.16)}.quickReportBarBtn:hover{background:var(--red2)}
+
+
+#quickReportDialog{width:min(560px,calc(100vw - 24px));max-width:560px;overflow-x:hidden}
+.quickReportForm{width:100%;max-width:100%;min-width:0;overflow:hidden}
+.quickPeriod{font-size:9px!important;color:#918a83!important;margin:3px 0 0!important;overflow-wrap:anywhere}
+.quickReportList{display:grid;gap:7px;margin-top:13px}
+.quickReportRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;border:1px solid #ece6df;background:#faf8f5;border-radius:11px;padding:11px 12px;min-width:0}
+.quickReportRow>div{min-width:0}
+.quickReportRow span{display:block;font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#807972}
+.quickReportRow small{display:block;font-size:8px;color:#99918a;margin-top:3px;white-space:normal}
+.quickReportRow strong{font-size:19px;letter-spacing:-.035em;text-align:right;white-space:nowrap}
+.quickReportRow input{width:150px;max-width:42vw;border:1px solid #ddd6cf;background:#fff;border-radius:8px;padding:9px 10px;text-align:right;font-size:11px;outline:none}
+.quickReportRow input:focus{border-color:var(--red);box-shadow:0 0 0 2px rgba(167,25,46,.08)}
+.quickReportRow.accent{background:linear-gradient(145deg,#7d1020,#a7192e);border:0;color:#fff}
+.quickReportRow.accent span,.quickReportRow.accent small{color:#efc7ce}
+.quickTextBox{margin-top:10px;background:#171717;color:#f2f0ed;border-radius:11px;padding:11px 12px;font:500 10px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%;overflow:hidden}
+.quickDialogActions{flex-wrap:wrap}
+.copyDone{background:#27764d!important;border-color:#27764d!important;color:#fff!important}
+@media(max-width:560px){
+  #quickReportDialog{width:calc(100vw - 16px)}
+  .quickReportRow{grid-template-columns:1fr;gap:7px}
+  .quickReportRow strong{text-align:left}
+  .quickReportRow input{width:100%;max-width:none;text-align:left}
+  .quickDialogActions{justify-content:stretch}
+  .quickDialogActions button{flex:1}
+}
+
