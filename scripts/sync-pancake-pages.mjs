@@ -186,6 +186,12 @@ const recon={
   source_names_excluded:Array.from(new Set(yAll.filter(o=>o.excludedExchangeSource).map(o=>o.sourceName))).sort()
 };
 console.log('YESTERDAY_RECONCILIATION:',JSON.stringify(recon));
+const yStatusAll=yAll.reduce((m,o)=>{const k=String(o.statusCode);m[k]=(m[k]||0)+1;return m},{});
+const yStatusIncluded=yRows.reduce((m,o)=>{const k=String(o.statusCode);m[k]=(m[k]||0)+1;return m},{});
+const ySourceAll=yAll.reduce((m,o)=>{const k=o.sourceName||'(blank)';m[k]=(m[k]||0)+1;return m},{});
+console.log('YESTERDAY_STATUS_ALL:',JSON.stringify(yStatusAll));
+console.log('YESTERDAY_STATUS_INCLUDED:',JSON.stringify(yStatusIncluded));
+console.log('YESTERDAY_SOURCE_ALL:',JSON.stringify(ySourceAll));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
