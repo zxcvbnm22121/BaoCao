@@ -193,9 +193,27 @@ function drawLineChart(el,data,series,target=null){
   const step=Math.max(1,Math.ceil(data.length/7));data.forEach((p,i)=>{if(i%step===0||i===data.length-1)addSvg(svg,'text',{x:x(i),y:H-8,'text-anchor':'middle',class:'axisText'},p.label.length>5?p.label.slice(5):p.label)})
 }
 function renderStatus(rows){
-  const g=group(rows,o=>o.status||'TREO'),total=Math.max(1,sum(rows,x=>x.totalAmount));
+  const g=group(rows,o=>o.status||'TREO'),total=Math.max(1,sum(rows,x=>x.netAmount??x.totalAmount));
   const order=['TREO','DANG_GIAO','THANH_CONG','HOAN','HUY'];
-  $('statusViz').innerHTML=order.map(s=>{const rr=g[s]||[],v=sum(rr,x=>x.totalAmount),share=v/total*100;return `<div class="statusItem"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`}).join('')
+  $('statusViz').innerHTML=order.map(s=>{
+    const rr=g[s]||[],v=sum(rr,x=>x.netAmount??x.totalAmount),share=v/total*100;
+    return `<div class="statusItem"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`
+  }).join('');
+
+  const detailed=[
+    {label:'Mới',codes:[0]},
+    {label:'Chờ hàng',codes:[11]},
+    {label:'Đã xác nhận',codes:[1]},
+    {label:'Chờ chuyển hàng',codes:[9]},
+    {label:'Đang giao',codes:[2]},
+    {label:'Thành công',codes:[3,16]},
+    {label:'Hoàn',codes:[4,5,15]}
+  ];
+  $('statusDetail').innerHTML=detailed.map(item=>{
+    const rr=rows.filter(o=>item.codes.includes(Number(o.statusCode)));
+    const amount=sum(rr,o=>o.netAmount??o.totalAmount);
+    return `<div class="statusDetailRow ${rr.length?'':'zero'}"><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
+  }).join('');
 }
 function channelStats(rows){
   const grouped=group(rows,x=>x.channel||'Khác');
