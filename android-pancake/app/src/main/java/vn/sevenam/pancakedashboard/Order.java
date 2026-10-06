@@ -4,6 +4,7 @@ import org.json.JSONObject;
 
 final class Order {
     String createdDate = "";
+    String createdAt = "";
     String salesStaff = "Chưa gán";
     String channel = "Khác";
     String status = "TREO";
@@ -23,6 +24,7 @@ final class Order {
     static Order fromJson(JSONObject o) {
         Order x = new Order();
         x.createdDate = o.optString("createdDate", "");
+        x.createdAt = o.optString("createdAt", "");
         x.salesStaff = blankFallback(o.optString("salesStaff", ""), "Chưa gán");
         x.channel = blankFallback(o.optString("channel", ""), "Khác");
         x.status = blankFallback(o.optString("status", ""), "TREO");
