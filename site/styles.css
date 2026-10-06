@@ -56,3 +56,15 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100% - 28px));padding:0;
 @media(max-width:1150px){.sidebar{width:68px}.brandText,.navBtn b,.sideAction span,.sourceBox>div:last-child{display:none}.brand{padding-left:0}.brandMark{width:40px}.navBtn{justify-content:center}.main{margin-left:68px}.kpiGrid{grid-template-columns:repeat(2,1fr)}.chartGrid.bigFirst,.chartGrid{grid-template-columns:1fr}.miniKpiGrid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:720px){.sidebar{display:none}.main{margin:0;padding:14px 9px}.topbar h1{font-size:22px}.filterBar{top:0}.kpiGrid{grid-template-columns:1fr 1fr}.chartGrid{grid-template-columns:1fr}.miniKpiGrid{grid-template-columns:1fr 1fr}.settingsGrid{grid-template-columns:1fr}.chart{height:235px}.legend{display:none}.sectionHead{align-items:flex-start}}
 @media(max-width:420px){.kpiGrid,.miniKpiGrid{grid-template-columns:1fr}.card{min-height:88px}}
+
+.statusDetailWrap{border-top:1px solid #eee8e1;margin:0 14px 14px;padding-top:11px}
+.statusDetailTitle{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+.statusDetailTitle span{font-size:8px;font-weight:900;letter-spacing:.08em;color:#827a73}
+.statusDetailTitle small{font-size:8px;color:#aaa29a}
+.statusDetail{display:grid;gap:4px}
+.statusDetailRow{display:grid;grid-template-columns:minmax(120px,1fr) 58px 110px;gap:8px;align-items:center;background:#faf8f5;border:1px solid #eee8e1;border-radius:8px;padding:7px 8px}
+.statusDetailRow .statusName{font-size:9px;font-weight:750}
+.statusDetailRow .statusCount{font-size:9px;text-align:right;color:#6e6761}
+.statusDetailRow .statusMoney{font-size:10px;text-align:right;font-weight:850}
+.statusDetailRow.zero{opacity:.58}
+@media(max-width:720px){.statusDetailRow{grid-template-columns:1fr 46px 92px}.statusDetailTitle small{display:none}}
