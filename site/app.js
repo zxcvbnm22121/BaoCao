@@ -360,9 +360,11 @@ async function copyQuickReport(){
 function switchView(view){
   currentView=view;document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  document.querySelectorAll('.mobileNavBtn').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
   const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',sales:'Sale Online',monthly:'Tiến độ tháng'};
   $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
 }
+function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
 function openSettings(){
   $('targetMonthInput').value=Math.round(targetMonth());
   $('targetDayInput').value=Math.round(targetDay());
@@ -378,9 +380,14 @@ async function init(){
   dateRange('today');sourceOrders=mockData();setMode('DEMO');populateFilters();renderAll();await tryAutoLive();
   setInterval(async()=>{if(meta.source==='PANCAKE'){const pwd=sessionStorage.getItem('sevenam_dashboard_password');if(pwd)try{applyPayload(await fetchLive(pwd))}catch(e){showError('Chưa tải được bản sync mới: '+e.message)}}},60000)
 }
-document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>dateRange(b.dataset.range));
+document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
 ['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
+document.querySelectorAll('.mobileNavBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.mobileView));
+$('mobileFilterBtn').onclick=()=>setMobileFilter(true);
+$('mobileFilterClose').onclick=()=>setMobileFilter(false);
+$('mobileFilterBackdrop').onclick=()=>setMobileFilter(false);
+$('mobileQuickBtn').onclick=openQuickReport;
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.dataset.closeDialog).close());
 $('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
 $('quickReportBarBtn').onclick=openQuickReport;
