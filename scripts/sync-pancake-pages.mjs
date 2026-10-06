@@ -196,6 +196,11 @@ const ySourceAll=yAll.reduce((m,o)=>{const k=o.sourceName||'(blank)';m[k]=(m[k]|
 console.log('YESTERDAY_STATUS_ALL:',JSON.stringify(yStatusAll));
 console.log('YESTERDAY_STATUS_INCLUDED:',JSON.stringify(yStatusIncluded));
 console.log('YESTERDAY_SOURCE_ALL:',JSON.stringify(ySourceAll));
+
+const todayRows=orders.filter(o=>o.createdDate===today);
+const todayIncluded=todayRows.filter(o=>!o.excludedFromDefaultReport);
+const todayChannel=todayIncluded.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||{orders:0,revenue:0});m[k].orders++;m[k].revenue+=o.netAmount||o.totalAmount||0;return m},{});
+console.log('TODAY_CHANNEL_RECONCILIATION:',JSON.stringify(todayChannel));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
