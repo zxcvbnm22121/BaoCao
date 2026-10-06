@@ -11,12 +11,15 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Build;
+import android.graphics.Insets;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
@@ -104,13 +107,34 @@ public class MainActivity extends Activity {
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
-        root.setPadding(dp(14), dp(10), dp(14), 0);
+        root.setPadding(dp(12), dp(8), dp(12), dp(6));
         setContentView(root);
+
+        // Android 15 enforces edge-to-edge for targetSdk 35. Handle the
+        // system bars explicitly so the dashboard never sits under them.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
+        }
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int top;
+            int bottom;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
+                top = bars.top;
+                bottom = bars.bottom;
+            } else {
+                top = insets.getSystemWindowInsetTop();
+                bottom = insets.getSystemWindowInsetBottom();
+            }
+            v.setPadding(dp(12), top + dp(8), dp(12), bottom + dp(5));
+            return insets;
+        });
+        root.requestApplyInsets();
 
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(0, dp(4), 0, dp(10));
+        header.setPadding(0, dp(1), 0, dp(8));
         root.addView(header, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -124,8 +148,8 @@ public class MainActivity extends Activity {
         eyebrow.setLetterSpacing(.08f);
         headerText.addView(eyebrow);
 
-        titleView = text("Tổng quan doanh thu", 25, INK, true);
-        titleView.setPadding(0, dp(3), 0, 0);
+        titleView = text("Tổng quan doanh thu", 23, INK, true);
+        titleView.setPadding(0, dp(2), 0, 0);
         headerText.addView(titleView);
 
         LinearLayout headerActions = new LinearLayout(this);
@@ -146,13 +170,13 @@ public class MainActivity extends Activity {
                 reloadLive(false, null, null);
             }
         });
-        LinearLayout.LayoutParams refreshLp = actionLp(dp(48));
+        LinearLayout.LayoutParams refreshLp = actionLp(dp(44));
         refreshLp.leftMargin = dp(7);
         headerActions.addView(refresh, refreshLp);
 
         LinearLayout quickActions = new LinearLayout(this);
         quickActions.setOrientation(LinearLayout.HORIZONTAL);
-        quickActions.setPadding(0, 0, 0, dp(10));
+        quickActions.setPadding(0, 0, 0, dp(8));
         root.addView(quickActions, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -160,11 +184,11 @@ public class MainActivity extends Activity {
 
         TextView filter = bigAction("☰  Bộ lọc", false);
         filter.setOnClickListener(v -> showFilterDialog());
-        quickActions.addView(filter, new LinearLayout.LayoutParams(0, dp(52), 1f));
+        quickActions.addView(filter, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         TextView quick = bigAction("▣  Báo cáo nhanh", true);
         quick.setOnClickListener(v -> showQuickReport());
-        LinearLayout.LayoutParams quickLp = new LinearLayout.LayoutParams(0, dp(52), 1f);
+        LinearLayout.LayoutParams quickLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
         quickLp.leftMargin = dp(8);
         quickActions.addView(quick, quickLp);
 
@@ -177,7 +201,7 @@ public class MainActivity extends Activity {
 
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, dp(2), 0, dp(24));
+        content.setPadding(0, dp(1), 0, dp(16));
         scroll.addView(content, new ScrollView.LayoutParams(
                 ScrollView.LayoutParams.MATCH_PARENT,
                 ScrollView.LayoutParams.WRAP_CONTENT
@@ -189,9 +213,9 @@ public class MainActivity extends Activity {
         bottom.setBackground(rounded(Color.rgb(20, 20, 20), Color.TRANSPARENT, 0, 18));
         bottom.setPadding(dp(5), dp(5), dp(5), dp(5));
         LinearLayout.LayoutParams bottomLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(74)
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(68)
         );
-        bottomLp.bottomMargin = dp(8);
+        bottomLp.bottomMargin = dp(3);
         root.addView(bottom, bottomLp);
 
         addNav(bottom, "▦", "Tổng quan", "overview");
@@ -205,7 +229,7 @@ public class MainActivity extends Activity {
         TextView item = new TextView(this);
         item.setText(icon + "\n" + label);
         item.setGravity(Gravity.CENTER);
-        item.setTextSize(12);
+        item.setTextSize(11);
         item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         item.setLineSpacing(dp(2), 1f);
         item.setTag(view);
@@ -259,48 +283,61 @@ public class MainActivity extends Activity {
     }
 
     private void addPeriodHeader() {
-        LinearLayout box = card();
-        box.setPadding(dp(14), dp(11), dp(14), dp(11));
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+        box.setPadding(dp(12), dp(9), dp(12), dp(9));
+        box.setBackground(rounded(Color.rgb(239, 235, 230), Color.rgb(226, 219, 211), 1, 13));
 
-        TextView period = text(fromDate + "  →  " + toDate, 13, INK, true);
-        box.addView(period);
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        TextView period = text(fromDate + "  →  " + toDate, 12, INK, true);
+        left.addView(period);
 
         String summary = dashboard == null
                 ? "Chưa mở dữ liệu LIVE"
-                : num(filteredRows().size()) + " đơn · tự loại Huỷ/Xoá + Đơn đổi";
-        TextView sub = text(summary, 11, MUTED, false);
-        sub.setPadding(0, dp(4), 0, 0);
-        box.addView(sub);
+                : num(filteredRows().size()) + " đơn · đã loại Huỷ/Xoá + Đơn đổi";
+        TextView sub = text(summary, 10, MUTED, false);
+        sub.setPadding(0, dp(2), 0, 0);
+        left.addView(sub);
+
+        box.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView badge = text(dashboard == null ? "LOCKED" : "LIVE", 10, dashboard == null ? MUTED : GREEN, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(9), dp(5), dp(9), dp(5));
+        badge.setBackground(rounded(Color.WHITE, dashboard == null ? LINE : Color.rgb(199, 226, 211), 1, 10));
+        box.addView(badge);
 
         LinearLayout.LayoutParams lp = fullLp();
-        lp.bottomMargin = dp(10);
+        lp.bottomMargin = dp(9);
         content.addView(box, lp);
     }
 
     private void addLockedState() {
         LinearLayout locked = card();
         locked.setGravity(Gravity.CENTER_HORIZONTAL);
-        locked.setPadding(dp(22), dp(30), dp(22), dp(30));
+        locked.setPadding(dp(20), dp(22), dp(20), dp(22));
 
-        TextView icon = text("🔒", 38, INK, false);
+        TextView icon = text("🔒", 32, INK, false);
         icon.setGravity(Gravity.CENTER);
         locked.addView(icon);
 
-        TextView h = text("Mở dữ liệu Pancake LIVE", 21, INK, true);
+        TextView h = text("Mở dữ liệu Pancake LIVE", 19, INK, true);
         h.setGravity(Gravity.CENTER);
-        h.setPadding(0, dp(12), 0, 0);
+        h.setPadding(0, dp(8), 0, 0);
         locked.addView(h);
 
         TextView p = text("Nhập mật khẩu dashboard để app tải và giải mã dữ liệu trực tiếp.", 13, MUTED, false);
         p.setGravity(Gravity.CENTER);
-        p.setPadding(0, dp(8), 0, dp(18));
+        p.setPadding(0, dp(6), 0, dp(14));
         locked.addView(p);
 
         TextView open = bigAction("MỞ LIVE", true);
         open.setGravity(Gravity.CENTER);
         open.setOnClickListener(v -> showUnlockDialog());
         locked.addView(open, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(52)
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)
         ));
 
         content.addView(locked, fullLp());
@@ -357,7 +394,7 @@ public class MainActivity extends Activity {
         total = Math.max(1, total);
 
         LinearLayout board = card();
-        board.setPadding(dp(14), dp(8), dp(14), dp(10));
+        board.setPadding(dp(13), dp(6), dp(13), dp(9));
         for (int i = 0; i < keys.length; i++) {
             final String key = keys[i];
             List<Order> rr = new ArrayList<>();
@@ -367,9 +404,9 @@ public class MainActivity extends Activity {
             LinearLayout top = new LinearLayout(this);
             top.setOrientation(LinearLayout.HORIZONTAL);
             top.setGravity(Gravity.CENTER_VERTICAL);
-            top.setPadding(0, dp(7), 0, dp(4));
-            TextView l = text(labels[i], 13, INK, true);
-            TextView v = text(compact(value) + "  ·  " + rr.size() + " đơn", 12, MUTED, true);
+            top.setPadding(0, dp(6), 0, dp(3));
+            TextView l = text(labels[i], 12, INK, true);
+            TextView v = text(compact(value) + "  ·  " + rr.size() + " đơn", 11, MUTED, true);
             v.setGravity(Gravity.END);
             top.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             top.addView(v);
@@ -393,9 +430,9 @@ public class MainActivity extends Activity {
         for (int i = 0; i < limit; i++) {
             NamedStats n = groups.get(i);
             LinearLayout box = compactCard();
-            TextView name = text(n.name, 15, INK, true);
-            TextView val = text(compact(n.stats.createdRevenue), 19, RED, true);
-            TextView sub = text(num(n.stats.orders) + " đơn · TC " + compact(n.stats.successfulRevenue), 11, MUTED, false);
+            TextView name = text(n.name, 14, INK, true);
+            TextView val = text(compact(n.stats.createdRevenue), 18, RED, true);
+            TextView sub = text(num(n.stats.orders) + " đơn · TC " + compact(n.stats.successfulRevenue), 10, MUTED, false);
             sub.setPadding(0, dp(4), 0, 0);
             box.addView(name);
             box.addView(val);
@@ -422,9 +459,9 @@ public class MainActivity extends Activity {
         double forecast = s.createdRevenue / elapsed * ym.lengthOfMonth();
 
         LinearLayout box = card();
-        box.setPadding(dp(16), dp(14), dp(16), dp(16));
+        box.setPadding(dp(14), dp(12), dp(14), dp(13));
         box.addView(text("Doanh số tháng", 11, MUTED, true));
-        TextView value = text(compact(s.createdRevenue), 28, INK, true);
+        TextView value = text(compact(s.createdRevenue), 25, INK, true);
         value.setPadding(0, dp(4), 0, dp(10));
         box.addView(value);
 
@@ -480,27 +517,31 @@ public class MainActivity extends Activity {
 
         for (NamedStats n : groups) {
             LinearLayout box = card();
-            box.setPadding(dp(15), dp(14), dp(15), dp(14));
+            box.setPadding(dp(14), dp(12), dp(14), dp(12));
 
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
             head.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = text(n.name, 19, INK, true);
-            TextView revenue = text(compact(n.stats.createdRevenue), 21, RED, true);
+            TextView name = text(n.name, 17, INK, true);
+            TextView revenue = text(compact(n.stats.createdRevenue), 19, RED, true);
             revenue.setGravity(Gravity.END);
             head.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(revenue);
             box.addView(head);
 
-            box.addView(infoRow("Thành công", compact(n.stats.successfulRevenue)));
-            box.addView(infoRow("Số đơn", num(n.stats.orders)));
-            box.addView(infoRow("AOV", compact(n.stats.aov)));
-            box.addView(infoRow("Tỷ lệ hoàn", pct(n.stats.returnRate)));
+            box.addView(infoPairRow(
+                    "Thành công", compact(n.stats.successfulRevenue),
+                    "Số đơn", num(n.stats.orders)
+            ));
+            box.addView(infoPairRow(
+                    "AOV", compact(n.stats.aov),
+                    "Tỷ lệ hoàn", pct(n.stats.returnRate)
+            ));
 
             LinearLayout dataRow = new LinearLayout(this);
             dataRow.setOrientation(LinearLayout.HORIZONTAL);
             dataRow.setGravity(Gravity.CENTER_VERTICAL);
-            dataRow.setPadding(0, dp(8), 0, 0);
+            dataRow.setPadding(0, dp(6), 0, 0);
             TextView dl = text("Data", 12, MUTED, true);
             EditText input = new EditText(this);
             input.setTextSize(16);
@@ -565,18 +606,25 @@ public class MainActivity extends Activity {
 
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
-            TextView name = text("#" + rank + "  " + n.name, 19, INK, true);
-            TextView rev = text(compact(n.stats.createdRevenue), 21, RED, true);
+            TextView name = text("#" + rank + "  " + n.name, 17, INK, true);
+            TextView rev = text(compact(n.stats.createdRevenue), 19, RED, true);
             rev.setGravity(Gravity.END);
             head.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(rev);
             box.addView(head);
 
-            box.addView(infoRow("Thành công", compact(n.stats.successfulRevenue) + " · " + num(n.stats.successfulOrders) + " đơn"));
-            box.addView(infoRow("Treo", compact(n.stats.pendingRevenue)));
-            box.addView(infoRow("Đang giao", compact(n.stats.shippingRevenue)));
-            box.addView(infoRow("Hoàn", compact(n.stats.returnRevenue) + " · " + pct(n.stats.returnRate)));
-            box.addView(infoRow("AOV", compact(n.stats.aov)));
+            box.addView(infoPairRow(
+                    "Thành công", compact(n.stats.successfulRevenue),
+                    "Đơn TC", num(n.stats.successfulOrders)
+            ));
+            box.addView(infoPairRow(
+                    "Treo", compact(n.stats.pendingRevenue),
+                    "Đang giao", compact(n.stats.shippingRevenue)
+            ));
+            box.addView(infoPairRow(
+                    "Hoàn", compact(n.stats.returnRevenue),
+                    "AOV", compact(n.stats.aov)
+            ));
 
             LinearLayout.LayoutParams lp = fullLp();
             lp.bottomMargin = dp(10);
@@ -636,8 +684,8 @@ public class MainActivity extends Activity {
             LinearLayout box = compactCard();
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
-            TextView date = text(String.format(Locale.US, "%02d", d) + "/" + month.substring(5), 16, INK, true);
-            TextView revenue = text(compact(s.createdRevenue), 19, RED, true);
+            TextView date = text(String.format(Locale.US, "%02d", d) + "/" + month.substring(5), 14, INK, true);
+            TextView revenue = text(compact(s.createdRevenue), 17, RED, true);
             revenue.setGravity(Gravity.END);
             head.addView(date, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(revenue);
@@ -1162,13 +1210,45 @@ public class MainActivity extends Activity {
         };
     }
 
+    private View infoPairRow(
+            String labelA, String valueA,
+            String labelB, String valueB
+    ) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(7), 0, 0);
+
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        TextView la = text(labelA, 10, MUTED, false);
+        TextView va = text(valueA, 13, INK, true);
+        va.setPadding(0, dp(2), 0, 0);
+        left.addView(la);
+        left.addView(va);
+
+        LinearLayout right = new LinearLayout(this);
+        right.setOrientation(LinearLayout.VERTICAL);
+        right.setGravity(Gravity.END);
+        TextView lb = text(labelB, 10, MUTED, false);
+        lb.setGravity(Gravity.END);
+        TextView vb = text(valueB, 13, INK, true);
+        vb.setGravity(Gravity.END);
+        vb.setPadding(0, dp(2), 0, 0);
+        right.addView(lb);
+        right.addView(vb);
+
+        row.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(right, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
+    }
+
     private View infoRow(String label, String value) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(7), 0, 0);
-        TextView l = text(label, 12, MUTED, false);
-        TextView v = text(value, 13, INK, true);
+        row.setPadding(0, dp(6), 0, 0);
+        TextView l = text(label, 11, MUTED, false);
+        TextView v = text(value, 12, INK, true);
         v.setGravity(Gravity.END);
         row.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         row.addView(v);
@@ -1178,36 +1258,53 @@ public class MainActivity extends Activity {
     private void addSectionTitle(String title, String subtitle) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setPadding(dp(2), dp(18), dp(2), dp(8));
+        wrap.setPadding(dp(2), dp(14), dp(2), dp(7));
         TextView e = text(title, 11, RED, true);
         e.setLetterSpacing(.06f);
         wrap.addView(e);
-        wrap.addView(text(subtitle, 14, INK, true));
+        wrap.addView(text(subtitle, 13, INK, true));
         content.addView(wrap);
     }
 
     private void addPrimaryKpi(String label, String value, String sub) {
         LinearLayout c = card();
-        c.setBackground(rounded(RED, RED, 0, 16));
-        c.setPadding(dp(18), dp(17), dp(18), dp(17));
-        c.addView(text(label, 11, Color.rgb(239, 196, 205), true));
-        TextView v = text(value, 34, Color.WHITE, true);
-        v.setPadding(0, dp(7), 0, dp(5));
-        c.addView(v);
-        c.addView(text(sub, 12, Color.rgb(241, 207, 214), false));
+        c.setPadding(0, 0, 0, 0);
+
+        View accent = new View(this);
+        accent.setBackgroundColor(RED);
+        c.addView(accent, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(4)
+        ));
+
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setPadding(dp(16), dp(13), dp(16), dp(14));
+        inner.addView(text(label, 10, RED, true));
+
+        TextView v = text(value, 31, INK, true);
+        v.setPadding(0, dp(5), 0, dp(4));
+        inner.addView(v);
+        inner.addView(text(sub, 11, MUTED, false));
+        c.addView(inner);
+
         LinearLayout.LayoutParams lp = fullLp();
-        lp.bottomMargin = dp(10);
+        lp.bottomMargin = dp(9);
         content.addView(c, lp);
     }
 
     private LinearLayout kpi(String label, String value, String sub) {
         LinearLayout c = card();
-        c.setPadding(dp(13), dp(13), dp(13), dp(13));
-        c.addView(text(label, 10, MUTED, true));
-        TextView v = text(value, 22, INK, true);
-        v.setPadding(0, dp(7), 0, dp(4));
+        c.setMinimumHeight(dp(88));
+        c.setPadding(dp(12), dp(11), dp(12), dp(10));
+        c.addView(text(label, 9, MUTED, true));
+        TextView v = text(value, 20, INK, true);
+        v.setPadding(0, dp(5), 0, dp(2));
         c.addView(v);
-        if (sub != null && !sub.isEmpty()) c.addView(text(sub, 10, MUTED, false));
+        if (sub != null && !sub.isEmpty()) {
+            TextView s = text(sub, 9, MUTED, false);
+            s.setMaxLines(2);
+            c.addView(s);
+        }
         return c;
     }
 
@@ -1217,25 +1314,26 @@ public class MainActivity extends Activity {
         row.setBaselineAligned(false);
         LinearLayout.LayoutParams aLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         LinearLayout.LayoutParams bLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        aLp.rightMargin = dp(5);
-        bLp.leftMargin = dp(5);
+        aLp.rightMargin = dp(4);
+        bLp.leftMargin = dp(4);
         row.addView(a, aLp);
         row.addView(b, bLp);
         LinearLayout.LayoutParams rp = fullLp();
-        rp.bottomMargin = dp(10);
+        rp.bottomMargin = dp(8);
         content.addView(row, rp);
     }
 
     private LinearLayout card() {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(rounded(CARD, LINE, 1, 16));
+        c.setBackground(rounded(CARD, Color.rgb(232, 226, 219), 1, 17));
+        c.setElevation(dp(1));
         return c;
     }
 
     private LinearLayout compactCard() {
         LinearLayout c = card();
-        c.setPadding(dp(14), dp(12), dp(14), dp(12));
+        c.setPadding(dp(13), dp(10), dp(13), dp(10));
         return c;
     }
 
@@ -1269,7 +1367,7 @@ public class MainActivity extends Activity {
 
     private TextView bigAction(String value, boolean primary) {
         TextView t = actionText(value, primary);
-        t.setTextSize(14);
+        t.setTextSize(13);
         return t;
     }
 
@@ -1289,7 +1387,7 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams actionLp(int width) {
-        return new LinearLayout.LayoutParams(width, dp(44));
+        return new LinearLayout.LayoutParams(width, dp(42));
     }
 
     private int dp(int value) {
