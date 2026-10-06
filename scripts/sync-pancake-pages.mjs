@@ -112,6 +112,23 @@ async function fetchOrders(from,to){
     console.log('ORDER_NESTED_SCHEMA_KEYS:',JSON.stringify(nested));
     const norm=normalize(raw);
     console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
+    console.log('ORDER_MONEY_DIAGNOSTIC:',JSON.stringify({
+      total_price:num(raw.total_price),
+      total_price_after_sub_discount:num(raw.total_price_after_sub_discount),
+      total_discount:num(raw.total_discount),
+      cod:num(raw.cod),
+      prepaid:num(raw.prepaid),
+      shipping_fee:num(raw.shipping_fee),
+      surcharge:num(raw.surcharge),
+      buyer_total_amount:num(raw.buyer_total_amount)
+    }));
+    console.log('ORDER_SOURCE_DIAGNOSTIC:',JSON.stringify({
+      order_sources:raw.order_sources,
+      order_sources_name:raw.order_sources_name,
+      ads_source:raw.ads_source,
+      is_livestream:raw.is_livestream,
+      is_live_shopping:raw.is_live_shopping
+    }));
   }
   if(!first.data.length||firstBounds.max<from)return rows;
 
