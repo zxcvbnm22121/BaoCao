@@ -375,6 +375,7 @@ document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.datas
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.dataset.closeDialog).close());
 $('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
 $('quickReportBtn').onclick=openQuickReport;
+$('quickReportBarBtn').onclick=openQuickReport;
 $('quickTotalData').oninput=()=>{quickTotalDataStore[currentDateRangeKey()]=Math.max(0,Number($('quickTotalData').value)||0);saveQuickTotalData();renderQuickReport()};
 $('quickAdsData').oninput=()=>{channelData[rangeKey('Facebook Ads')]=Math.max(0,Number($('quickAdsData').value)||0);saveChannelData();renderQuickReport()};
 $('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickTotalData()}};
