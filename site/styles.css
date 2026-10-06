@@ -203,3 +203,128 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100vw - 24px));max-heigh
   #unlockDialog .dialogActions{position:sticky;bottom:-14px;background:#fff;padding-top:10px;padding-bottom:14px;margin-bottom:-14px}
   #unlockDialog .dialogActions button{min-height:42px}
 }
+
+/* True phone UI v3 */
+@media(max-width:720px){
+  body{font-size:14px}
+  .main{padding:14px 12px calc(104px + env(safe-area-inset-bottom))}
+  .topbar{margin:-14px -12px 0;padding:14px 12px 11px}
+  .topbar h1{font-size:24px;line-height:1.12;letter-spacing:-.035em}
+  .eyebrow,.sectionEyebrow{font-size:10px;letter-spacing:.11em}
+  .topActions{gap:7px}
+  .squareBtn{width:44px;height:44px;border-radius:12px;font-size:17px}
+  .liveBadge{padding:10px 12px;font-size:10px}
+
+  .mobileCommandBar{gap:9px;margin:12px 0 5px}
+  .mobileCommandBar button{min-height:50px;border-radius:13px;font-size:13px;font-weight:850}
+  .filterBar{left:10px;right:10px;bottom:calc(84px + env(safe-area-inset-bottom));gap:10px;padding:15px;border-radius:20px}
+  .mobileFilterHead b{font-size:17px}
+  .mobileFilterHead button{width:42px;height:42px;font-size:22px}
+  .presetGroup{gap:6px}
+  .presetGroup button{min-height:44px;font-size:12px;border-radius:10px}
+  .filterBar label{gap:5px}
+  .filterBar label span{font-size:10px}
+  .filterBar input,.filterBar select{min-height:48px;padding:10px 12px;font-size:16px;border-radius:11px}
+  .quickReportBarBtn{min-height:50px!important;font-size:13px!important;border-radius:12px!important}
+
+  .sectionHead{margin:18px 0 10px;gap:10px}
+  .sectionHead h2{font-size:21px;line-height:1.15}
+  .sectionHead p{font-size:12px;line-height:1.4}
+  .periodStat{font-size:10px;padding:8px 9px;max-width:46%;white-space:normal;text-align:right;line-height:1.35}
+
+  .kpiGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .kpiGrid .card:first-child{grid-column:1/-1;min-height:132px;padding:18px}
+  .kpiGrid .card:first-child .cardLabel{font-size:11px}
+  .kpiGrid .card:first-child .cardValue{font-size:36px;margin-top:12px}
+  .kpiGrid .card:first-child .cardSub{font-size:12px}
+  .card{min-height:116px;padding:14px;border-radius:15px}
+  .cardLabel{font-size:10px;line-height:1.35;letter-spacing:.06em}
+  .cardValue{font-size:23px;line-height:1.12;margin-top:10px}
+  .cardSub{font-size:11px;line-height:1.35;margin-top:6px}
+
+  .chartGrid,.chartGrid.bigFirst{gap:10px;margin-top:10px}
+  .panel{border-radius:15px}
+  .panelHead{padding:14px 14px 10px}
+  .panelHead h3{font-size:16px;line-height:1.2}
+  .panelHead p{font-size:11px;line-height:1.35;margin-top:4px}
+  .legend{display:none}
+  .chart,.chartLarge,.chartTall{height:290px;padding:6px 4px 14px}
+  .axisText{font-size:10px}
+  .statusViz{padding:2px 14px 14px}
+  .statusItem{padding:9px 0}
+  .statusTop{font-size:12px}
+  .statusMeta{font-size:10px}
+  .statusDetailWrap{margin:0 14px 14px;padding-top:13px}
+  .statusDetailTitle span{font-size:10px}
+  .statusDetail{gap:7px}
+  .statusDetailRow{grid-template-columns:minmax(0,1fr) 68px 108px;gap:8px;padding:10px 11px;border-radius:10px}
+  .statusDetailRow .statusName{font-size:12px}
+  .statusDetailRow .statusCount{font-size:11px}
+  .statusDetailRow .statusMoney{font-size:12px}
+
+  .targetHero{padding:15px}
+  .targetHero span{font-size:10px}
+  .targetHero strong{font-size:27px}
+  .gapBadge{font-size:10px;padding:7px 9px}
+  .progressRow{padding:0 14px 12px}
+  .progressLabel{font-size:11px}
+  .targetStats{grid-template-columns:1fr 1fr 1fr;gap:7px;padding:12px 14px 15px}
+  .targetStats span{font-size:9px}
+  .targetStats b{font-size:13px}
+  .miniKpiGrid{grid-template-columns:1fr 1fr;gap:10px}
+  .miniKpi{padding:14px;min-height:94px;border-radius:14px}
+  .miniKpi span{font-size:10px}
+  .miniKpi b{font-size:21px;margin-top:8px}
+
+  /* Turn desktop tables into finger-friendly phone cards */
+  .tablePanel{background:transparent;border:0;box-shadow:none;overflow:visible}
+  .tablePanel>.panelHead{background:#fff;border:1px solid var(--line);border-radius:15px;margin-bottom:9px}
+  .tablePanel .scroll{overflow:visible}
+  .tablePanel table{display:block;min-width:0;width:100%}
+  .tablePanel thead{display:none}
+  .tablePanel tbody{display:grid;gap:10px}
+  .tablePanel tbody tr{display:block;background:#fff;border:1px solid var(--line);border-radius:15px;padding:7px 13px;box-shadow:var(--shadow)}
+  .tablePanel tbody tr td{position:static!important;display:flex;justify-content:space-between;align-items:center;gap:14px;width:100%;min-height:42px;padding:8px 0!important;border:0!important;border-bottom:1px solid #f0ebe6!important;background:transparent!important;box-shadow:none!important;text-align:right!important;font-size:13px!important;white-space:normal}
+  .tablePanel tbody tr td:last-child{border-bottom:0!important}
+  .tablePanel tbody tr td::before{content:attr(data-label);font-size:10px;font-weight:850;color:#817a73;text-transform:uppercase;letter-spacing:.04em;text-align:left;flex:0 0 42%}
+  .tablePanel tbody tr td:first-child{font-size:16px!important;font-weight:900!important;color:var(--ink);min-height:48px}
+  .tablePanel tbody tr td:first-child::before{font-size:10px}
+  .tablePanel tbody tr td input{width:145px;max-width:52%;min-height:42px;font-size:16px;padding:8px 10px;border-radius:9px}
+  .summaryChip{font-size:10px;padding:7px 9px}
+
+  footer{font-size:10px;line-height:1.4}
+
+  dialog{left:10px!important;right:10px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;border-radius:20px}
+  dialog .dialogForm{padding:18px}
+  .dialogHead h2{font-size:21px}
+  .dialogHead .x{width:42px;height:42px;font-size:22px}
+  .dialogForm>p{font-size:12px!important;line-height:1.5!important}
+  .field span{font-size:10px}
+  .field input{min-height:48px;font-size:16px;padding:10px 12px}
+  .dialogActions{gap:8px}
+  .dialogActions button{min-height:48px;font-size:13px;border-radius:11px}
+  #unlockDialog{max-height:58vh!important;max-height:58dvh!important}
+  #unlockDialog .dialogForm{padding:18px}
+  #unlockDialog .dialogHead{top:-18px;padding-top:18px}
+  #unlockDialog .dialogActions{bottom:-18px;padding-bottom:18px;margin-bottom:-18px}
+  #unlockDialog p{font-size:12px!important}
+  #unlockDialog .field input{min-height:50px;font-size:16px}
+
+  .quickExactList{gap:10px;margin-top:15px}
+  .quickExactRow{padding:13px;border-radius:12px}
+  .quickExactRow label,.quickExactRow span{font-size:13px}
+  .quickExactRow input{min-height:48px;font-size:16px;padding:10px 11px}
+  .quickExactRow strong{font-size:21px}
+  .quickTextBox{font-size:12px;line-height:1.65;padding:13px}
+
+  .mobileBottomNav{padding:8px 7px calc(8px + env(safe-area-inset-bottom));gap:5px}
+  .mobileNavBtn{min-height:62px;border-radius:12px;gap:5px}
+  .mobileNavBtn span{font-size:20px}
+  .mobileNavBtn b{font-size:11px}
+}
+@media(max-width:390px){
+  .main{padding-left:10px;padding-right:10px}
+  .kpiGrid{grid-template-columns:1fr 1fr}
+  .cardValue{font-size:21px}
+  .kpiGrid .card:first-child .cardValue{font-size:32px}
+}
