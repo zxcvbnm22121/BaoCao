@@ -29,7 +29,7 @@ function mockData(days=40){
       const st=pick(r,['THANH_CONG','THANH_CONG','THANH_CONG','THANH_CONG','DANG_GIAO','TREO','HOAN','HUY']);
       const ch=pick(r,['Facebook Ads','Facebook Ads','Facebook Ads','Livestream','Livestream','Shopee','Website','Zalo/CSKH']);
       const staff=ch==='Livestream'&&r()<.7?'Linh live':pick(r,['Hương','Diễm','Thu']);
-      out.push({createdAt:`${key}T${pad(h)}:${pad(m)}:00+07:00`,salesStaff:staff,channel:ch,status:st,totalAmount:total,successfulAmount:st==='THANH_CONG'?total:0,isPartialReturn:false,statusCode:null,statusName:'demo'});
+      out.push({createdAt:`${key}T${pad(h)}:${pad(m)}:00+07:00`,createdDate:key,salesStaff:staff,channel:ch,sourceName:ch,status:st,grossAmount:Math.round(total/(1-discount||1)),netAmount:total,discountAmount:0,codAmount:total,prepaidAmount:0,totalAmount:total,successfulAmount:st==='THANH_CONG'?total:0,isPartialReturn:false,statusCode:null,statusName:'demo',excludedStatus:st==='HUY',excludedExchangeSource:false,excludedFromDefaultReport:st==='HUY'});
     }
   } return out
 }
@@ -76,36 +76,51 @@ function dateRange(kind){
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===kind));
   renderAll()
 }
-function normalizeDate(v){return String(v||'').slice(0,10)}
+function orderDate(o){
+  if(o&&o.createdDate)return String(o.createdDate).slice(0,10);
+  try{return vnDate(new Date(o&&o.createdAt||o))}catch{return String(o&&o.createdAt||o||'').slice(0,10)}
+}
+function orderHour(o){
+  try{return new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Bangkok',hour:'2-digit',hour12:false}).format(new Date(o.createdAt))+'h'}catch{return'—'}
+}
 function populateFilters(){
   const fill=(id,vals)=>{const el=$(id),old=el.value;el.innerHTML=['Tất cả',...Array.from(new Set(vals.filter(Boolean))).sort()].map(x=>`<option>${esc(x)}</option>`).join('');if([...el.options].some(o=>o.value===old))el.value=old};
   fill('channel',sourceOrders.map(x=>x.channel));
   fill('staff',sourceOrders.map(x=>x.salesStaff))
 }
+function isDefaultExcluded(o){
+  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedStatus)
+}
 function filteredRows(opts={}){
   const from=opts.from||$('from').value,to=opts.to||$('to').value,ch=$('channel').value,staff=$('staff').value,status=$('status').value;
   return sourceOrders.filter(o=>{
-    const d=normalizeDate(o.createdAt);
-    return (!from||d>=from)&&(!to||d<=to)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&(status==='Tất cả'||o.status===status)
+    const d=orderDate(o);
+    const defaultRule=status==='Tất cả'?!isDefaultExcluded(o):(!o.excludedExchangeSource&&o.status===status);
+    return (!from||d>=from)&&(!to||d<=to)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&defaultRule
   })
 }
 function filteredIgnoringDate(month){
   const ch=$('channel').value,staff=$('staff').value,status=$('status').value;
-  return sourceOrders.filter(o=>normalizeDate(o.createdAt).startsWith(month)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&(status==='Tất cả'||o.status===status))
+  return sourceOrders.filter(o=>{
+    const defaultRule=status==='Tất cả'?!isDefaultExcluded(o):(!o.excludedExchangeSource&&o.status===status);
+    return orderDate(o).startsWith(month)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&defaultRule
+  })
 }
 function sum(rows,fn){return rows.reduce((a,x)=>a+(Number(fn(x))||0),0)}
 function successful(o){return Number(o.successfulAmount)||0}
 function overview(rows){
-  const created=sum(rows,x=>x.totalAmount),success=sum(rows,successful),returns=rows.filter(x=>x.status==='HOAN');
+  const net=sum(rows,x=>x.netAmount??x.totalAmount),gross=sum(rows,x=>x.grossAmount??x.totalAmount),success=sum(rows,successful),returns=rows.filter(x=>x.status==='HOAN');
+  const cod=sum(rows,x=>x.codAmount??0),prepaid=sum(rows,x=>x.prepaidAmount??0),discount=sum(rows,x=>x.discountAmount??Math.max(0,(x.grossAmount||0)-(x.netAmount||x.totalAmount||0)));
   return {
-    createdRevenue:created,successfulRevenue:success,orders:rows.length,
+    createdRevenue:net,grossRevenue:gross,discountRevenue:discount,codRevenue:cod,prepaidRevenue:prepaid,
+    successfulRevenue:success,orders:rows.length,
     successfulOrders:rows.filter(x=>successful(x)>0||x.status==='THANH_CONG').length,
-    pendingRevenue:sum(rows,x=>x.status==='TREO'?x.totalAmount:0),
-    shippingRevenue:sum(rows,x=>x.status==='DANG_GIAO'?x.totalAmount:0),
-    returnRevenue:sum(rows,x=>x.status==='HOAN'?x.totalAmount:0),
-    cancelledRevenue:sum(rows,x=>x.status==='HUY'?x.totalAmount:0),
+    pendingRevenue:sum(rows,x=>x.status==='TREO'?(x.netAmount??x.totalAmount):0),
+    shippingRevenue:sum(rows,x=>x.status==='DANG_GIAO'?(x.netAmount??x.totalAmount):0),
+    returnRevenue:sum(rows,x=>x.status==='HOAN'?(x.netAmount??x.totalAmount):0),
+    cancelledRevenue:sum(rows,x=>x.status==='HUY'?(x.netAmount??x.totalAmount):0),
     returnRate:rows.length?returns.length/rows.length:0,
-    aov:rows.length?created/rows.length:0
+    aov:rows.length?net/rows.length:0
   }
 }
 function group(rows,key){const m={};for(const r of rows)(m[key(r)]??=[]).push(r);return m}
@@ -128,16 +143,20 @@ function mini(label,value,cls=''){return `<div class="miniKpi ${cls}"><span>${la
 function renderAll(){
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
   $('kpis').innerHTML=[
-    card('Doanh số tạo đơn',compact(k.createdRevenue),`${numFmt(k.orders)} đơn`,true),
+    card('Tổng tiền sau CK',compact(k.createdRevenue),`${numFmt(k.orders)} đơn · khớp logic Pancake`,true),
+    card('COD',compact(k.codRevenue),'Tiền thu hộ'),
+    card('Trả trước',compact(k.prepaidRevenue),'Khách đã thanh toán trước'),
+    card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`),
     card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`),
     card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển'),
-    card('Treo',compact(k.pendingRevenue),'Chưa hoàn tất'),
+    card('Treo',compact(k.pendingRevenue),'Mới / chờ hàng / xác nhận...'),
     card('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`),
-    card('Huỷ / xoá',compact(k.cancelledRevenue),'Tách riêng khỏi hoàn'),
     card('Tổng Data',data?numFmt(data):'Chưa nhập',data?`CR chốt ${pct(k.orders/data)}`:'Nhập tại màn Theo kênh'),
-    card('AOV',compact(k.aov),'Giá trị đơn trung bình')
+    card('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Chưa có data'),
+    card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình'),
+    card('Đơn đã loại',numFmt(sourceOrders.filter(o=>orderDate(o)>=$('from').value&&orderDate(o)<=$('to').value&&isDefaultExcluded(o)).length),'Huỷ/Xoá + các nguồn Đơn đổi')
   ].join('');
-  $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn`;
+  $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Đã loại Hủy/Xóa + Đơn đổi`;
   renderTrend(rows);
   renderStatus(rows);
   renderChannelChart(rows,'channelChart');
@@ -146,7 +165,7 @@ function renderAll(){
   renderSales(rows);
   renderMonthly();
   $('updatedAt').textContent='Cập nhật dữ liệu: '+new Date(meta.lastUpdated||Date.now()).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'});
-  $('pageSub').textContent=`${meta.source==='PANCAKE'?'Pancake POS':'Demo'} · ${numFmt(rows.length)} đơn theo bộ lọc hiện tại`;
+  $('pageSub').textContent=`${meta.source==='PANCAKE'?'Pancake POS':'Demo'} · ${numFmt(rows.length)} đơn · Tổng tiền dùng số sau chiết khấu`;
 }
 function chartBase(el){
   const W=920,H=260,P={l:48,r:16,t:15,b:30};
@@ -159,7 +178,7 @@ function addSvg(svg,tag,attrs,text){
 }
 function renderTrend(rows){
   const single=$('from').value===$('to').value;
-  const g=group(rows,o=>single?String(new Date(o.createdAt).getHours()).padStart(2,'0')+'h':normalizeDate(o.createdAt));
+  const g=group(rows,o=>single?orderHour(o):orderDate(o));
   const labels=single?Array.from({length:15},(_,i)=>String(i+8).padStart(2,'0')+'h'):Object.keys(g).sort();
   const data=labels.map(l=>{const rr=g[l]||[],o=overview(rr);return{label:l,created:o.createdRevenue,success:o.successfulRevenue}});
   drawLineChart($('trendChart'),data,[{key:'created',class:'lineRed',point:'pointRed'},{key:'success',class:'lineDark',point:'pointDark'}],single?null:effectiveDailyTarget($('from').value.slice(0,7)))
@@ -180,7 +199,7 @@ function renderStatus(rows){
 }
 function channelStats(rows){
   const grouped=group(rows,x=>x.channel||'Khác');
-  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo/CSKH'];
+  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo/CSKH','TikTok Shop','Lazada','Showroom/POS'];
   const names=Array.from(new Set([...canonical,...Object.keys(grouped)]));
   return names.map(name=>({name,...overview(grouped[name]||[]),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
 }
@@ -227,7 +246,7 @@ function renderSales(rows){
   drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
 }
 function renderMonthly(){
-  const month=($('from').value||vnDate()).slice(0,7),rows=filteredIgnoringDate(month),days=daysInMonth(month),g=group(rows,x=>normalizeDate(x.createdAt)),dailyTarget=effectiveDailyTarget(month),tm=targetMonth(),daily=[],cumulative=[];let run=0;
+  const month=($('from').value||vnDate()).slice(0,7),rows=filteredIgnoringDate(month),days=daysInMonth(month),g=group(rows,x=>orderDate(x)),dailyTarget=effectiveDailyTarget(month),tm=targetMonth(),daily=[],cumulative=[];let run=0;
   for(let d=1;d<=days;d++){const key=`${month}-${pad(d)}`,rr=g[key]||[],o=overview(rr);run+=o.createdRevenue;daily.push({label:key,value:o.createdRevenue-dailyTarget,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders});cumulative.push({label:key,actual:run,target:tm*d/days})}
   const nowMonth=month===vnDate().slice(0,7),lastDay=nowMonth?Number(vnDate().slice(8,10)):days,actualToDate=cumulative[Math.max(0,lastDay-1)]?.actual||0,time=lastDay/days,completion=tm?actualToDate/tm:0,gapPts=(completion-time)*100,forecast=lastDay?actualToDate/lastDay*days:0;
   $('monthlyKpis').innerHTML=[mini('Target tháng',compact(tm)),mini('Đã đạt',compact(actualToDate)),mini('% hoàn thành',pct(completion)),mini('Tiến độ thời gian',pct(time)),mini('Dự báo cuối tháng',compact(forecast))].join('');
