@@ -103,7 +103,7 @@ async function fetchOrderPage(from,to,page){
   url.searchParams.set('from_date',from);
   url.searchParams.set('to_date',to);
   url.searchParams.set('page_number',String(page));
-  url.searchParams.set('page_size','100');
+  url.searchParams.set('page_size','1000');
   const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
   if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
   const body=await r.json();
@@ -127,9 +127,11 @@ function pageDateBounds(data){
 async function fetchOrders(from,to){
   const first=await fetchOrderPage(from,to,1);
   const firstNorm=first.data.map(normalize).filter(x=>x.totalAmount>=0);
-  const rows=firstNorm.filter(x=>keepInRange(x,from,to));
+  const rows=[...firstNorm];
+
   const firstBounds=pageDateBounds(first.data);
   console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''} · ${firstBounds.min||'?'} → ${firstBounds.max||'?'}`);
+
   if(first.data[0]){
     const raw=first.data[0];
     const nested=Object.entries(raw).filter(([,v])=>v&&typeof v==='object'&&!Array.isArray(v)).slice(0,20).map(([k,v])=>[k,Object.keys(v).sort().slice(0,40)]);
@@ -138,19 +140,18 @@ async function fetchOrders(from,to){
     const norm=normalize(raw);
     console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
   }
-  if(!first.data.length||firstBounds.max<from)return rows;
+
+  if(!first.data.length)return rows;
 
   if(first.totalPages){
-    const maxPages=Math.min(200,first.totalPages);
-    let stop=false;
-    for(let fromPage=2;fromPage<=maxPages&&!stop;fromPage+=5){
+    const maxPages=Math.min(500,first.totalPages);
+    for(let fromPage=2;fromPage<=maxPages;fromPage+=5){
       const pages=Array.from({length:Math.min(5,maxPages-fromPage+1)},(_,i)=>fromPage+i);
       const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
       for(let i=0;i<batch.length;i++){
         const page=pages[i],data=batch[i].data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
         console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-        rows.push(...norm.filter(x=>keepInRange(x,from,to)));
-        if(!data.length||(bounds.max&&bounds.max<from)){stop=true;break}
+        rows.push(...norm);
       }
     }
     return rows
@@ -159,15 +160,15 @@ async function fetchOrders(from,to){
   const seenPages=new Set();
   const firstA=first.data[0]||{},firstB=first.data[first.data.length-1]||{};
   seenPages.add(`${first.data.length}:${str(get(firstA,'id|display_id|order_id|code'))}:${str(get(firstB,'id|display_id|order_id|code'))}`);
-  for(let page=2;page<=200;page++){
+  for(let page=2;page<=500;page++){
     const res=await fetchOrderPage(from,to,page),data=res.data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
     const a=data[0]||{},b=data[data.length-1]||{};
     const sig=`${data.length}:${str(get(a,'id|display_id|order_id|code'))}:${str(get(b,'id|display_id|order_id|code'))}`;
     if(seenPages.has(sig)){console.log(`Pagination repeated at page ${page}; stopping.`);break}
     seenPages.add(sig);
     console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-    rows.push(...norm.filter(x=>keepInRange(x,from,to)));
-    if(!data.length||data.length<100||(bounds.max&&bounds.max<from))break;
+    rows.push(...norm);
+    if(!data.length||data.length<100)break;
   }
   return rows
 }
@@ -176,7 +177,7 @@ function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=cryp
 await fs.mkdir('site/data',{recursive:true});
 if(!API_KEY||!PASSWORD){await fs.rm(OUT,{force:true});await fs.writeFile(STATUS,JSON.stringify({mode:'DEMO',updatedAt:new Date().toISOString(),reason:'Missing GitHub Secrets'},null,2));console.log('DEMO mode: set PANCAKE_API_KEY and DASHBOARD_PASSWORD in GitHub Actions secrets. PANCAKE_SHOP_ID is optional.');process.exit(0)}
 await discoverShopId();
-const today=dateKey(),from=today.slice(0,7)+'-01';
+const today=dateKey(),from='2000-01-01';
 console.log(`Sync Pancake shop ${SHOP_ID}: ${from} -> ${today}`);
 const orders=await fetchOrders(from,today);
 const statusDistribution=orders.reduce((m,o)=>{const k=`${o.statusCode}:${o.status}`;m[k]=(m[k]||0)+1;return m},{});
