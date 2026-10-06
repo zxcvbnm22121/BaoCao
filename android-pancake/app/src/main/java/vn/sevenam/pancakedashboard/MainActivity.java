@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.Build;
 import android.graphics.Insets;
@@ -144,11 +145,11 @@ public class MainActivity extends Activity {
         headerText.setOrientation(LinearLayout.VERTICAL);
         header.addView(headerText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView eyebrow = text("SEVEN.AM · PANCAKE", 11, RED, true);
+        TextView eyebrow = text("SEVEN.AM · PANCAKE", 9.5f, RED, true);
         eyebrow.setLetterSpacing(.08f);
         headerText.addView(eyebrow);
 
-        titleView = text("Tổng quan doanh thu", 23, INK, true);
+        titleView = text("Tổng quan doanh thu", 21, INK, true);
         titleView.setPadding(0, dp(2), 0, 0);
         headerText.addView(titleView);
 
@@ -162,7 +163,7 @@ public class MainActivity extends Activity {
         headerActions.addView(liveChip, actionLp(dp(82)));
 
         TextView refresh = actionText("↻", false);
-        refresh.setTextSize(22);
+        refresh.setTextSize(20);
         refresh.setOnClickListener(v -> {
             if (livePassword == null || livePassword.isEmpty()) {
                 showUnlockDialog();
@@ -210,7 +211,7 @@ public class MainActivity extends Activity {
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.setGravity(Gravity.CENTER);
-        bottom.setBackground(rounded(Color.rgb(20, 20, 20), Color.TRANSPARENT, 0, 18));
+        bottom.setBackground(rounded(Color.rgb(24, 23, 22), Color.TRANSPARENT, 0, 22));
         bottom.setPadding(dp(5), dp(5), dp(5), dp(5));
         LinearLayout.LayoutParams bottomLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(68)
@@ -229,8 +230,8 @@ public class MainActivity extends Activity {
         TextView item = new TextView(this);
         item.setText(icon + "\n" + label);
         item.setGravity(Gravity.CENTER);
-        item.setTextSize(11);
-        item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        item.setTextSize(10);
+        item.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         item.setLineSpacing(dp(2), 1f);
         item.setTag(view);
         item.setOnClickListener(v -> {
@@ -249,7 +250,7 @@ public class MainActivity extends Activity {
             boolean active = currentView.equals(String.valueOf(item.getTag()));
             item.setTextColor(active ? Color.WHITE : Color.rgb(145, 139, 134));
             item.setBackground(active
-                    ? rounded(Color.rgb(43, 43, 43), Color.TRANSPARENT, 0, 13)
+                    ? rounded(Color.rgb(49, 47, 45), Color.TRANSPARENT, 0, 15)
                     : null);
         }
     }
@@ -287,26 +288,26 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.HORIZONTAL);
         box.setGravity(Gravity.CENTER_VERTICAL);
         box.setPadding(dp(12), dp(9), dp(12), dp(9));
-        box.setBackground(rounded(Color.rgb(239, 235, 230), Color.rgb(226, 219, 211), 1, 13));
+        box.setBackground(rounded(Color.rgb(241, 238, 234), Color.rgb(229, 224, 218), 1, 18));
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        TextView period = text(fromDate + "  →  " + toDate, 12, INK, true);
+        TextView period = text(fromDate + "  →  " + toDate, 11, INK, true);
         left.addView(period);
 
         String summary = dashboard == null
                 ? "Chưa mở dữ liệu LIVE"
                 : num(filteredRows().size()) + " đơn · đã loại Huỷ/Xoá + Đơn đổi";
-        TextView sub = text(summary, 10, MUTED, false);
+        TextView sub = text(summary, 9, MUTED, false);
         sub.setPadding(0, dp(2), 0, 0);
         left.addView(sub);
 
         box.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView badge = text(dashboard == null ? "LOCKED" : "LIVE", 10, dashboard == null ? MUTED : GREEN, true);
+        TextView badge = text(dashboard == null ? "LOCKED" : "LIVE", 9, dashboard == null ? MUTED : GREEN, true);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(9), dp(5), dp(9), dp(5));
-        badge.setBackground(rounded(Color.WHITE, dashboard == null ? LINE : Color.rgb(199, 226, 211), 1, 10));
+        badge.setBackground(rounded(Color.WHITE, dashboard == null ? LINE : Color.rgb(199, 226, 211), 1, 13));
         box.addView(badge);
 
         LinearLayout.LayoutParams lp = fullLp();
@@ -323,12 +324,12 @@ public class MainActivity extends Activity {
         icon.setGravity(Gravity.CENTER);
         locked.addView(icon);
 
-        TextView h = text("Mở dữ liệu Pancake LIVE", 19, INK, true);
+        TextView h = text("Mở dữ liệu Pancake LIVE", 17, INK, true);
         h.setGravity(Gravity.CENTER);
         h.setPadding(0, dp(8), 0, 0);
         locked.addView(h);
 
-        TextView p = text("Nhập mật khẩu dashboard để app tải và giải mã dữ liệu trực tiếp.", 13, MUTED, false);
+        TextView p = text("Nhập mật khẩu dashboard để app tải và giải mã dữ liệu trực tiếp.", 11, MUTED, false);
         p.setGravity(Gravity.CENTER);
         p.setPadding(0, dp(6), 0, dp(14));
         locked.addView(p);
@@ -405,8 +406,8 @@ public class MainActivity extends Activity {
             top.setOrientation(LinearLayout.HORIZONTAL);
             top.setGravity(Gravity.CENTER_VERTICAL);
             top.setPadding(0, dp(6), 0, dp(3));
-            TextView l = text(labels[i], 12, INK, true);
-            TextView v = text(compact(value) + "  ·  " + rr.size() + " đơn", 11, MUTED, true);
+            TextView l = text(labels[i], 11, INK, true);
+            TextView v = text(compact(value) + "  ·  " + rr.size() + " đơn", 10, MUTED, true);
             v.setGravity(Gravity.END);
             top.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             top.addView(v);
@@ -430,9 +431,9 @@ public class MainActivity extends Activity {
         for (int i = 0; i < limit; i++) {
             NamedStats n = groups.get(i);
             LinearLayout box = compactCard();
-            TextView name = text(n.name, 14, INK, true);
-            TextView val = text(compact(n.stats.createdRevenue), 18, RED, true);
-            TextView sub = text(num(n.stats.orders) + " đơn · TC " + compact(n.stats.successfulRevenue), 10, MUTED, false);
+            TextView name = text(n.name, 13, INK, true);
+            TextView val = text(compact(n.stats.createdRevenue), 16.5f, RED, true);
+            TextView sub = text(num(n.stats.orders) + " đơn · TC " + compact(n.stats.successfulRevenue), 9, MUTED, false);
             sub.setPadding(0, dp(4), 0, 0);
             box.addView(name);
             box.addView(val);
@@ -460,8 +461,8 @@ public class MainActivity extends Activity {
 
         LinearLayout box = card();
         box.setPadding(dp(14), dp(12), dp(14), dp(13));
-        box.addView(text("Doanh số tháng", 11, MUTED, true));
-        TextView value = text(compact(s.createdRevenue), 25, INK, true);
+        box.addView(text("Doanh số tháng", 9, MUTED, true));
+        TextView value = text(compact(s.createdRevenue), 22, INK, true);
         value.setPadding(0, dp(4), 0, dp(10));
         box.addView(value);
 
@@ -487,7 +488,7 @@ public class MainActivity extends Activity {
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         TextView l = text(label, 12, INK, false);
-        TextView v = text(value, 12, INK, true);
+        TextView v = text(value, 11, INK, true);
         v.setGravity(Gravity.END);
         top.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         top.addView(v);
@@ -522,8 +523,8 @@ public class MainActivity extends Activity {
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
             head.setGravity(Gravity.CENTER_VERTICAL);
-            TextView name = text(n.name, 17, INK, true);
-            TextView revenue = text(compact(n.stats.createdRevenue), 19, RED, true);
+            TextView name = text(n.name, 15.5f, INK, true);
+            TextView revenue = text(compact(n.stats.createdRevenue), 17, RED, true);
             revenue.setGravity(Gravity.END);
             head.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(revenue);
@@ -606,8 +607,8 @@ public class MainActivity extends Activity {
 
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
-            TextView name = text("#" + rank + "  " + n.name, 17, INK, true);
-            TextView rev = text(compact(n.stats.createdRevenue), 19, RED, true);
+            TextView name = text("#" + rank + "  " + n.name, 15.5f, INK, true);
+            TextView rev = text(compact(n.stats.createdRevenue), 17, RED, true);
             rev.setGravity(Gravity.END);
             head.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(rev);
@@ -684,8 +685,8 @@ public class MainActivity extends Activity {
             LinearLayout box = compactCard();
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
-            TextView date = text(String.format(Locale.US, "%02d", d) + "/" + month.substring(5), 14, INK, true);
-            TextView revenue = text(compact(s.createdRevenue), 17, RED, true);
+            TextView date = text(String.format(Locale.US, "%02d", d) + "/" + month.substring(5), 13, INK, true);
+            TextView revenue = text(compact(s.createdRevenue), 15.5f, RED, true);
             revenue.setGravity(Gravity.END);
             head.addView(date, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             head.addView(revenue);
@@ -752,6 +753,7 @@ public class MainActivity extends Activity {
         });
         dialog.getWindow();
         dialog.show();
+        styleDialog(dialog);
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
@@ -888,6 +890,7 @@ public class MainActivity extends Activity {
                 })
                 .create();
         dialog.show();
+        styleDialog(dialog);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
     }
 
@@ -992,6 +995,7 @@ public class MainActivity extends Activity {
         });
 
         dialog.show();
+        styleDialog(dialog);
     }
 
     private void showTargetDialog() {
@@ -1148,7 +1152,7 @@ public class MainActivity extends Activity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
         spinner.setPadding(dp(8), 0, dp(8), 0);
-        spinner.setBackground(rounded(Color.WHITE, LINE, 1, 10));
+        spinner.setBackground(rounded(Color.WHITE, LINE, 1, 15));
         return spinner;
     }
 
@@ -1176,11 +1180,11 @@ public class MainActivity extends Activity {
 
     private EditText numberInput() {
         EditText e = new EditText(this);
-        e.setTextSize(16);
+        e.setTextSize(14);
         e.setSingleLine(true);
         e.setInputType(InputType.TYPE_CLASS_NUMBER);
         e.setPadding(dp(10), dp(8), dp(10), dp(8));
-        e.setBackground(rounded(Color.WHITE, LINE, 1, 10));
+        e.setBackground(rounded(Color.WHITE, LINE, 1, 15));
         return e;
     }
 
@@ -1189,7 +1193,7 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(5), 0, dp(5));
-        TextView l = text(label, 13, INK, true);
+        TextView l = text(label, 11.5f, INK, true);
         row.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(dp(150), dp(48));
         row.addView(value, vp);
@@ -1197,7 +1201,7 @@ public class MainActivity extends Activity {
     }
 
     private TextView quickValue(String value) {
-        TextView t = text(value, 17, INK, true);
+        TextView t = text(value, 15, INK, true);
         t.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         return t;
     }
@@ -1220,8 +1224,8 @@ public class MainActivity extends Activity {
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        TextView la = text(labelA, 10, MUTED, false);
-        TextView va = text(valueA, 13, INK, true);
+        TextView la = text(labelA, 9, MUTED, false);
+        TextView va = text(valueA, 12, INK, true);
         va.setPadding(0, dp(2), 0, 0);
         left.addView(la);
         left.addView(va);
@@ -1229,9 +1233,9 @@ public class MainActivity extends Activity {
         LinearLayout right = new LinearLayout(this);
         right.setOrientation(LinearLayout.VERTICAL);
         right.setGravity(Gravity.END);
-        TextView lb = text(labelB, 10, MUTED, false);
+        TextView lb = text(labelB, 9, MUTED, false);
         lb.setGravity(Gravity.END);
-        TextView vb = text(valueB, 13, INK, true);
+        TextView vb = text(valueB, 12, INK, true);
         vb.setGravity(Gravity.END);
         vb.setPadding(0, dp(2), 0, 0);
         right.addView(lb);
@@ -1247,7 +1251,7 @@ public class MainActivity extends Activity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, dp(6), 0, 0);
-        TextView l = text(label, 11, MUTED, false);
+        TextView l = text(label, 10, MUTED, false);
         TextView v = text(value, 12, INK, true);
         v.setGravity(Gravity.END);
         row.addView(l, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1259,33 +1263,38 @@ public class MainActivity extends Activity {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setPadding(dp(2), dp(14), dp(2), dp(7));
-        TextView e = text(title, 11, RED, true);
+        TextView e = text(title, 9.5f, RED, true);
         e.setLetterSpacing(.06f);
         wrap.addView(e);
-        wrap.addView(text(subtitle, 13, INK, true));
+        wrap.addView(text(subtitle, 12, INK, true));
         content.addView(wrap);
     }
 
     private void addPrimaryKpi(String label, String value, String sub) {
         LinearLayout c = card();
-        c.setPadding(0, 0, 0, 0);
+        c.setPadding(dp(15), dp(13), dp(15), dp(13));
 
-        View accent = new View(this);
-        accent.setBackgroundColor(RED);
-        c.addView(accent, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(4)
-        ));
+        LinearLayout labelRow = new LinearLayout(this);
+        labelRow.setOrientation(LinearLayout.HORIZONTAL);
+        labelRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        LinearLayout inner = new LinearLayout(this);
-        inner.setOrientation(LinearLayout.VERTICAL);
-        inner.setPadding(dp(16), dp(13), dp(16), dp(14));
-        inner.addView(text(label, 10, RED, true));
+        View dot = new View(this);
+        dot.setBackground(rounded(RED, RED, 0, 4));
+        labelRow.addView(dot, new LinearLayout.LayoutParams(dp(7), dp(7)));
 
-        TextView v = text(value, 31, INK, true);
-        v.setPadding(0, dp(5), 0, dp(4));
-        inner.addView(v);
-        inner.addView(text(sub, 11, MUTED, false));
-        c.addView(inner);
+        TextView l = text(label, 9, RED, true);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        llp.leftMargin = dp(7);
+        labelRow.addView(l, llp);
+        c.addView(labelRow);
+
+        TextView v = text(value, 28, INK, true);
+        v.setPadding(0, dp(6), 0, dp(3));
+        c.addView(v);
+        c.addView(text(sub, 10, MUTED, false));
 
         LinearLayout.LayoutParams lp = fullLp();
         lp.bottomMargin = dp(9);
@@ -1294,14 +1303,14 @@ public class MainActivity extends Activity {
 
     private LinearLayout kpi(String label, String value, String sub) {
         LinearLayout c = card();
-        c.setMinimumHeight(dp(88));
-        c.setPadding(dp(12), dp(11), dp(12), dp(10));
-        c.addView(text(label, 9, MUTED, true));
-        TextView v = text(value, 20, INK, true);
+        c.setMinimumHeight(dp(82));
+        c.setPadding(dp(11), dp(10), dp(11), dp(9));
+        c.addView(text(label, 8.5f, MUTED, true));
+        TextView v = text(value, 18, INK, true);
         v.setPadding(0, dp(5), 0, dp(2));
         c.addView(v);
         if (sub != null && !sub.isEmpty()) {
-            TextView s = text(sub, 9, MUTED, false);
+            TextView s = text(sub, 8.5f, MUTED, false);
             s.setMaxLines(2);
             c.addView(s);
         }
@@ -1326,14 +1335,14 @@ public class MainActivity extends Activity {
     private LinearLayout card() {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(rounded(CARD, Color.rgb(232, 226, 219), 1, 17));
+        c.setBackground(rounded(CARD, Color.rgb(235, 230, 224), 1, 21));
         c.setElevation(dp(1));
         return c;
     }
 
     private LinearLayout compactCard() {
         LinearLayout c = card();
-        c.setPadding(dp(13), dp(10), dp(13), dp(10));
+        c.setPadding(dp(12), dp(10), dp(12), dp(10));
         return c;
     }
 
@@ -1351,14 +1360,18 @@ public class MainActivity extends Activity {
         t.setText(value);
         t.setTextSize(sp);
         t.setTextColor(color);
-        if (bold) t.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        t.setIncludeFontPadding(false);
+        t.setTypeface(Typeface.create(
+                bold ? "sans-serif-medium" : "sans-serif",
+                Typeface.NORMAL
+        ));
         return t;
     }
 
     private TextView actionText(String value, boolean primary) {
         TextView t = text(value, 12, primary ? Color.WHITE : INK, true);
         t.setGravity(Gravity.CENTER);
-        t.setBackground(rounded(primary ? RED : Color.WHITE, primary ? RED : LINE, 1, 12));
+        t.setBackground(rounded(primary ? RED : Color.WHITE, primary ? RED : Color.rgb(225, 219, 213), 1, 15));
         t.setPadding(dp(8), dp(8), dp(8), dp(8));
         t.setClickable(true);
         t.setFocusable(true);
@@ -1367,8 +1380,50 @@ public class MainActivity extends Activity {
 
     private TextView bigAction(String value, boolean primary) {
         TextView t = actionText(value, primary);
-        t.setTextSize(13);
+        t.setTextSize(12);
         return t;
+    }
+
+    private void styleDialog(AlertDialog dialog) {
+        if (dialog == null || dialog.getWindow() == null) return;
+
+        dialog.getWindow().setBackgroundDrawable(
+                rounded(Color.WHITE, Color.TRANSPARENT, 0, 24)
+        );
+        dialog.getWindow().setDimAmount(.42f);
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+
+        int width = getResources().getDisplayMetrics().widthPixels - dp(28);
+        dialog.getWindow().setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
+
+        int titleId = getResources().getIdentifier("alertTitle", "id", "android");
+        TextView title = dialog.findViewById(titleId);
+        if (title != null) {
+            title.setTextSize(17);
+            title.setTextColor(INK);
+            title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            title.setIncludeFontPadding(false);
+        }
+
+        TextView message = dialog.findViewById(android.R.id.message);
+        if (message != null) {
+            message.setTextSize(11);
+            message.setTextColor(MUTED);
+            message.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        }
+
+        Button positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        if (positive != null) {
+            positive.setTextSize(12);
+            positive.setTextColor(RED);
+            positive.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        }
+        if (negative != null) {
+            negative.setTextSize(12);
+            negative.setTextColor(MUTED);
+            negative.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        }
     }
 
     private GradientDrawable rounded(int fill, int stroke, int strokeWidthDp, int radiusDp) {
