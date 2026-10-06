@@ -223,33 +223,36 @@
       <div class="dialogHead">
         <div>
           <div class="eyebrow">BÁO CÁO NHANH</div>
-          <h2>Tóm tắt hiệu quả kênh</h2>
+          <h2>Tóm tắt theo từng kênh</h2>
           <p class="quickPeriod" id="quickPeriod">—</p>
         </div>
         <button type="button" class="x" data-close-dialog="quickReportDialog">×</button>
       </div>
 
-      <div class="quickReportList">
-        <div class="quickReportRow editable">
-          <div><span>Data mới toàn kênh</span><small>Tự nhập</small></div>
-          <input id="quickTotalData" type="number" min="0" step="1" inputmode="numeric" placeholder="Nhập số data">
+      <div class="quickTotalBox">
+        <label class="field">
+          <span>Data mới toàn kênh</span>
+          <input id="quickTotalData" type="number" min="0" step="1" inputmode="numeric" placeholder="Tự nhập tổng Data mới">
+        </label>
+        <div class="quickTotalMetric">
+          <span>Tổng doanh số sau CK</span>
+          <strong id="quickAllRevenue">—</strong>
         </div>
-        <div class="quickReportRow editable">
-          <div><span>Data Ads</span><small>Dùng để tính CR Ads</small></div>
-          <input id="quickAdsData" type="number" min="0" step="1" inputmode="numeric" placeholder="Nhập Data Ads">
+        <div class="quickTotalMetric">
+          <span>Tổng số đơn</span>
+          <strong id="quickAllOrders">—</strong>
         </div>
-        <div class="quickReportRow accent">
-          <div><span>CR Ads</span><small id="quickAdsCrSub">Số đơn Ads / Data Ads</small></div>
-          <strong id="quickAdsCr">—</strong>
+      </div>
+
+      <div class="quickChannelHead">
+        <div><b>CHI TIẾT KÊNH</b><small>Nhập Data từng kênh để tính CR ngay</small></div>
+      </div>
+
+      <div class="quickChannelTable">
+        <div class="quickChannelHeader">
+          <span>Kênh</span><span>Data</span><span>Số đơn</span><span>CR</span><span>Doanh số sau CK</span>
         </div>
-        <div class="quickReportRow">
-          <div><span>Doanh số Ads</span><small>Sau chiết khấu</small></div>
-          <strong id="quickAdsRevenue">—</strong>
-        </div>
-        <div class="quickReportRow">
-          <div><span>Doanh số Live</span><small>Sau chiết khấu</small></div>
-          <strong id="quickLiveRevenue">—</strong>
-        </div>
+        <div id="quickChannelRows"></div>
       </div>
 
       <div class="quickTextBox" id="quickTextBox"></div>
