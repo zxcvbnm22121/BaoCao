@@ -7,6 +7,7 @@ on:
     paths:
       - 'site/**'
       - 'scripts/sync-pancake-pages.mjs'
+      - 'scripts/sync-nhanh-pages.mjs'
       - '.github/workflows/sevenam-pages.yml'
   schedule:
     - cron: '*/5 * * * *'
@@ -42,6 +43,14 @@ jobs:
           DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
           MONTHLY_TARGET: ${{ vars.MONTHLY_TARGET }}
         run: node scripts/sync-pancake-pages.mjs
+
+      - name: Sync Nhanh.vn showroom dashboard
+        env:
+          NHANH_APP_ID: ${{ secrets.NHANH_APP_ID }}
+          NHANH_BUSINESS_ID: ${{ secrets.NHANH_BUSINESS_ID }}
+          NHANH_ACCESS_TOKEN: ${{ secrets.NHANH_ACCESS_TOKEN }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: node scripts/sync-nhanh-pages.mjs
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
