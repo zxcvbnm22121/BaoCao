@@ -896,6 +896,8 @@ public class MainActivity extends Activity {
         wrap.addView(quickRow("Doanh số live:", liveRev));
 
         final int finalAdsOrders = adsOrders;
+        final double finalAdsRevenue = adsRevenue;
+        final double finalLiveRevenue = liveRevenue;
         Runnable updateCr = () -> {
             double data = parseDouble(adsInput.getText().toString());
             cr.setText(data > 0 ? pct(finalAdsOrders / data) : "—");
@@ -933,8 +935,8 @@ public class MainActivity extends Activity {
                     "Data mới toàn kênh: " + (totalData > 0 ? num(totalData) : "Chưa nhập") + "\n" +
                     "Data Ads: " + (adsData > 0 ? num(adsData) : "Chưa nhập") + "\n" +
                     "CR Ads: " + (adsData > 0 ? pct(finalAdsOrders / adsData) : "—") + "\n" +
-                    "Doanh số Ads: " + money(adsRevenue) + "\n" +
-                    "Doanh số live: " + money(liveRevenue);
+                    "Doanh số Ads: " + money(finalAdsRevenue) + "\n" +
+                    "Doanh số live: " + money(finalLiveRevenue);
 
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("Báo cáo nhanh", report));
