@@ -132,35 +132,36 @@ function rawOrderKey(raw,index=0){
 }
 
 async function fetchOrders(from,to){
-  const first=await fetchOrderPage(from,to,1);
   const rawMap=new Map();
-  first.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+  const maxPages=200;
 
-  const firstBounds=pageDateBounds(first.data);
-  console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''} · ${firstBounds.min||'?'} → ${firstBounds.max||'?'}`);
+  for(let page=1;page<=maxPages;page++){
+    const res=await fetchOrderPage(from,to,page);
+    const data=res.data;
+    const bounds=pageDateBounds(data);
 
-  const maxPages=Math.max(1,Math.min(200,first.totalPages||1));
-  for(let fromPage=2;fromPage<=maxPages;fromPage+=4){
-    const pages=Array.from({length:Math.min(4,maxPages-fromPage+1)},(_,i)=>fromPage+i);
-    const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
-    for(let i=0;i<batch.length;i++){
-      const page=pages[i],data=batch[i].data,bounds=pageDateBounds(data);
-      data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
-      console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-    }
+    data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+    console.log(`Orders page ${page}: ${data.length} rows${page===1&&res.totalPages?' / '+res.totalPages+' pages':''} · ${bounds.min||'?'} → ${bounds.max||'?'}`);
+
+    if(!data.length)break;
+
+    // Pancake may ignore from/to in the list endpoint. Stop only after the
+    // newest order on a page is already older than the requested range.
+    if(bounds.max && bounds.max < from)break;
+
+    // Safety fallback for APIs that report a correct total page count.
+    if(res.totalPages && page>=res.totalPages)break;
   }
 
-  // Re-fetch the first page once after the full scan so orders inserted while syncing
-  // are included without creating duplicates.
+  // Re-fetch page 1 to capture orders inserted while the scan was running.
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
   const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
   const inRange=normalized.filter(x=>keepInRange(x,from,to));
-  console.log(`Pancake full scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
+  console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
   return inRange
 }
-
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
 
 await fs.mkdir('site/data',{recursive:true});
