@@ -38,7 +38,6 @@
         <p id="pageSub">Dữ liệu Pancake POS · cập nhật tự động qua GitHub Actions</p>
       </div>
       <div class="topActions">
-        <button class="quickReportBtn" id="quickReportBtn">▣ Báo cáo nhanh</button>
         <span class="liveBadge demo" id="modePill">DEMO</span>
         <button class="squareBtn" id="unlockBtn" title="Mở dữ liệu LIVE">🔒</button>
         <button class="squareBtn" id="reloadBtn" title="Làm mới">↻</button>
@@ -222,50 +221,40 @@
   <dialog id="quickReportDialog">
     <form class="dialogForm quickReportForm" id="quickReportForm">
       <div class="dialogHead">
-        <div><div class="eyebrow">BÁO CÁO NHANH</div><h2>Tóm tắt hiệu quả kênh</h2><p class="quickPeriod" id="quickPeriod">—</p></div>
+        <div>
+          <div class="eyebrow">BÁO CÁO NHANH</div>
+          <h2>Tóm tắt hiệu quả kênh</h2>
+          <p class="quickPeriod" id="quickPeriod">—</p>
+        </div>
         <button type="button" class="x" data-close-dialog="quickReportDialog">×</button>
       </div>
 
-      <div class="quickInputRow">
-        <label class="field">
-          <span>Data mới toàn kênh</span>
-          <input id="quickTotalData" type="number" min="0" step="1" placeholder="Tự nhập">
-        </label>
-        <label class="field">
-          <span>Data Ads</span>
-          <input id="quickAdsData" type="number" min="0" step="1" placeholder="Nhập Data Ads">
-        </label>
-      </div>
-
-      <div class="quickMetrics">
-        <div class="quickMetric">
-          <span>Data mới toàn kênh</span>
-          <strong id="quickTotalDataValue">—</strong>
+      <div class="quickReportList">
+        <div class="quickReportRow editable">
+          <div><span>Data mới toàn kênh</span><small>Tự nhập</small></div>
+          <input id="quickTotalData" type="number" min="0" step="1" inputmode="numeric" placeholder="Nhập số data">
         </div>
-        <div class="quickMetric">
-          <span>Data Ads</span>
-          <strong id="quickAdsDataValue">—</strong>
+        <div class="quickReportRow editable">
+          <div><span>Data Ads</span><small>Dùng để tính CR Ads</small></div>
+          <input id="quickAdsData" type="number" min="0" step="1" inputmode="numeric" placeholder="Nhập Data Ads">
         </div>
-        <div class="quickMetric accent">
-          <span>CR Ads</span>
+        <div class="quickReportRow accent">
+          <div><span>CR Ads</span><small id="quickAdsCrSub">Số đơn Ads / Data Ads</small></div>
           <strong id="quickAdsCr">—</strong>
-          <small id="quickAdsCrSub">Số đơn Ads / Data Ads</small>
         </div>
-        <div class="quickMetric">
-          <span>Doanh số Ads</span>
+        <div class="quickReportRow">
+          <div><span>Doanh số Ads</span><small>Sau chiết khấu</small></div>
           <strong id="quickAdsRevenue">—</strong>
-          <small>Sau chiết khấu</small>
         </div>
-        <div class="quickMetric">
-          <span>Doanh số Live</span>
+        <div class="quickReportRow">
+          <div><span>Doanh số Live</span><small>Sau chiết khấu</small></div>
           <strong id="quickLiveRevenue">—</strong>
-          <small>Sau chiết khấu</small>
         </div>
       </div>
 
       <div class="quickTextBox" id="quickTextBox"></div>
 
-      <div class="dialogActions">
+      <div class="dialogActions quickDialogActions">
         <button type="button" data-close-dialog="quickReportDialog">Đóng</button>
         <button type="button" class="primaryBtn" id="copyQuickReportBtn">Sao chép báo cáo</button>
       </div>
