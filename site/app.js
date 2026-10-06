@@ -389,6 +389,7 @@ $('mobileFilterClose').onclick=()=>setMobileFilter(false);
 $('mobileFilterBackdrop').onclick=()=>setMobileFilter(false);
 $('mobileQuickBtn').onclick=openQuickReport;
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.dataset.closeDialog).close());
+document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close()}));
 $('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
 $('quickReportBarBtn').onclick=openQuickReport;
 $('quickTotalData').oninput=updateQuickTotalDataFromInput;
@@ -398,7 +399,7 @@ $('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQui
 $('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
 $('settingsForm').onsubmit=e=>{e.preventDefault();settings.targetMonth=Math.max(0,Number($('targetMonthInput').value)||0);settings.targetDay=Math.max(0,Number($('targetDayInput').value)||0);settings.gapDay=Number($('gapDayInput').value)||0;saveSettings();$('settingsDialog').close();renderAll()};
-$('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();setTimeout(()=>$('password').focus(),50)};
+$('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();if(window.innerWidth>720)setTimeout(()=>$('password').focus(),50)};
 $('unlockForm').onsubmit=async e=>{e.preventDefault();const pwd=$('password').value,box=$('unlockError');box.style.display='none';try{$('app').classList.add('loading');const p=await fetchLive(pwd);sessionStorage.setItem('sevenam_dashboard_password',pwd);applyPayload(p);$('unlockDialog').close()}catch(err){box.textContent='Không mở được dữ liệu: sai mật khẩu hoặc bản LIVE chưa sẵn sàng.';box.style.display='block'}finally{$('app').classList.remove('loading')}};
 $('reloadBtn').onclick=async()=>{const pwd=sessionStorage.getItem('sevenam_dashboard_password');if(meta.source==='PANCAKE'&&pwd)try{$('app').classList.add('loading');applyPayload(await fetchLive(pwd))}catch(e){showError(e.message)}finally{$('app').classList.remove('loading')}else renderAll()};
 init();
