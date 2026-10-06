@@ -223,36 +223,24 @@
       <div class="dialogHead">
         <div>
           <div class="eyebrow">BÁO CÁO NHANH</div>
-          <h2>Tóm tắt theo từng kênh</h2>
+          <h2>Báo cáo nhanh</h2>
           <p class="quickPeriod" id="quickPeriod">—</p>
         </div>
         <button type="button" class="x" data-close-dialog="quickReportDialog">×</button>
       </div>
 
-      <div class="quickTotalBox">
-        <label class="field">
-          <span>Data mới toàn kênh</span>
-          <input id="quickTotalData" type="number" min="0" step="1" inputmode="numeric" placeholder="Tự nhập tổng Data mới">
-        </label>
-        <div class="quickTotalMetric">
-          <span>Tổng doanh số sau CK</span>
-          <strong id="quickAllRevenue">—</strong>
+      <div class="quickExactList">
+        <div class="quickExactRow">
+          <label for="quickTotalData">Data mới toàn kênh:</label>
+          <input id="quickTotalData" type="number" min="0" step="1" inputmode="numeric" placeholder="Tự nhập">
         </div>
-        <div class="quickTotalMetric">
-          <span>Tổng số đơn</span>
-          <strong id="quickAllOrders">—</strong>
+        <div class="quickExactRow">
+          <label for="quickAdsData">Data Ads:</label>
+          <input id="quickAdsData" type="number" min="0" step="1" inputmode="numeric" placeholder="Nhập Data Ads">
         </div>
-      </div>
-
-      <div class="quickChannelHead">
-        <div><b>CHI TIẾT KÊNH</b><small>Nhập Data từng kênh để tính CR ngay</small></div>
-      </div>
-
-      <div class="quickChannelTable">
-        <div class="quickChannelHeader">
-          <span>Kênh</span><span>Data</span><span>Số đơn</span><span>CR</span><span>Doanh số sau CK</span>
-        </div>
-        <div id="quickChannelRows"></div>
+        <div class="quickExactRow readonly"><span>CR Ads:</span><strong id="quickAdsCr">—</strong></div>
+        <div class="quickExactRow readonly"><span>Doanh số Ads:</span><strong id="quickAdsRevenue">—</strong></div>
+        <div class="quickExactRow readonly"><span>Doanh số live:</span><strong id="quickLiveRevenue">—</strong></div>
       </div>
 
       <div class="quickTextBox" id="quickTextBox"></div>
