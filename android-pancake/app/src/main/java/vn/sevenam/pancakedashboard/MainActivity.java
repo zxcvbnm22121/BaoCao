@@ -470,8 +470,12 @@ public class MainActivity extends Activity {
     }
 
     private void addTargetBoard() {
-        String month = fromDate.substring(0, 7);
-        List<Order> monthRows = filteredMonth(month);
+        String month = "overview".equals(currentView)
+                ? LocalDate.now(VN_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM"))
+                : fromDate.substring(0, 7);
+        List<Order> monthRows = "overview".equals(currentView)
+                ? defaultRowsForMonth(month)
+                : filteredMonth(month);
         Stats s = stats(monthRows);
         double target = targetMonth();
         YearMonth ym = YearMonth.parse(month);
