@@ -219,7 +219,7 @@ public class MainActivity extends Activity {
         bottomLp.bottomMargin = dp(3);
         root.addView(bottom, bottomLp);
 
-        addNav(bottom, "▦", "Tổng quan", "overview");
+        addNav(bottom, "▦", "Hôm nay", "overview");
         addNav(bottom, "◫", "Theo kênh", "channels");
         addNav(bottom, "◎", "Sale", "sales");
         addNav(bottom, "◒", "Tháng", "monthly");
@@ -262,7 +262,7 @@ public class MainActivity extends Activity {
         if ("channels".equals(currentView)) title = "Hiệu quả theo kênh";
         else if ("sales".equals(currentView)) title = "Sale Online";
         else if ("monthly".equals(currentView)) title = "Tiến độ tháng";
-        else title = "Tổng quan doanh thu";
+        else title = "Hôm nay";
         titleView.setText(title);
 
         addPeriodHeader();
@@ -290,14 +290,24 @@ public class MainActivity extends Activity {
         box.setPadding(dp(12), dp(9), dp(12), dp(9));
         box.setBackground(rounded(Color.rgb(241, 238, 234), Color.rgb(229, 224, 218), 1, 18));
 
+        boolean todayView = "overview".equals(currentView);
+        String today = LocalDate.now(VN_ZONE).format(ISO);
+        String periodText = todayView ? today : fromDate + "  →  " + toDate;
+
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
-        TextView period = text(fromDate + "  →  " + toDate, 11, INK, true);
+        TextView period = text(periodText, 11, INK, true);
         left.addView(period);
 
-        String summary = dashboard == null
-                ? "Chưa mở dữ liệu LIVE"
-                : num(filteredRows().size()) + " đơn · đã loại Huỷ/Xoá + Đơn đổi";
+        String summary;
+        if (dashboard == null) {
+            summary = "Chưa mở dữ liệu LIVE";
+        } else if (todayView) {
+            summary = num(defaultRowsForDate(today).size()) + " đơn · toàn kênh hôm nay";
+        } else {
+            summary = num(filteredRows().size()) + " đơn · đã loại Huỷ/Xoá + Đơn đổi";
+        }
+
         TextView sub = text(summary, 9, MUTED, false);
         sub.setPadding(0, dp(2), 0, 0);
         left.addView(sub);
@@ -345,30 +355,45 @@ public class MainActivity extends Activity {
     }
 
     private void renderOverview() {
-        List<Order> rows = filteredRows();
+        String today = LocalDate.now(VN_ZONE).format(ISO);
+        List<Order> rows = defaultRowsForDate(today);
         Stats s = stats(rows);
 
-        addPrimaryKpi("TỔNG TIỀN SAU CK", compact(s.createdRevenue),
-                num(s.orders) + " đơn · số sau chiết khấu");
+        double adsRevenue = revenueForChannel(rows, "Facebook Ads");
+        double liveRevenue = revenueForChannel(rows, "Livestream");
+        double dailyTarget = targetMonth() / YearMonth.now(VN_ZONE).lengthOfMonth();
+        double remaining = Math.max(0, dailyTarget - s.createdRevenue);
+
+        addPrimaryKpi("DOANH SỐ HÔM NAY", compact(s.createdRevenue),
+                num(s.orders) + " đơn · toàn kênh sau chiết khấu");
 
         addKpiPair(
-                kpi("COD", compact(s.codRevenue), "Tiền thu hộ"),
-                kpi("TRẢ TRƯỚC", compact(s.prepaidRevenue), "Khách đã thanh toán")
+                kpi("TARGET HÔM NAY", compact(dailyTarget),
+                        s.createdRevenue >= dailyTarget ? "Đã đạt target ngày" : "Mục tiêu bình quân ngày"),
+                kpi("CÒN THIẾU", compact(remaining),
+                        s.createdRevenue >= dailyTarget ? "Đã vượt target" : "Để đạt target hôm nay")
         );
+
+        addKpiPair(
+                kpi("ADS", compact(adsRevenue), num(orderCountForChannel(rows, "Facebook Ads")) + " đơn"),
+                kpi("LIVE", compact(liveRevenue), num(orderCountForChannel(rows, "Livestream")) + " đơn")
+        );
+
+        addSmartAlerts(rows);
+
+        addSectionTitle("SO SÁNH NHANH", "Hôm qua và cùng ngày tuần trước");
+        addComparisonBoard(rows);
+
         addKpiPair(
                 kpi("THÀNH CÔNG", compact(s.successfulRevenue), num(s.successfulOrders) + " đơn"),
-                kpi("CHIẾT KHẤU", compact(s.discountRevenue), "Trước CK " + compact(s.grossRevenue))
+                kpi("ĐANG GIAO", compact(s.shippingRevenue), "Đơn đang vận chuyển")
         );
         addKpiPair(
-                kpi("ĐANG GIAO", compact(s.shippingRevenue), "Đơn đang vận chuyển"),
-                kpi("TREO", compact(s.pendingRevenue), "Mới / chờ / xác nhận")
-        );
-        addKpiPair(
-                kpi("HOÀN", compact(s.returnRevenue), "Tỷ lệ " + pct(s.returnRate)),
-                kpi("AOV", compact(s.aov), "Giá trị đơn TB")
+                kpi("TREO", compact(s.pendingRevenue), "Mới / chờ / xác nhận"),
+                kpi("HOÀN", compact(s.returnRevenue), "Tỷ lệ " + pct(s.returnRate))
         );
 
-        double totalData = totalManualData();
+        double totalData = totalManualDataForRange(rows, today, today);
         addKpiPair(
                 kpi("TỔNG DATA", totalData > 0 ? num(totalData) : "Chưa nhập",
                         totalData > 0 ? "CR " + pct(s.orders / totalData) : "Nhập tại Theo kênh"),
@@ -376,13 +401,13 @@ public class MainActivity extends Activity {
                         totalData > 0 ? num(s.orders) + " đơn / " + num(totalData) + " data" : "Chưa có data")
         );
 
-        addSectionTitle("TRẠNG THÁI", "Phân bổ doanh số");
+        addSectionTitle("TRẠNG THÁI", "Phân bổ doanh số hôm nay");
         addStatusBoard(rows);
 
-        addSectionTitle("DOANH SỐ KÊNH", "Top kênh trong khoảng đang chọn");
+        addSectionTitle("DOANH SỐ KÊNH", "Top kênh hôm nay");
         addChannelSummary(rows);
 
-        addSectionTitle("TIẾN ĐỘ MỤC TIÊU", "Theo tháng đang chọn");
+        addSectionTitle("TIẾN ĐỘ MỤC TIÊU", "Theo tháng hiện tại");
         addTargetBoard();
     }
 
@@ -599,6 +624,8 @@ public class MainActivity extends Activity {
             addEmpty("Không có dữ liệu Sale");
             return;
         }
+
+        addSalesPodium(sales);
 
         int rank = 1;
         for (NamedStats n : sales) {
@@ -906,6 +933,273 @@ public class MainActivity extends Activity {
         picker.show();
     }
 
+    private List<Order> defaultRowsForDate(String date) {
+        List<Order> out = new ArrayList<>();
+        if (dashboard == null) return out;
+        for (Order o : dashboard.orders) {
+            if (!date.equals(o.createdDate)) continue;
+            if (o.excludedFromDefaultReport) continue;
+            out.add(o);
+        }
+        return out;
+    }
+
+    private List<Order> defaultRowsForMonth(String month) {
+        List<Order> out = new ArrayList<>();
+        if (dashboard == null) return out;
+        for (Order o : dashboard.orders) {
+            if (!o.createdDate.startsWith(month)) continue;
+            if (o.excludedFromDefaultReport) continue;
+            out.add(o);
+        }
+        return out;
+    }
+
+    private boolean hasAnyDataForDate(String date) {
+        if (dashboard == null) return false;
+        for (Order o : dashboard.orders) {
+            if (date.equals(o.createdDate)) return true;
+        }
+        return false;
+    }
+
+    private double revenueForChannel(List<Order> rows, String channel) {
+        double sum = 0;
+        for (Order o : rows) if (channel.equals(o.channel)) sum += o.netAmount;
+        return sum;
+    }
+
+    private int orderCountForChannel(List<Order> rows, String channel) {
+        int count = 0;
+        for (Order o : rows) if (channel.equals(o.channel)) count++;
+        return count;
+    }
+
+    private double totalManualDataForRange(List<Order> rows, String from, String to) {
+        Set<String> channels = new LinkedHashSet<>();
+        for (Order o : rows) channels.add(o.channel);
+        double sum = 0;
+        for (String channel : channels) sum += manualDataForRange(channel, from, to);
+        return sum;
+    }
+
+    private double manualDataForRange(String channel, String from, String to) {
+        return prefs.getFloat("data|" + from + "|" + to + "|" + channel, 0);
+    }
+
+    private void addSmartAlerts(List<Order> todayRows) {
+        List<String> alerts = new ArrayList<>();
+
+        LocalDate todayDate = LocalDate.now(VN_ZONE);
+        String today = todayDate.format(ISO);
+        String month = today.substring(0, 7);
+        List<Order> monthRows = defaultRowsForMonth(month);
+        Stats monthStats = stats(monthRows);
+        Stats todayStats = stats(todayRows);
+
+        double target = targetMonth();
+        double completion = target > 0 ? monthStats.createdRevenue / target : 0;
+        double time = todayDate.getDayOfMonth() / (double) YearMonth.now(VN_ZONE).lengthOfMonth();
+        double gapPts = (completion - time) * 100;
+
+        if (gapPts < -10) {
+            alerts.add("Doanh số tháng đang chậm " + oneDecimal(Math.abs(gapPts)) + " điểm % so với tiến độ thời gian.");
+        }
+
+        double adsData = manualDataForRange("Facebook Ads", today, today);
+        int adsOrders = orderCountForChannel(todayRows, "Facebook Ads");
+        if (adsData > 0 && adsOrders / adsData < .10) {
+            alerts.add("CR Ads hôm nay đang dưới 10%.");
+        }
+
+        if (revenueForChannel(todayRows, "Livestream") <= 0) {
+            alerts.add("Livestream hôm nay chưa ghi nhận doanh số.");
+        }
+
+        if (todayStats.returnRate > .20) {
+            alerts.add("Tỷ lệ hoàn hôm nay đang trên 20%.");
+        }
+
+        addSectionTitle("CẢNH BÁO", alerts.isEmpty() ? "Chưa có cảnh báo đáng chú ý" : alerts.size() + " điểm cần chú ý");
+
+        LinearLayout board = card();
+        board.setPadding(dp(13), dp(8), dp(13), dp(8));
+
+        if (alerts.isEmpty()) {
+            TextView ok = text("✓  Các chỉ số chính đang trong ngưỡng theo dõi.", 10.5f, GREEN, true);
+            ok.setPadding(0, dp(6), 0, dp(6));
+            board.addView(ok);
+        } else {
+            for (int i = 0; i < alerts.size(); i++) {
+                TextView alert = text("•  " + alerts.get(i), 10.5f, i == 0 ? RED : INK, i == 0);
+                alert.setPadding(0, dp(6), 0, dp(6));
+                board.addView(alert);
+                if (i < alerts.size() - 1) {
+                    View line = new View(this);
+                    line.setBackgroundColor(Color.rgb(241, 237, 232));
+                    board.addView(line, new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
+                    ));
+                }
+            }
+        }
+        content.addView(board, fullLp());
+    }
+
+    private void addComparisonBoard(List<Order> todayRows) {
+        LocalDate today = LocalDate.now(VN_ZONE);
+        String yesterdayDate = today.minusDays(1).format(ISO);
+        String weekDate = today.minusDays(7).format(ISO);
+
+        List<Order> yesterday = defaultRowsForDate(yesterdayDate);
+        List<Order> week = defaultRowsForDate(weekDate);
+
+        boolean hasYesterday = hasAnyDataForDate(yesterdayDate);
+        boolean hasWeek = hasAnyDataForDate(weekDate);
+
+        LinearLayout board = card();
+        board.setPadding(dp(13), dp(8), dp(13), dp(8));
+
+        board.addView(comparisonRow(
+                "Tổng doanh số",
+                stats(todayRows).createdRevenue,
+                hasYesterday ? stats(yesterday).createdRevenue : null,
+                hasWeek ? stats(week).createdRevenue : null
+        ));
+        board.addView(comparisonRow(
+                "Facebook Ads",
+                revenueForChannel(todayRows, "Facebook Ads"),
+                hasYesterday ? revenueForChannel(yesterday, "Facebook Ads") : null,
+                hasWeek ? revenueForChannel(week, "Facebook Ads") : null
+        ));
+        board.addView(comparisonRow(
+                "Livestream",
+                revenueForChannel(todayRows, "Livestream"),
+                hasYesterday ? revenueForChannel(yesterday, "Livestream") : null,
+                hasWeek ? revenueForChannel(week, "Livestream") : null
+        ));
+
+        content.addView(board, fullLp());
+    }
+
+    private View comparisonRow(String label, double current, Double yesterday, Double week) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(0, dp(7), 0, dp(7));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        TextView name = text(label, 10.5f, MUTED, false);
+        TextView value = text(compact(current), 14, INK, true);
+        value.setGravity(Gravity.END);
+        top.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        top.addView(value);
+        row.addView(top);
+
+        TextView delta = text(
+                "Hôm qua " + changeText(current, yesterday) + "   ·   Tuần trước " + changeText(current, week),
+                9.5f, MUTED, false
+        );
+        delta.setPadding(0, dp(3), 0, 0);
+        row.addView(delta);
+        return row;
+    }
+
+    private String changeText(double current, Double previous) {
+        if (previous == null) return "—";
+        if (previous == 0) return current == 0 ? "0%" : "—";
+        double change = (current - previous) / previous;
+        return (change >= 0 ? "↑ " : "↓ ") + oneDecimal(Math.abs(change) * 100) + "%";
+    }
+
+    private void addSalesPodium(List<NamedStats> sales) {
+        addSectionTitle("XẾP HẠNG", "Top Sale theo doanh số tạo đơn");
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setBaselineAligned(false);
+
+        int limit = Math.min(3, sales.size());
+        for (int i = 0; i < limit; i++) {
+            NamedStats n = sales.get(i);
+            LinearLayout box = card();
+            box.setGravity(Gravity.CENTER_HORIZONTAL);
+            box.setPadding(dp(7), dp(10), dp(7), dp(10));
+
+            TextView rank = text("#" + (i + 1), 9, i == 0 ? RED : MUTED, true);
+            rank.setGravity(Gravity.CENTER);
+            box.addView(rank);
+
+            TextView name = text(n.name, 11.5f, INK, true);
+            name.setGravity(Gravity.CENTER);
+            name.setMaxLines(1);
+            name.setPadding(0, dp(4), 0, 0);
+            box.addView(name);
+
+            TextView rev = text(compact(n.stats.createdRevenue), 13.5f, INK, true);
+            rev.setGravity(Gravity.CENTER);
+            rev.setPadding(0, dp(5), 0, 0);
+            box.addView(rev);
+
+            double tcRate = n.stats.orders > 0
+                    ? n.stats.successfulOrders / (double) n.stats.orders : 0;
+            TextView sub = text(
+                    num(n.stats.orders) + " đơn · TC " + pct(tcRate),
+                    8.5f, MUTED, false
+            );
+            sub.setGravity(Gravity.CENTER);
+            sub.setPadding(0, dp(3), 0, 0);
+            box.addView(sub);
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            );
+            if (i > 0) lp.leftMargin = dp(6);
+            row.addView(box, lp);
+        }
+
+        LinearLayout.LayoutParams rowLp = fullLp();
+        rowLp.bottomMargin = dp(10);
+        content.addView(row, rowLp);
+    }
+
+    private Button reportActionButton(String label, boolean primary) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(11.5f);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setTextColor(primary ? Color.WHITE : INK);
+        button.setBackground(rounded(
+                primary ? RED : Color.WHITE,
+                primary ? RED : LINE,
+                1,
+                14
+        ));
+        return button;
+    }
+
+    private void saveQuickInputs(double totalData, double adsData) {
+        prefs.edit()
+                .putFloat(quickTotalKey(), (float) totalData)
+                .putFloat(channelDataKey("Facebook Ads"), (float) adsData)
+                .apply();
+    }
+
+    private String buildQuickReportText(
+            double totalData,
+            double adsData,
+            int adsOrders,
+            double adsRevenue,
+            double liveRevenue
+    ) {
+        return "Data mới toàn kênh: " + (totalData > 0 ? num(totalData) : "Chưa nhập") + "\n" +
+                "Data Ads: " + (adsData > 0 ? num(adsData) : "Chưa nhập") + "\n" +
+                "CR Ads: " + (adsData > 0 ? pct(adsOrders / adsData) : "—") + "\n" +
+                "Doanh số Ads: " + money(adsRevenue) + "\n" +
+                "Doanh số live: " + money(liveRevenue);
+    }
+
     private void showQuickReport() {
         if (dashboard == null) {
             showUnlockDialog();
@@ -949,6 +1243,7 @@ public class MainActivity extends Activity {
         final int finalAdsOrders = adsOrders;
         final double finalAdsRevenue = adsRevenue;
         final double finalLiveRevenue = liveRevenue;
+
         Runnable updateCr = () -> {
             double data = parseDouble(adsInput.getText().toString());
             cr.setText(data > 0 ? pct(finalAdsOrders / data) : "—");
@@ -956,17 +1251,20 @@ public class MainActivity extends Activity {
         adsInput.addTextChangedListener(simpleWatcher(updateCr));
         updateCr.run();
 
-        Button copy = new Button(this);
-        copy.setText("Sao chép báo cáo");
-        copy.setAllCaps(false);
-        copy.setTextSize(14);
-        copy.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        copy.setTextColor(Color.WHITE);
-        copy.setBackground(rounded(RED, RED, 0, 11));
-        LinearLayout.LayoutParams cp = fullLp();
-        cp.height = dp(50);
-        cp.topMargin = dp(12);
-        wrap.addView(copy, cp);
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button copy = reportActionButton("Sao chép", false);
+        Button share = reportActionButton("Chia sẻ ảnh", true);
+
+        actions.addView(copy, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        LinearLayout.LayoutParams shareLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        shareLp.leftMargin = dp(8);
+        actions.addView(share, shareLp);
+
+        LinearLayout.LayoutParams ap = fullLp();
+        ap.topMargin = dp(12);
+        wrap.addView(actions, ap);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Báo cáo nhanh")
@@ -977,21 +1275,31 @@ public class MainActivity extends Activity {
         copy.setOnClickListener(v -> {
             double totalData = parseDouble(totalInput.getText().toString());
             double adsData = parseDouble(adsInput.getText().toString());
-            prefs.edit()
-                    .putFloat(quickTotalKey(), (float) totalData)
-                    .putFloat(channelDataKey("Facebook Ads"), (float) adsData)
-                    .apply();
+            saveQuickInputs(totalData, adsData);
 
-            String report =
-                    "Data mới toàn kênh: " + (totalData > 0 ? num(totalData) : "Chưa nhập") + "\n" +
-                    "Data Ads: " + (adsData > 0 ? num(adsData) : "Chưa nhập") + "\n" +
-                    "CR Ads: " + (adsData > 0 ? pct(finalAdsOrders / adsData) : "—") + "\n" +
-                    "Doanh số Ads: " + money(finalAdsRevenue) + "\n" +
-                    "Doanh số live: " + money(finalLiveRevenue);
+            String report = buildQuickReportText(
+                    totalData, adsData, finalAdsOrders, finalAdsRevenue, finalLiveRevenue
+            );
 
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("Báo cáo nhanh", report));
             Toast.makeText(this, "Đã sao chép báo cáo", Toast.LENGTH_SHORT).show();
+        });
+
+        share.setOnClickListener(v -> {
+            double totalData = parseDouble(totalInput.getText().toString());
+            double adsData = parseDouble(adsInput.getText().toString());
+            saveQuickInputs(totalData, adsData);
+
+            String report = buildQuickReportText(
+                    totalData, adsData, finalAdsOrders, finalAdsRevenue, finalLiveRevenue
+            );
+
+            try {
+                ReportImageSharer.share(this, report, fromDate, toDate);
+            } catch (Exception e) {
+                Toast.makeText(this, "Không tạo được ảnh báo cáo", Toast.LENGTH_LONG).show();
+            }
         });
 
         dialog.show();
