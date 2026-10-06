@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#151515">
+  <title>Seven.AM · Showroom Revenue Command Center</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <aside class="side">
+    <div class="brand"><div class="mark">7A</div><div><b>SEVEN.AM</b><small>SHOWROOM COMMAND</small></div></div>
+    <nav>
+      <button class="active" data-scroll="top">▦ <span>Tổng quan</span></button>
+      <button data-scroll="ranking">◫ <span>Xếp hạng</span></button>
+      <button data-scroll="daily">▥ <span>Doanh thu ngày</span></button>
+      <button data-scroll="trend">⌁ <span>Xu hướng</span></button>
+    </nav>
+    <div class="bottom">
+      <button class="settingsBtn" id="settingsBtn">⚙ <span>Target showroom</span></button>
+      <a class="back" href="../">← Pancake Dashboard</a>
+      <div class="source"><i></i><div><b id="sourceText">NHANH.VN</b><small id="sourceSub">DEMO DATA</small></div></div>
+    </div>
+  </aside>
+
+  <main class="main" id="app">
+    <div id="top"></div>
+    <header class="header">
+      <div>
+        <div class="eyebrow">SEVEN.AM · NHANH.VN</div>
+        <h1>Showroom Revenue Command Center</h1>
+        <p id="subtitle">Một màn hình để theo dõi toàn bộ showroom</p>
+      </div>
+      <div class="headerActions">
+        <span class="live demo" id="modePill">DEMO</span>
+        <button class="iconBtn" id="unlockBtn" title="Mở dữ liệu Nhanh.vn">🔒</button>
+        <button class="iconBtn" id="reloadBtn" title="Làm mới">↻</button>
+      </div>
+    </header>
+
+    <div class="notice" id="notice"></div>
+    <div class="error" id="error"></div>
+
+    <section class="filterBar">
+      <div class="preset">
+        <button data-range="today" class="active">Hôm nay</button>
+        <button data-range="yesterday">Hôm qua</button>
+      </div>
+      <label><span>Ngày báo cáo</span><input type="date" id="reportDate"></label>
+      <label><span>Tháng target</span><input type="month" id="reportMonth"></label>
+      <label class="searchLabel"><span>Tìm showroom</span><input type="search" id="searchShowroom" placeholder="Tên showroom..."></label>
+      <button class="targetBtn" id="targetBtn">⚙ Nhập target</button>
+    </section>
+
+    <section class="summary" id="summary"></section>
+
+    <section class="grid2" id="ranking">
+      <article class="panel rankingPanel">
+        <div class="panelHead">
+          <div><span class="sectionLabel">RANKING</span><h2>Xếp hạng showroom</h2><p>Mặc định xếp theo % hoàn thành target từ cao xuống thấp</p></div>
+          <div class="chip" id="rankingChip">— showroom</div>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Showroom</th><th>Target tháng</th><th>DT tháng</th><th>% HT</th><th>Gap TG</th><th>DT hôm nay</th><th>HĐ</th><th>AOV</th></tr>
+            </thead>
+            <tbody id="rankingRows"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panelHead"><div><span class="sectionLabel">% TARGET</span><h2>Tiến độ showroom</h2><p>Đường chuẩn 100%</p></div></div>
+        <div class="rankBars" id="rankBars"></div>
+      </article>
+    </section>
+
+    <section class="grid2" id="daily">
+      <article class="panel">
+        <div class="panelHead">
+          <div><span class="sectionLabel">DAILY SALES</span><h2>Doanh thu ngày từng showroom</h2><p id="dailySub">Actual vs Target ngày</p></div>
+          <div class="legend"><i></i>Actual <i class="gray"></i>Target</div>
+        </div>
+        <div class="chart tall" id="dailyChart"></div>
+      </article>
+      <article class="panel">
+        <div class="panelHead"><div><span class="sectionLabel">DAILY DETAIL</span><h2>Báo cáo ngày</h2><p>Đủ số liệu để rà nhanh từng showroom</p></div></div>
+        <div class="tableWrap compactTable">
+          <table>
+            <thead><tr><th>Showroom</th><th>Doanh thu</th><th>Target ngày</th><th>Gap</th><th>HĐ</th><th>SP</th><th>AOV</th></tr></thead>
+            <tbody id="dailyRows"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid2" id="trend">
+      <article class="panel wide">
+        <div class="panelHead">
+          <div><span class="sectionLabel">SYSTEM TREND</span><h2>Xu hướng doanh thu toàn hệ thống</h2><p>Doanh thu từng ngày trong tháng · Target/ngày</p></div>
+        </div>
+        <div class="chart trendChart" id="trendChart"></div>
+      </article>
+      <article class="panel">
+        <div class="panelHead"><div><span class="sectionLabel">SYSTEM HEALTH</span><h2>Nhịp doanh thu tháng</h2><p>Tiến độ, gap và forecast</p></div></div>
+        <div class="pacing" id="pacing"></div>
+      </article>
+    </section>
+
+    <footer><span>Seven.AM · Internal Showroom Revenue Dashboard</span><span id="updatedAt">—</span></footer>
+  </main>
+
+  <dialog id="unlockDialog">
+    <form id="unlockForm" class="dialogForm">
+      <div class="dialogHead"><div><div class="eyebrow">NHANH.VN DATA</div><h2>Mở dữ liệu LIVE</h2></div><button type="button" class="closeBtn" data-close="unlockDialog">×</button></div>
+      <p>Dữ liệu Nhanh.vn được mã hoá trước khi đưa lên GitHub Pages. Nhập mật khẩu dashboard để mở.</p>
+      <label class="field"><span>Mật khẩu dashboard</span><input id="password" type="password" autocomplete="current-password"></label>
+      <div class="dialogError" id="unlockError"></div>
+      <div class="dialogActions"><button type="button" data-close="unlockDialog">Đóng</button><button type="submit" class="primary">Mở dữ liệu</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" class="dialogForm settingsDialog">
+      <div class="dialogHead"><div><div class="eyebrow">TARGET SHOWROOM</div><h2>Nhập mục tiêu tháng</h2></div><button type="button" class="closeBtn" data-close="settingsDialog">×</button></div>
+      <p>Target ngày sẽ tự tính = Target tháng / số ngày của tháng. Các showroom không nhập target vẫn được hiển thị nhưng xếp sau showroom có target.</p>
+      <div class="settingsToolbar"><button type="button" id="spreadTargetBtn">Chia đều tổng target</button><label><span>Tổng target hệ thống</span><input id="systemTargetInput" type="number" min="0" step="1000000"></label></div>
+      <div class="targetList" id="targetList"></div>
+      <div class="dialogActions"><button type="button" data-close="settingsDialog">Đóng</button><button type="submit" class="primary">Lưu & áp dụng</button></div>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
