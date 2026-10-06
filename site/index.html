@@ -2,10 +2,10 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111111" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=56" />
+  <link rel="stylesheet" href="./styles.css?v=android1" />
 </head>
 <body>
   <aside class="sidebar">
@@ -47,7 +47,14 @@
     <div class="notice" id="notice"></div>
     <div class="error" id="error"></div>
 
+    <section class="mobileCommandBar" aria-label="Thao tác nhanh">
+      <button type="button" id="mobileFilterBtn">☰ Bộ lọc</button>
+      <button type="button" id="mobileQuickBtn">▣ Báo cáo nhanh</button>
+    </section>
+    <div class="mobileFilterBackdrop" id="mobileFilterBackdrop"></div>
+
     <section class="filterBar">
+      <div class="mobileFilterHead"><b>Bộ lọc báo cáo</b><button type="button" id="mobileFilterClose">×</button></div>
       <div class="presetGroup">
         <button data-range="today" class="active">Hôm nay</button>
         <button data-range="yesterday">Hôm qua</button>
@@ -191,6 +198,13 @@
     <footer><span>Seven.AM · Internal Revenue Dashboard</span><span id="updatedAt">—</span></footer>
   </main>
 
+  <nav class="mobileBottomNav" aria-label="Điều hướng dashboard">
+    <button type="button" class="mobileNavBtn active" data-mobile-view="overview"><span>▦</span><b>Tổng quan</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="channels"><span>◫</span><b>Theo kênh</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="sales"><span>◎</span><b>Sale</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="monthly"><span>◒</span><b>Tháng</b></button>
+  </nav>
+
   <dialog id="unlockDialog">
     <form method="dialog" id="unlockForm" class="dialogForm">
       <div class="dialogHead"><div><div class="eyebrow">DỮ LIỆU PANCAKE</div><h2>Mở dashboard LIVE</h2></div><button type="button" class="x" data-close-dialog="unlockDialog">×</button></div>
@@ -252,6 +266,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=56"></script>
+  <script src="./app.js?v=android1"></script>
 </body>
 </html>
