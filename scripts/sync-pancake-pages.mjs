@@ -104,6 +104,10 @@ async function fetchOrderPage(from,to,page){
   url.searchParams.set('to_date',to);
   url.searchParams.set('page_number',String(page));
   url.searchParams.set('page_size','500');
+  // Pancake's default order listing can omit some lifecycle statuses.
+  // Explicitly request the full documented POS status set so dashboard totals
+  // reconcile with the POS "Tất cả" view before applying our exclusions.
+  [0,17,1,11,20,12,13,8,9,2,3,16,4,15,5,6,7].forEach(s=>url.searchParams.append('filter_status[]',String(s)));
   const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
   if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
   const body=await r.json();
