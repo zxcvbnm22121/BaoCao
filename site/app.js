@@ -12,8 +12,10 @@ let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},pa
 
 const SETTINGS_KEY='sevenam_kpi_settings_v3';
 const DATA_KEY='sevenam_channel_data_v3';
+const QUICK_DATA_KEY='sevenam_quick_total_data_v1';
 let settings=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');
 let channelData=JSON.parse(localStorage.getItem(DATA_KEY)||'{}');
+let quickTotalDataStore=JSON.parse(localStorage.getItem(QUICK_DATA_KEY)||'{}');
 
 function seed32(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
 function randFactory(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -67,6 +69,9 @@ function setMode(mode){
 }
 function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}
 function saveChannelData(){localStorage.setItem(DATA_KEY,JSON.stringify(channelData))}
+function saveQuickTotalData(){localStorage.setItem(QUICK_DATA_KEY,JSON.stringify(quickTotalDataStore))}
+function currentDateRangeKey(){return `${$('from').value}|${$('to').value}`}
+function quickTotalDataValue(){return Number(quickTotalDataStore[currentDateRangeKey()])||0}
 function dateRange(kind){
   const now=new Date(),today=vnDate(now);let from=today,to=today;
   if(kind==='yesterday'){const d=new Date(now.getTime()-86400000);from=to=vnDate(d)}
@@ -274,6 +279,75 @@ function renderMonthly(){
   const gapText=`${gapPts>=0?'Vượt':'Chậm'} ${Math.abs(gapPts).toFixed(2).replace('.',',')} điểm %`;
   document.querySelector('#view-monthly .sectionHead p').textContent=`Nhịp tháng ${month} · ${gapText}`
 }
+function quickReportRows(){
+  const from=$('from').value,to=$('to').value;
+  return sourceOrders.filter(o=>{
+    const d=orderDate(o);
+    return (!from||d>=from)&&(!to||d<=to)&&!isDefaultExcluded(o)
+  })
+}
+function quickReportStats(){
+  const rows=quickReportRows();
+  const adsRows=rows.filter(o=>o.channel==='Facebook Ads');
+  const liveRows=rows.filter(o=>o.channel==='Livestream');
+  const adsData=channelDataValue('Facebook Ads');
+  const totalData=quickTotalDataValue();
+  const adsRevenue=sum(adsRows,o=>o.netAmount??o.totalAmount);
+  const liveRevenue=sum(liveRows,o=>o.netAmount??o.totalAmount);
+  const adsOrders=adsRows.length;
+  return {
+    totalData,adsData,adsOrders,
+    adsCr:adsData?adsOrders/adsData:null,
+    adsRevenue,liveRevenue
+  }
+}
+function renderQuickReport(){
+  const s=quickReportStats();
+  $('quickPeriod').textContent=`${$('from').value} → ${$('to').value} · Không phụ thuộc bộ lọc Kênh/Sale/Trạng thái`;
+  $('quickTotalData').value=s.totalData||'';
+  $('quickAdsData').value=s.adsData||'';
+  $('quickTotalDataValue').textContent=s.totalData?numFmt(s.totalData):'Chưa nhập';
+  $('quickAdsDataValue').textContent=s.adsData?numFmt(s.adsData):'Chưa nhập';
+  $('quickAdsCr').textContent=pct(s.adsCr);
+  $('quickAdsCrSub').textContent=s.adsData?`${numFmt(s.adsOrders)} đơn Ads / ${numFmt(s.adsData)} data`:'Nhập Data Ads để tính CR';
+  $('quickAdsRevenue').textContent=money(s.adsRevenue);
+  $('quickLiveRevenue').textContent=money(s.liveRevenue);
+  $('quickTextBox').textContent=[
+    `Data mới toàn kênh: ${s.totalData?numFmt(s.totalData):'Chưa nhập'}`,
+    `Data Ads: ${s.adsData?numFmt(s.adsData):'Chưa nhập'}`,
+    `CR Ads: ${pct(s.adsCr)}`,
+    `Doanh số Ads: ${money(s.adsRevenue)}`,
+    `Doanh số live: ${money(s.liveRevenue)}`
+  ].join('\n')
+}
+function openQuickReport(){
+  renderQuickReport();
+  $('quickReportDialog').showModal();
+  setTimeout(()=>$('quickTotalData').focus(),60)
+}
+function updateQuickTotalData(){
+  quickTotalDataStore[currentDateRangeKey()]=Math.max(0,Number($('quickTotalData').value)||0);
+  saveQuickTotalData();
+  renderQuickReport()
+}
+function updateQuickAdsData(){
+  channelData[rangeKey('Facebook Ads')]=Math.max(0,Number($('quickAdsData').value)||0);
+  saveChannelData();
+  renderQuickReport();
+  renderAll()
+}
+async function copyQuickReport(){
+  const text=$('quickTextBox').textContent;
+  try{
+    await navigator.clipboard.writeText(text);
+    const btn=$('copyQuickReportBtn'),old=btn.textContent;
+    btn.textContent='Đã sao chép';btn.classList.add('copyDone');
+    setTimeout(()=>{btn.textContent=old;btn.classList.remove('copyDone')},1400)
+  }catch{
+    showError('Trình duyệt chưa cho phép sao chép tự động.')
+  }
+}
+
 function switchView(view){
   currentView=view;document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -300,6 +374,13 @@ document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>dateRange(b.d
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.dataset.closeDialog).close());
 $('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
+$('quickReportBtn').onclick=openQuickReport;
+$('quickTotalData').oninput=()=>{quickTotalDataStore[currentDateRangeKey()]=Math.max(0,Number($('quickTotalData').value)||0);saveQuickTotalData();renderQuickReport()};
+$('quickAdsData').oninput=()=>{channelData[rangeKey('Facebook Ads')]=Math.max(0,Number($('quickAdsData').value)||0);saveChannelData();renderQuickReport()};
+$('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickTotalData()}};
+$('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickAdsData()}};
+$('quickAdsData').onblur=()=>{renderAll()};
+$('copyQuickReportBtn').onclick=copyQuickReport;
 $('settingsForm').onsubmit=e=>{e.preventDefault();settings.targetMonth=Math.max(0,Number($('targetMonthInput').value)||0);settings.targetDay=Math.max(0,Number($('targetDayInput').value)||0);settings.gapDay=Number($('gapDayInput').value)||0;saveSettings();$('settingsDialog').close();renderAll()};
 $('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();setTimeout(()=>$('password').focus(),50)};
 $('unlockForm').onsubmit=async e=>{e.preventDefault();const pwd=$('password').value,box=$('unlockError');box.style.display='none';try{$('app').classList.add('loading');const p=await fetchLive(pwd);sessionStorage.setItem('sevenam_dashboard_password',pwd);applyPayload(p);$('unlockDialog').close()}catch(err){box.textContent='Không mở được dữ liệu: sai mật khẩu hoặc bản LIVE chưa sẵn sàng.';box.style.display='block'}finally{$('app').classList.remove('loading')}};
