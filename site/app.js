@@ -286,92 +286,62 @@ function quickReportRows(){
     return (!from||d>=from)&&(!to||d<=to)&&!isDefaultExcluded(o)
   })
 }
-function quickChannelStats(){
-  const rows=quickReportRows();
-  const grouped=group(rows,o=>o.channel||'Khác');
-  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo/CSKH'];
-  const extra=Object.keys(grouped).filter(x=>!canonical.includes(x)).sort();
-  const names=[...canonical,...extra];
-  return names.map(name=>{
-    const rr=grouped[name]||[];
-    const data=channelDataValue(name);
-    const orders=rr.length;
-    const revenue=sum(rr,o=>o.netAmount??o.totalAmount);
-    return {name,data,orders,revenue,cr:data?orders/data:null}
-  })
-}
 function quickReportStats(){
-  const channels=quickChannelStats();
+  const rows=quickReportRows();
+  const adsRows=rows.filter(o=>o.channel==='Facebook Ads');
+  const liveRows=rows.filter(o=>o.channel==='Livestream');
+  const adsData=channelDataValue('Facebook Ads');
+  const totalData=quickTotalDataValue();
+  const adsOrders=adsRows.length;
   return {
-    totalData:quickTotalDataValue(),
-    totalOrders:channels.reduce((a,x)=>a+x.orders,0),
-    totalRevenue:channels.reduce((a,x)=>a+x.revenue,0),
-    channels
+    totalData,
+    adsData,
+    adsCr:adsData?adsOrders/adsData:null,
+    adsRevenue:sum(adsRows,o=>o.netAmount??o.totalAmount),
+    liveRevenue:sum(liveRows,o=>o.netAmount??o.totalAmount)
   }
 }
 function quickReportText(s=quickReportStats()){
-  const lines=[
+  return [
     `Data mới toàn kênh: ${s.totalData?numFmt(s.totalData):'Chưa nhập'}`,
-    `Tổng số đơn: ${numFmt(s.totalOrders)}`,
-    `Tổng doanh số sau CK: ${money(s.totalRevenue)}`,
-    ''
-  ];
-  s.channels.forEach(ch=>{
-    lines.push(`${ch.name}: Data ${ch.data?numFmt(ch.data):'—'} | Đơn ${numFmt(ch.orders)} | CR ${pct(ch.cr)} | Doanh số ${money(ch.revenue)}`)
-  });
-  return lines.join('\n')
+    `Data Ads: ${s.adsData?numFmt(s.adsData):'Chưa nhập'}`,
+    `CR Ads: ${pct(s.adsCr)}`,
+    `Doanh số Ads: ${money(s.adsRevenue)}`,
+    `Doanh số live: ${money(s.liveRevenue)}`
+  ].join('\n')
 }
-function renderQuickReport({syncTotalInput=true}={}){
+function renderQuickReport({syncInputs=true}={}){
   const s=quickReportStats();
-  $('quickPeriod').textContent=`${$('from').value} → ${$('to').value} · Tự động bỏ Huỷ/Xoá + Đơn đổi`;
-  if(syncTotalInput)$('quickTotalData').value=s.totalData||'';
-  $('quickAllRevenue').textContent=money(s.totalRevenue);
-  $('quickAllOrders').textContent=numFmt(s.totalOrders);
-
-  $('quickChannelRows').innerHTML=s.channels.map(ch=>`
-    <div class="quickChannelRow ${ch.orders||ch.data?'':'zero'}" data-channel="${esc(ch.name)}">
-      <span class="channelName" title="${esc(ch.name)}">${esc(ch.name)}</span>
-      <input class="quickChannelDataInput" data-channel="${esc(ch.name)}" type="number" min="0" step="1" inputmode="numeric" value="${ch.data||''}" placeholder="Data">
-      <span class="channelOrders">${numFmt(ch.orders)}</span>
-      <span class="channelCr">${pct(ch.cr)}</span>
-      <span class="channelRevenue">${compact(ch.revenue)}</span>
-    </div>`).join('');
-
-  $('quickTextBox').textContent=quickReportText(s);
-
-  document.querySelectorAll('.quickChannelDataInput').forEach(inp=>{
-    const update=()=>{
-      channelData[rangeKey(inp.dataset.channel)]=Math.max(0,Number(inp.value)||0);
-      saveChannelData();
-      const row=inp.closest('.quickChannelRow');
-      const rows=quickReportRows().filter(o=>(o.channel||'Khác')===inp.dataset.channel);
-      const orders=rows.length,data=Number(inp.value)||0;
-      row.querySelector('.channelCr').textContent=pct(data?orders/data:null);
-      $('quickTextBox').textContent=quickReportText();
-    };
-    inp.oninput=update;
-    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();update();inp.blur()}};
-    inp.onblur=()=>{update();renderAll()}
-  })
+  $('quickPeriod').textContent=`${$('from').value} → ${$('to').value}`;
+  if(syncInputs){
+    $('quickTotalData').value=s.totalData||'';
+    $('quickAdsData').value=s.adsData||'';
+  }
+  $('quickAdsCr').textContent=pct(s.adsCr);
+  $('quickAdsRevenue').textContent=money(s.adsRevenue);
+  $('quickLiveRevenue').textContent=money(s.liveRevenue);
+  $('quickTextBox').textContent=quickReportText(s)
 }
 function openQuickReport(){
-  renderQuickReport({syncTotalInput:true});
+  renderQuickReport({syncInputs:true});
   $('quickReportDialog').showModal();
   setTimeout(()=>$('quickTotalData').focus(),60)
 }
 function updateQuickTotalDataFromInput(){
   quickTotalDataStore[currentDateRangeKey()]=Math.max(0,Number($('quickTotalData').value)||0);
   saveQuickTotalData();
-  $('quickTextBox').textContent=quickReportText()
+  renderQuickReport({syncInputs:false})
+}
+function updateQuickAdsDataFromInput(){
+  channelData[rangeKey('Facebook Ads')]=Math.max(0,Number($('quickAdsData').value)||0);
+  saveChannelData();
+  renderQuickReport({syncInputs:false})
 }
 async function copyQuickReport(){
   const report=quickReportText();
   let copied=false;
   try{
-    if(navigator.clipboard&&window.isSecureContext){
-      await navigator.clipboard.writeText(report);
-      copied=true
-    }
+    if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(report);copied=true}
   }catch{}
   if(!copied){
     try{
@@ -384,9 +354,7 @@ async function copyQuickReport(){
     const btn=$('copyQuickReportBtn'),old=btn.textContent;
     btn.textContent='Đã sao chép';btn.classList.add('copyDone');
     setTimeout(()=>{btn.textContent=old;btn.classList.remove('copyDone')},1400)
-  }else{
-    showError('Trình duyệt chưa cho phép sao chép tự động.')
-  }
+  }else showError('Trình duyệt chưa cho phép sao chép tự động.')
 }
 
 function switchView(view){
@@ -417,7 +385,10 @@ document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.da
 $('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
 $('quickReportBarBtn').onclick=openQuickReport;
 $('quickTotalData').oninput=updateQuickTotalDataFromInput;
+$('quickAdsData').oninput=updateQuickAdsDataFromInput;
 $('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickTotalDataFromInput();$('quickTotalData').blur()}};
+$('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickAdsDataFromInput();$('quickAdsData').blur()}};
+$('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
 $('settingsForm').onsubmit=e=>{e.preventDefault();settings.targetMonth=Math.max(0,Number($('targetMonthInput').value)||0);settings.targetDay=Math.max(0,Number($('targetDayInput').value)||0);settings.gapDay=Number($('gapDayInput').value)||0;saveSettings();$('settingsDialog').close();renderAll()};
 $('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();setTimeout(()=>$('password').focus(),50)};
