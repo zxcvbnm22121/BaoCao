@@ -103,8 +103,8 @@ async function fetchOrderPage(from,to,page){
   url.searchParams.set('from_date',from);
   url.searchParams.set('to_date',to);
   url.searchParams.set('page_number',String(page));
-  url.searchParams.set('page_size','100');
-  const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});
+  url.searchParams.set('page_size','500');
+  const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
   if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
   const body=await r.json();
   const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
@@ -123,54 +123,40 @@ function pageDateBounds(data){
   const dates=data.map(normalize).map(normalizedDateKey).filter(Boolean).sort();
   return {min:dates[0]||null,max:dates[dates.length-1]||null}
 }
+function rawOrderKey(raw,index=0){
+  return str(get(raw,'id|display_id|order_id|code')) || `${str(get(raw,'inserted_at|created_at|creation_time'))}:${index}`
+}
 
 async function fetchOrders(from,to){
   const first=await fetchOrderPage(from,to,1);
-  const firstNorm=first.data.map(normalize).filter(x=>x.totalAmount>=0);
-  const rows=firstNorm.filter(x=>keepInRange(x,from,to));
+  const rawMap=new Map();
+  first.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+
   const firstBounds=pageDateBounds(first.data);
   console.log(`Orders page 1: ${first.data.length} rows${first.totalPages?' / '+first.totalPages+' pages':''} · ${firstBounds.min||'?'} → ${firstBounds.max||'?'}`);
-  if(first.data[0]){
-    const raw=first.data[0];
-    const nested=Object.entries(raw).filter(([,v])=>v&&typeof v==='object'&&!Array.isArray(v)).slice(0,20).map(([k,v])=>[k,Object.keys(v).sort().slice(0,40)]);
-    console.log('ORDER_SCHEMA_KEYS:',JSON.stringify(Object.keys(raw).sort()));
-    console.log('ORDER_NESTED_SCHEMA_KEYS:',JSON.stringify(nested));
-    const norm=normalize(raw);
-    console.log('ORDER_DATE_DIAGNOSTIC:',JSON.stringify({createdAt:norm.createdAt,statusCode:norm.statusCode,statusName:norm.statusName}));
-  }
-  if(!first.data.length||firstBounds.max<from)return rows;
 
-  if(first.totalPages){
-    const maxPages=Math.min(200,first.totalPages);
-    let stop=false;
-    for(let fromPage=2;fromPage<=maxPages&&!stop;fromPage+=5){
-      const pages=Array.from({length:Math.min(5,maxPages-fromPage+1)},(_,i)=>fromPage+i);
-      const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
-      for(let i=0;i<batch.length;i++){
-        const page=pages[i],data=batch[i].data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
-        console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-        rows.push(...norm.filter(x=>keepInRange(x,from,to)));
-        if(!data.length||(bounds.max&&bounds.max<from)){stop=true;break}
-      }
+  const maxPages=Math.max(1,Math.min(200,first.totalPages||1));
+  for(let fromPage=2;fromPage<=maxPages;fromPage+=4){
+    const pages=Array.from({length:Math.min(4,maxPages-fromPage+1)},(_,i)=>fromPage+i);
+    const batch=await Promise.all(pages.map(p=>fetchOrderPage(from,to,p)));
+    for(let i=0;i<batch.length;i++){
+      const page=pages[i],data=batch[i].data,bounds=pageDateBounds(data);
+      data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
+      console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
     }
-    return rows
   }
 
-  const seenPages=new Set();
-  const firstA=first.data[0]||{},firstB=first.data[first.data.length-1]||{};
-  seenPages.add(`${first.data.length}:${str(get(firstA,'id|display_id|order_id|code'))}:${str(get(firstB,'id|display_id|order_id|code'))}`);
-  for(let page=2;page<=200;page++){
-    const res=await fetchOrderPage(from,to,page),data=res.data,norm=data.map(normalize).filter(x=>x.totalAmount>=0),bounds=pageDateBounds(data);
-    const a=data[0]||{},b=data[data.length-1]||{};
-    const sig=`${data.length}:${str(get(a,'id|display_id|order_id|code'))}:${str(get(b,'id|display_id|order_id|code'))}`;
-    if(seenPages.has(sig)){console.log(`Pagination repeated at page ${page}; stopping.`);break}
-    seenPages.add(sig);
-    console.log(`Orders page ${page}: ${data.length} rows · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-    rows.push(...norm.filter(x=>keepInRange(x,from,to)));
-    if(!data.length||data.length<100||(bounds.max&&bounds.max<from))break;
-  }
-  return rows
+  // Re-fetch the first page once after the full scan so orders inserted while syncing
+  // are included without creating duplicates.
+  const latest=await fetchOrderPage(from,to,1);
+  latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+
+  const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
+  const inRange=normalized.filter(x=>keepInRange(x,from,to));
+  console.log(`Pancake full scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
+  return inRange
 }
+
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
 
 await fs.mkdir('site/data',{recursive:true});
