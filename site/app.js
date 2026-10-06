@@ -329,9 +329,9 @@ function renderQuickReport({syncTotalInput=true}={}){
   $('quickAllOrders').textContent=numFmt(s.totalOrders);
 
   $('quickChannelRows').innerHTML=s.channels.map(ch=>`
-    <div class="quickChannelRow ${ch.orders||ch.data?'':'zero'}" data-channel="${escapeHtml(ch.name)}">
-      <span class="channelName" title="${escapeHtml(ch.name)}">${escapeHtml(ch.name)}</span>
-      <input class="quickChannelDataInput" data-channel="${escapeHtml(ch.name)}" type="number" min="0" step="1" inputmode="numeric" value="${ch.data||''}" placeholder="Data">
+    <div class="quickChannelRow ${ch.orders||ch.data?'':'zero'}" data-channel="${esc(ch.name)}">
+      <span class="channelName" title="${esc(ch.name)}">${esc(ch.name)}</span>
+      <input class="quickChannelDataInput" data-channel="${esc(ch.name)}" type="number" min="0" step="1" inputmode="numeric" value="${ch.data||''}" placeholder="Data">
       <span class="channelOrders">${numFmt(ch.orders)}</span>
       <span class="channelCr">${pct(ch.cr)}</span>
       <span class="channelRevenue">${compact(ch.revenue)}</span>
