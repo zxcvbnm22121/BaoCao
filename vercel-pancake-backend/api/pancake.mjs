@@ -1,8 +1,11 @@
+import crypto from 'node:crypto';
+
 const TZ='Asia/Ho_Chi_Minh';
 
-const API_KEY=(process.env.PANCAKE_API_KEY||'').trim();
+let API_KEY=(process.env.PANCAKE_API_KEY||'').trim();
 let SHOP_ID=(process.env.PANCAKE_SHOP_ID||'').trim();
-const DASHBOARD_PASSWORD=process.env.DASHBOARD_PASSWORD||'';
+const DASHBOARD_PASSWORD=(process.env.DASHBOARD_PASSWORD||'').trim();
+const KEY_ARTIFACT='https://zxcvbnm22121.github.io/BaoCao/data/pancake-key.enc';
 const ALLOWED_ORIGIN=(process.env.ALLOWED_ORIGIN||'https://zxcvbnm22121.github.io').replace(/\/$/,'');
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
 const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
@@ -14,6 +17,39 @@ const dateKey=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:
 const get=(o,path)=>String(path).split('|').map(x=>x.trim()).map(p=>p.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,o)).find(v=>v!==undefined&&v!==null&&v!=='');
 const num=v=>{const n=Number(v??0);return Number.isFinite(n)?n:0};
 const str=(v,f='')=>v==null?f:String(v);
+
+function decryptEnvelope(env,password){
+  const salt=Buffer.from(env.salt,'base64');
+  const iv=Buffer.from(env.iv,'base64');
+  const combined=Buffer.from(env.data,'base64');
+  if(combined.length<17)throw new Error('Invalid encrypted credential artifact');
+  const ciphertext=combined.subarray(0,combined.length-16);
+  const tag=combined.subarray(combined.length-16);
+  const key=crypto.pbkdf2Sync(password,salt,Number(env.iterations||210000),32,'sha256');
+  const decipher=crypto.createDecipheriv('aes-256-gcm',key,iv);
+  decipher.setAuthTag(tag);
+  const plain=Buffer.concat([decipher.update(ciphertext),decipher.final()]);
+  return JSON.parse(plain.toString('utf8'));
+}
+let credentialCache={at:0,value:null};
+async function loadCredentials(password){
+  if(API_KEY){
+    if(DASHBOARD_PASSWORD && !secureEqual(password,DASHBOARD_PASSWORD))throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
+    return {apiKey:API_KEY,shopId:SHOP_ID};
+  }
+  if(credentialCache.value&&Date.now()-credentialCache.at<300000)return credentialCache.value;
+  const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw new Error('Encrypted Pancake credential artifact unavailable');
+  try{
+    const payload=decryptEnvelope(await r.json(),password);
+    if(!payload?.apiKey)throw new Error('Missing API key');
+    const value={apiKey:String(payload.apiKey),shopId:String(payload.shopId||'')};
+    credentialCache={at:Date.now(),value};
+    return value;
+  }catch(e){
+    throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
+  }
+}
 
 function parsePancakeDate(value){
   if(value==null||value==='')throw new Error('Missing Pancake creation timestamp');
@@ -167,7 +203,7 @@ function buildPayload(orders,from,to){
     d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
   }
   return {
-    meta:{source:'PANCAKE_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},
+    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},
     monthlyTarget:MONTHLY_TARGET,
     channelTargets:CHANNEL_TARGETS,
     orders
@@ -198,11 +234,13 @@ export default async function handler(req,res){
   cors(req,res);
   if(req.method==='OPTIONS')return res.status(204).end();
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
-  if(!API_KEY||!DASHBOARD_PASSWORD)return res.status(503).json({error:'Backend secrets not configured'});
   const supplied=req.headers['x-dashboard-password']||req.body?.password||'';
-  if(!secureEqual(supplied,DASHBOARD_PASSWORD))return res.status(401).json({error:'Sai mật khẩu dashboard'});
+  if(!supplied)return res.status(401).json({error:'Cần mật khẩu dashboard'});
 
   try{
+    const creds=await loadCredentials(supplied);
+    API_KEY=creds.apiKey;
+    if(creds.shopId)SHOP_ID=creds.shopId;
     const now=Date.now();
     if(cache.payload&&now-cache.at<CACHE_MS)return res.status(200).json(cache.payload);
     await discoverShopId();
@@ -212,6 +250,7 @@ export default async function handler(req,res){
     cache={at:now,payload};
     return res.status(200).json(payload);
   }catch(e){
+    if(e?.auth)return res.status(401).json({error:'Sai mật khẩu dashboard'});
     console.error(e);
     return res.status(502).json({error:'Không tải được Pancake lúc này'});
   }
