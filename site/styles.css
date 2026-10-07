@@ -435,3 +435,19 @@ tr.clickable:hover td{background:#fbf7f3}
   .channelTargetRow b{font-size:12px}
   .targetConfigNotice{margin:0 14px 14px;font-size:11px}
 }
+
+/* Product image + canonical code */
+.productTable td:nth-child(2),.productTable th:nth-child(2){text-align:center;width:58px}
+.productTable td:nth-child(3),.productTable th:nth-child(3){text-align:left}
+.productTable td:nth-child(4),.productTable th:nth-child(4){text-align:left}
+.productTable td:nth-child(4){white-space:normal;min-width:190px;max-width:360px}
+.productThumb{width:46px;height:58px;border-radius:8px;overflow:hidden;background:#f2eee9;border:1px solid #e6dfd8;display:grid;place-items:center;margin:auto}
+.productThumb img{width:100%;height:100%;object-fit:cover;display:block}
+.productThumb span{display:none;font-size:11px;font-weight:900;color:#9a928a;letter-spacing:.05em}
+.productThumb.empty span,.productThumb.imageError span{display:grid}
+.productThumb.imageError img{display:none}
+
+@media(max-width:720px){
+  .productTable tbody tr td[data-label="Ảnh"]{justify-content:flex-end}
+  .productThumb{width:72px;height:88px;margin:0}
+}
