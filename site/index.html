@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111111" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=pancake-ops-center-20261007" />
+  <link rel="stylesheet" href="./styles.css?v=product-performance-20261007-2" />
 </head>
 <body>
   <aside class="sidebar">
@@ -17,6 +17,7 @@
     <nav class="nav">
       <button class="navBtn active" data-view="overview"><span>▦</span><b>Tổng quan</b></button>
       <button class="navBtn" data-view="channels"><span>◫</span><b>Theo kênh</b></button>
+      <button class="navBtn" data-view="products"><span>◆</span><b>Sản phẩm</b></button>
       <button class="navBtn" data-view="sales"><span>◎</span><b>Sale Online</b></button>
       <button class="navBtn" data-view="monthly"><span>◒</span><b>Tiến độ tháng</b></button>
     </nav>
@@ -166,6 +167,48 @@
       </article>
     </section>
 
+
+    <section id="view-products" class="view">
+      <div class="sectionHead productSectionHead">
+        <div>
+          <span class="sectionEyebrow">PRODUCT PERFORMANCE</span>
+          <h2>Sản phẩm bán chạy</h2>
+          <p>Xếp hạng theo số lượng bán · theo dõi số lượng hoàn và tỷ lệ hoàn từng mã</p>
+        </div>
+      </div>
+
+      <section class="productToolbar" aria-label="Bộ lọc sản phẩm">
+        <div class="productPeriodGroup">
+          <button type="button" class="productPeriodBtn active" data-product-period="day">Ngày</button>
+          <button type="button" class="productPeriodBtn" data-product-period="week">7 ngày</button>
+          <button type="button" class="productPeriodBtn" data-product-period="month">Tháng</button>
+        </div>
+        <label><span>Ngày mốc</span><input type="date" id="productAnchor" /></label>
+        <label><span>Kênh</span><select id="productChannel"><option>Tất cả</option></select></label>
+      </section>
+
+      <section class="miniKpiGrid productKpis" id="productKpis"></section>
+
+      <article class="panel tablePanel productTablePanel">
+        <div class="panelHead">
+          <div>
+            <h3>Top sản phẩm theo số lượng bán</h3>
+            <p>SL bán gồm sản phẩm đã phát sinh đơn; SL bán thực = SL bán − SL hoàn</p>
+          </div>
+          <div class="summaryChip" id="productRangeSummary">—</div>
+        </div>
+        <div class="productDataNote" id="productDataNote"></div>
+        <div class="scroll">
+          <table class="productTable">
+            <thead>
+              <tr><th>#</th><th>Mã SP</th><th>Tên sản phẩm</th><th>SL bán</th><th>SL hoàn</th><th>SL bán thực</th><th>Tỷ lệ hoàn</th><th>Số đơn</th></tr>
+            </thead>
+            <tbody id="productRows"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
     <section id="view-sales" class="view">
       <div class="sectionHead">
         <div><span class="sectionEyebrow">SALE ONLINE</span><h2>Hiệu suất nhân viên</h2><p>Doanh số, thành công, hoàn và AOV</p></div>
@@ -224,7 +267,8 @@
 
   <nav class="mobileBottomNav" aria-label="Điều hướng dashboard">
     <button type="button" class="mobileNavBtn active" data-mobile-view="overview"><span>▦</span><b>Tổng quan</b></button>
-    <button type="button" class="mobileNavBtn" data-mobile-view="channels"><span>◫</span><b>Theo kênh</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="channels"><span>◫</span><b>Kênh</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="products"><span>◆</span><b>Sản phẩm</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="sales"><span>◎</span><b>Sale</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="monthly"><span>◒</span><b>Tháng</b></button>
   </nav>
@@ -307,6 +351,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=pancake-revenue-reconcile-20261007-1541"></script>
+  <script src="./app.js?v=product-performance-20261007-2"></script>
 </body>
 </html>
