@@ -8,7 +8,7 @@ const vnDate=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ban
 const statusLabels={TREO:'Treo',DANG_GIAO:'Đang giao',THANH_CONG:'Thành công',HOAN:'Hoàn',HUY:'Huỷ / xoá'};
 const statusColors={TREO:'#b57a21',DANG_GIAO:'#386ba7',THANH_CONG:'#28734c',HOAN:'#a7192e',HUY:'#77716b'};
 const b64bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},payloadMonthlyTarget=2300000000,currentView='overview';
+let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},payloadMonthlyTarget=2300000000,currentView='overview',productPeriod='day';
 
 const SETTINGS_KEY='sevenam_kpi_settings_v3';
 const DATA_KEY='sevenam_channel_data_v3';
@@ -142,6 +142,7 @@ function dateRange(kind){
   else if(kind==='7d')from=vnDate(new Date(now.getTime()-6*86400000));
   else if(kind==='month')from=today.slice(0,7)+'-01';
   $('from').value=from;$('to').value=to;
+  if($('productAnchor'))$('productAnchor').value=to;
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===kind));
   renderAll()
 }
@@ -206,6 +207,7 @@ function orderHour(o){
 function populateFilters(){
   const fill=(id,vals)=>{const el=$(id),old=el.value;el.innerHTML=['Tất cả',...Array.from(new Set(vals.filter(Boolean))).sort()].map(x=>`<option>${esc(x)}</option>`).join('');if([...el.options].some(o=>o.value===old))el.value=old};
   fill('channel',sourceOrders.map(x=>x.channel));
+  fill('productChannel',sourceOrders.map(x=>x.channel));
   fill('staff',sourceOrders.map(x=>x.salesStaff))
 }
 function isDefaultExcluded(o){
@@ -427,7 +429,7 @@ function renderAll(){
     $('kpis').innerHTML=card('DOANH SỐ PANCAKE','Chưa mở LIVE','Nhập mật khẩu qua nút 🔒 để xem tổng tiền thực tế',true);
     $('periodStat').textContent=`${$('from').value} → ${$('to').value} · Chưa có dữ liệu LIVE`;
     ['channelChart','trendChart','statusChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','monthlyChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
-    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Chưa mở Pancake LIVE';
     $('pageSub').textContent='Chưa có dữ liệu Pancake đã xác thực';
     updateDataFreshness();
@@ -438,7 +440,7 @@ function renderAll(){
   if(coverageError){
     $('kpis').innerHTML=card('CHƯA CÓ ĐỦ DỮ LIỆU','Không thể đối soát',esc(coverageError),true);
     $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
-    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     ['trendChart','channelChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Khoảng lọc nằm ngoài dữ liệu đã đồng bộ';
     return;
@@ -465,6 +467,7 @@ function renderAll(){
   renderTarget();
   renderOperationalPanels(rows);
   renderChannels(rows);
+  renderProducts();
   renderSales(rows);
   renderSaleLeaderboard(rows);
   renderMonthly();
@@ -549,6 +552,97 @@ function renderTarget(){
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
     <div class="progressRow"><div class="progressLabel"><span>Tiến độ thời gian khoảng lọc</span><b>${pct(time)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
     <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>`;
+}
+function shiftIsoDay(day,offset){
+  const d=new Date(String(day||vnDate())+'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate()+offset);
+  return d.toISOString().slice(0,10)
+}
+function parentSku(raw){
+  const s=String(raw||'').trim();
+  return /^[A-Za-z]\d+[A-Za-z][1-5]$/.test(s)?s.slice(0,-1):s
+}
+function productDateRange(){
+  const anchor=($('productAnchor')?.value||$('to').value||vnDate());
+  if(productPeriod==='week')return{from:shiftIsoDay(anchor,-6),to:anchor,label:'7 ngày'};
+  if(productPeriod==='month')return{from:anchor.slice(0,7)+'-01',to:anchor,label:'Tháng'};
+  return{from:anchor,to:anchor,label:'Ngày'}
+}
+function productSourceRows(){
+  const r=productDateRange(),ch=$('productChannel')?.value||'Tất cả';
+  return sourceOrders.filter(o=>{
+    const d=orderDate(o);
+    return d>=r.from&&d<=r.to&&!isDefaultExcluded(o)&&(ch==='Tất cả'||o.channel===ch)
+  })
+}
+function aggregateProducts(rows){
+  const map=new Map();
+  let ordersWithItems=0,ordersMissingItems=0,partialUnknown=0,totalLines=0;
+  for(const o of rows){
+    const items=Array.isArray(o.products)?o.products:[];
+    if(!items.length){ordersMissingItems++;continue}
+    ordersWithItems++;
+    if(o.partialReturnProductDetailMissing)partialUnknown++;
+    const seen=new Set();
+    for(const item of items){
+      const quantity=Math.max(0,Number(item?.quantity)||0);
+      if(!quantity)continue;
+      const returned=Math.min(quantity,Math.max(0,Number(item?.returnedQuantity)||0));
+      const displayCode=String(item?.productCode||parentSku(item?.sku)||item?.productId||item?.variationId||item?.name||'Chưa rõ').trim();
+      const key=String(item?.productId||displayCode||item?.name||'unknown').trim().toLowerCase();
+      let p=map.get(key);
+      if(!p){
+        p={code:displayCode,name:String(item?.name||displayCode||'Chưa rõ sản phẩm').trim(),soldQty:0,returnedQty:0,orders:0,returnOrders:0};
+        map.set(key,p)
+      }
+      p.soldQty+=quantity;
+      p.returnedQty+=returned;
+      totalLines++;
+      const orderKey=String(o.orderCode||o.createdAt||'');
+      if(!seen.has(key)){p.orders++;seen.add(key)}
+      if(returned>0){
+        const returnKey=key+'|'+orderKey;
+        if(!seen.has(returnKey)){p.returnOrders++;seen.add(returnKey)}
+      }
+    }
+  }
+  const products=[...map.values()].map(p=>({
+    ...p,
+    netQty:Math.max(0,p.soldQty-p.returnedQty),
+    returnRate:p.soldQty?p.returnedQty/p.soldQty:0
+  })).sort((a,b)=>b.soldQty-a.soldQty||b.netQty-a.netQty||b.orders-a.orders||a.code.localeCompare(b.code,'vi'));
+  return{products,ordersWithItems,ordersMissingItems,partialUnknown,totalLines}
+}
+function renderProducts(){
+  const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
+  if(!kpis||!tbody||!summary||!note)return;
+  const range=productDateRange(),rows=productSourceRows(),agg=aggregateProducts(rows),list=agg.products;
+  const sold=sum(list,x=>x.soldQty),returned=sum(list,x=>x.returnedQty),net=sold-returned,rate=sold?returned/sold:0;
+  kpis.innerHTML=[
+    mini('Sản phẩm',numFmt(list.length)),
+    mini('SL bán',numFmt(sold)),
+    mini('SL hoàn',numFmt(returned),rate>.20?'bad':''),
+    mini('SL bán thực',numFmt(net)),
+    mini('Tỷ lệ hoàn',pct(rate),rate>.20?'bad':'')
+  ].join('');
+  const ch=$('productChannel')?.value||'Tất cả';
+  summary.textContent=`${range.from} → ${range.to} · ${ch}`;
+  const messages=[];
+  if(!agg.ordersWithItems&&rows.length)messages.push('Dữ liệu đơn trong kỳ chưa có line-item sản phẩm từ Pancake.');
+  else if(agg.ordersMissingItems)messages.push(`${numFmt(agg.ordersMissingItems)} đơn chưa có chi tiết sản phẩm.`);
+  if(agg.partialUnknown)messages.push(`${numFmt(agg.partialUnknown)} đơn hoàn một phần chưa có SKU hoàn chi tiết — không tự gán hoàn cho toàn bộ sản phẩm.`);
+  note.textContent=messages.join(' ');
+  note.style.display=messages.length?'block':'none';
+  tbody.innerHTML=list.slice(0,100).map((p,i)=>`<tr>
+    <td data-label="#">${i+1}</td>
+    <td data-label="Mã SP"><strong>${esc(p.code||'—')}</strong></td>
+    <td data-label="Tên SP">${esc(p.name||'—')}</td>
+    <td data-label="SL bán">${numFmt(p.soldQty)}</td>
+    <td data-label="SL hoàn" class="${p.returnedQty?'bad':''}">${numFmt(p.returnedQty)}</td>
+    <td data-label="SL bán thực">${numFmt(p.netQty)}</td>
+    <td data-label="Tỷ lệ hoàn" class="${p.returnRate>.20?'bad':p.returnRate>.10?'warnText':''}">${pct(p.returnRate)}</td>
+    <td data-label="Số đơn">${numFmt(p.orders)}</td>
+  </tr>`).join('')||'<tr><td colspan="8">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
 }
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
@@ -684,7 +778,7 @@ function switchView(view){
   currentView=view;document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.mobileNavBtn').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
-  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',sales:'Sale Online',monthly:'Tiến độ tháng'};
+  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
   $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
 }
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
@@ -709,6 +803,7 @@ async function tryAutoLive(){
 async function init(){
   sourceOrders=[];
   setMode('LOCKED');
+  if($('productAnchor'))$('productAnchor').value=vnDate();
   dateRange('today');
   populateFilters();
   await tryAutoLive();
@@ -739,6 +834,13 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiv
 window.addEventListener('online',refreshLiveWhenVisible);
 window.addEventListener('focus',refreshLiveWhenVisible);
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
+document.querySelectorAll('[data-product-period]').forEach(b=>b.onclick=()=>{
+  productPeriod=b.dataset.productPeriod||'day';
+  document.querySelectorAll('[data-product-period]').forEach(x=>x.classList.toggle('active',x===b));
+  renderProducts()
+});
+if($('productAnchor'))$('productAnchor').onchange=renderProducts;
+if($('productChannel'))$('productChannel').onchange=renderProducts;
 ['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 document.querySelectorAll('.mobileNavBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.mobileView));
