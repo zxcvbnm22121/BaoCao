@@ -74,14 +74,14 @@ function firstArray(raw,paths){
 }
 function productLine(rawItem){
   if(!rawItem||typeof rawItem!=='object')return null;
-  const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')));
+  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
+  const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
   if(!quantity)return null;
   const sku=str(get(rawItem,'sku|variation.sku|variation_info.sku|code|variation.display_id')).trim();
   const productCode=str(get(rawItem,'product_code|product.code|product.sku|product.display_id|variation.product_code|variation_info.product_code')).trim();
   const productId=str(get(rawItem,'product_id|product.id|variation.product_id|variation_info.product_id')).trim();
   const variationId=str(get(rawItem,'variation_id|variation.id|variation_info.id|id')).trim();
   const name=str(get(rawItem,'product_name|product.name|variation_name|variation.name|variation_info.name|display_name|name')).trim()||sku||productId||variationId||'Chưa rõ sản phẩm';
-  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
   const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
   return{sku:sku||productCode||productId||variationId||name,productCode,name,productId,variationId,quantity,returnedQuantity}
 }
