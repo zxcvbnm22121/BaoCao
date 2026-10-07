@@ -1,6 +1,10 @@
 package vn.sevenam.pancakedashboard;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
 
 final class Order {
     String createdDate = "";
@@ -20,6 +24,8 @@ final class Order {
     boolean excludedStatus;
     boolean excludedExchangeSource;
     boolean excludedFromDefaultReport;
+    boolean partialReturnProductDetailMissing;
+    final List<ProductLine> products = new ArrayList<>();
 
     static Order fromJson(JSONObject o) {
         Order x = new Order();
@@ -43,6 +49,14 @@ final class Order {
                 "excludedFromDefaultReport",
                 x.excludedStatus || x.excludedExchangeSource
         );
+        x.partialReturnProductDetailMissing = o.optBoolean("partialReturnProductDetailMissing", false);
+        JSONArray products = o.optJSONArray("products");
+        if (products != null) {
+            for (int i = 0; i < products.length(); i++) {
+                JSONObject item = products.optJSONObject(i);
+                if (item != null) x.products.add(ProductLine.fromJson(item));
+            }
+        }
         return x;
     }
 
