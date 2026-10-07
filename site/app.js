@@ -257,10 +257,31 @@ function overview(rows){
 function group(rows,key){const m={};for(const r of rows)(m[key(r)]??=[]).push(r);return m}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
-function targetMonth(){return Number(settings.targetMonth)||payloadMonthlyTarget||2300000000}
-function targetDay(month=$('from').value.slice(0,7)||vnDate().slice(0,7)){return Number(settings.targetDay)||Math.round(targetMonth()/daysInMonth(month))}
-function gapDay(){return Number(settings.gapDay)||0}
-function effectiveDailyTarget(month){return Math.max(0,targetDay(month)+gapDay())}
+const KPI_CHANNELS=[
+  {key:'ads',channel:'Facebook Ads',label:'Ads'},
+  {key:'live',channel:'Livestream',label:'Live'},
+  {key:'zalo',channel:'Zalo/CSKH',label:'Zalo'},
+  {key:'website',channel:'Website',label:'Website'}
+];
+function hasChannelTargets(){return Boolean(settings.channelTargetsConfigured)}
+function channelTargetMonth(channel){
+  const cfg=settings.channelTargets||{};
+  const item=KPI_CHANNELS.find(x=>x.channel===channel);
+  return item?Math.max(0,Number(cfg[item.key])||0):0
+}
+function targetMonth(channel=$('channel')?.value||'Tất cả'){
+  if(hasChannelTargets()){
+    if(channel&&channel!=='Tất cả')return channelTargetMonth(channel);
+    return KPI_CHANNELS.reduce((n,x)=>n+channelTargetMonth(x.channel),0)
+  }
+  return Number(settings.targetMonth)||payloadMonthlyTarget||2300000000
+}
+function targetDay(month=$('from').value.slice(0,7)||vnDate().slice(0,7),channel=$('channel')?.value||'Tất cả'){
+  return Math.round(targetMonth(channel)/daysInMonth(month))
+}
+function effectiveDailyTarget(month,channel=$('channel')?.value||'Tất cả'){
+  return Math.max(0,targetDay(month,channel))
+}
 function rangeKey(channel){return `${$('from').value}|${$('to').value}|${channel}`}
 function channelDataValue(channel){return Number(channelData[rangeKey(channel)])||0}
 function totalManualData(rows){
@@ -546,12 +567,32 @@ function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegat
 }
 function renderTarget(){
   const days=selectedCalendarDays(),rows=filteredRows(),k=overview(rows),goal=periodTarget(days);
-  const time=reportTimeProgress(days),completion=goal?k.createdRevenue/goal:0,gapPoints=(completion-time)*100;
+  const time=reportTimeProgress(days),expected=goal*time,completion=goal?k.createdRevenue/goal:0;
+  const gapMoney=k.createdRevenue-expected,gapPoints=goal?(k.createdRevenue/goal-time)*100:0;
   const dayTarget=days.length?goal/days.length:0,forecast=time>0?k.createdRevenue/time:0;
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapPoints>=0?'Vượt':'Chậm'} ${Math.abs(gapPoints).toFixed(2).replace('.',',')} điểm %</div></div>
+  const selectedChannel=$('channel').value;
+  const breakdown=KPI_CHANNELS
+    .filter(x=>selectedChannel==='Tất cả'||x.channel===selectedChannel)
+    .map(x=>{
+      const rr=rows.filter(o=>o.channel===x.channel);
+      const actual=overview(rr).createdRevenue;
+      const channelGoal=days.reduce((n,date)=>n+effectiveDailyTarget(date.slice(0,7),x.channel),0);
+      const channelExpected=channelGoal*time;
+      const gap=actual-channelExpected;
+      const pacing=channelExpected?actual/channelExpected:null;
+      return `<div class="channelTargetRow">
+        <span class="channelTargetName">${esc(x.label)}</span>
+        <span><small>Thực đạt</small><b>${compact(actual)}</b></span>
+        <span><small>Phải đạt</small><b>${compact(channelExpected)}</b></span>
+        <span class="${gap>=0?'good':'bad'}"><small>GAP</small><b>${gap>=0?'+':''}${compact(gap)}</b></span>
+        <span><small>% tiến độ</small><b>${pct(pacing)}</b></span>
+      </div>`
+    }).join('');
+  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>=0?'Vượt':'Thiếu'} ${compact(Math.abs(gapMoney))}</div></div>
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
-    <div class="progressRow"><div class="progressLabel"><span>Tiến độ thời gian khoảng lọc</span><b>${pct(time)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
-    <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>`;
+    <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
+    <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
+    ${hasChannelTargets()?'<div class="channelTargetBoard">'+breakdown+'</div>':'<div class="targetConfigNotice">Chưa cấu hình target theo kênh. Bấm “Chỉnh target” để nhập Ads, Live, Zalo và Website.</div>'}`;
 }
 function shiftIsoDay(day,offset){
   const d=new Date(String(day||vnDate())+'T12:00:00Z');
@@ -782,10 +823,18 @@ function switchView(view){
   $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
 }
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
+function updateTargetTotalPreview(){
+  const ids=['targetAdsInput','targetLiveInput','targetZaloInput','targetWebsiteInput'];
+  const total=ids.reduce((n,id)=>n+Math.max(0,Number($(id)?.value)||0),0);
+  if($('targetTotalInput'))$('targetTotalInput').value=money(total)
+}
 function openSettings(){
-  $('targetMonthInput').value=Math.round(targetMonth());
-  $('targetDayInput').value=Math.round(targetDay());
-  $('gapDayInput').value=Math.round(gapDay());
+  const cfg=settings.channelTargets||{};
+  $('targetAdsInput').value=Math.round(Number(cfg.ads)||0);
+  $('targetLiveInput').value=Math.round(Number(cfg.live)||0);
+  $('targetZaloInput').value=Math.round(Number(cfg.zalo)||0);
+  $('targetWebsiteInput').value=Math.round(Number(cfg.website)||0);
+  updateTargetTotalPreview();
   $('settingsDialog').showModal()
 }
 function showError(msg){$('error').textContent=msg;$('error').style.display='block';setTimeout(()=>$('error').style.display='none',7000)}
@@ -858,7 +907,22 @@ $('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQ
 $('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickAdsDataFromInput();$('quickAdsData').blur()}};
 $('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
-$('settingsForm').onsubmit=e=>{e.preventDefault();settings.targetMonth=Math.max(0,Number($('targetMonthInput').value)||0);settings.targetDay=Math.max(0,Number($('targetDayInput').value)||0);settings.gapDay=Number($('gapDayInput').value)||0;saveSettings();$('settingsDialog').close();renderAll()};
+['targetAdsInput','targetLiveInput','targetZaloInput','targetWebsiteInput'].forEach(id=>$(id).oninput=updateTargetTotalPreview);
+$('settingsForm').onsubmit=e=>{
+  e.preventDefault();
+  settings.channelTargets={
+    ads:Math.max(0,Number($('targetAdsInput').value)||0),
+    live:Math.max(0,Number($('targetLiveInput').value)||0),
+    zalo:Math.max(0,Number($('targetZaloInput').value)||0),
+    website:Math.max(0,Number($('targetWebsiteInput').value)||0)
+  };
+  settings.channelTargetsConfigured=true;
+  delete settings.targetDay;
+  delete settings.gapDay;
+  saveSettings();
+  $('settingsDialog').close();
+  renderAll()
+};
 $('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();if(window.innerWidth>720)setTimeout(()=>$('password').focus(),50)};
 $('unlockForm').onsubmit=async e=>{
   e.preventDefault();
