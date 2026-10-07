@@ -6,6 +6,7 @@ let API_KEY=(process.env.PANCAKE_API_KEY||'').trim();
 let SHOP_ID=(process.env.PANCAKE_SHOP_ID||'').trim();
 const DASHBOARD_PASSWORD=(process.env.DASHBOARD_PASSWORD||'').trim();
 const KEY_ARTIFACT='https://zxcvbnm22121.github.io/BaoCao/data/pancake-key.enc';
+const LIVE_ARTIFACT='https://zxcvbnm22121.github.io/BaoCao/data/live.enc';
 const ALLOWED_ORIGIN=(process.env.ALLOWED_ORIGIN||'https://zxcvbnm22121.github.io').replace(/\/$/,'');
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
 const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
@@ -32,6 +33,28 @@ function decryptEnvelope(env,password){
   return JSON.parse(plain.toString('utf8'));
 }
 let credentialArtifactCache={at:0,env:null};
+let snapshotArtifactCache={at:0,env:null};
+async function loadSnapshot(password){
+  let env=snapshotArtifactCache.env;
+  if(!env||Date.now()-snapshotArtifactCache.at>=15000){
+    const r=await fetch(LIVE_ARTIFACT+'?ts='+Date.now(),{
+      headers:{Accept:'application/json','Cache-Control':'no-cache'},
+      signal:AbortSignal.timeout(10000)
+    });
+    if(!r.ok)throw new Error('Dashboard snapshot unavailable');
+    env=await r.json();
+    snapshotArtifactCache={at:Date.now(),env};
+  }
+  try{
+    const payload=decryptEnvelope(env,password);
+    if(!payload||!Array.isArray(payload.orders))throw new Error('Invalid dashboard snapshot');
+    payload.meta={...(payload.meta||{}),source:'PANCAKE',transport:'VERCEL_SNAPSHOT'};
+    return payload;
+  }catch(e){
+    throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
+  }
+}
+
 async function loadCredentials(password){
   // Authentication always uses the encrypted credential artifact. Even when
   // Vercel happens to expose an API key env var, it must never bypass the
@@ -266,6 +289,14 @@ export default async function handler(req,res){
     const creds=await loadCredentials(supplied);
     API_KEY=creds.apiKey;
     if(creds.shopId)SHOP_ID=creds.shopId;
+
+    const action=String(req.body?.action||'live');
+    if(action==='open'){
+      // Fast login path: authenticate and return the latest encrypted snapshot.
+      // Do not wait for a full Pancake pagination scan.
+      return res.status(200).json(await loadSnapshot(supplied));
+    }
+
     const now=Date.now();
     if(cache.payload&&now-cache.at<CACHE_MS)return res.status(200).json(cache.payload);
     await discoverShopId();
