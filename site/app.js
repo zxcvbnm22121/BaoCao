@@ -176,7 +176,7 @@ function renderAll(){
   updateDataFreshness();
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
   $('kpis').innerHTML=[
-    card('Tổng tiền sau CK',compact(k.createdRevenue),`${numFmt(k.orders)} đơn · khớp logic Pancake`,true),
+    card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true),
     card('COD',compact(k.codRevenue),'Tiền thu hộ'),
     card('Trả trước',compact(k.prepaidRevenue),'Khách đã thanh toán trước'),
     card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`),
