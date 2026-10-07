@@ -60,12 +60,29 @@ function applyPayload(p){
 }
 function setMode(mode){
   const live=mode==='LIVE';
-  $('modePill').textContent=live?'LIVE':'DEMO';
+  $('modePill').textContent=live?'LIVE':'CHƯA MỞ';
   $('modePill').classList.toggle('demo',!live);
-  $('sourceText').textContent=live?'PANCAKE · GITHUB':'GITHUB PAGES';
-  $('sourceSub').textContent=live?'Dữ liệu đã giải mã':'Dữ liệu mô phỏng';
-  $('notice').style.display=live?'none':'block';
-  $('notice').innerHTML=live?'':'Đang hiển thị <b>DEMO DATA</b>. Bấm biểu tượng khoá để mở dữ liệu Pancake.';
+  $('sourceText').textContent=live?'PANCAKE · GITHUB':'CHƯA MỞ LIVE';
+  $('sourceSub').textContent=live?'Dữ liệu đã giải mã':'Không hiển thị số liệu giả';
+  updateDataFreshness();
+}
+function updateDataFreshness(){
+  const note=$('notice');
+  if(meta.source!=='PANCAKE'){
+    note.style.display='block';
+    note.innerHTML='Chưa mở dữ liệu Pancake LIVE. Bấm biểu tượng 🔒 để nhập mật khẩu. <b>Website không hiển thị doanh số DEMO.</b>';
+    return;
+  }
+  const updatedMs=Date.parse(meta.lastUpdated||'');
+  const ageMinutes=Number.isFinite(updatedMs)?Math.max(0,Math.floor((Date.now()-updatedMs)/60000)):Infinity;
+  if(ageMinutes<15){
+    note.style.display='none';
+    note.innerHTML='';
+    return;
+  }
+  const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
+  note.style.display='block';
+  note.innerHTML=`⚠ Dữ liệu Pancake được đồng bộ lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}). <b>Số tổng có thể thấp hơn Pancake hiện tại.</b> Nút ↻ chỉ tải lại bản đã đồng bộ, không gọi trực tiếp Pancake.`;
 }
 function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}
 function saveChannelData(){localStorage.setItem(DATA_KEY,JSON.stringify(channelData))}
@@ -146,6 +163,17 @@ function card(label,value,sub,primary=false){return `<div class="card${primary?'
 function mini(label,value,cls=''){return `<div class="miniKpi ${cls}"><span>${label}</span><b>${value}</b></div>`}
 
 function renderAll(){
+  if(meta.source!=='PANCAKE'){
+    $('kpis').innerHTML=card('DOANH SỐ PANCAKE','Chưa mở LIVE','Nhập mật khẩu qua nút 🔒 để xem tổng tiền thực tế',true);
+    $('periodStat').textContent=`${$('from').value} → ${$('to').value} · Chưa có dữ liệu LIVE`;
+    ['channelChart','trendChart','statusChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','monthlyChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    $('updatedAt').textContent='Chưa mở Pancake LIVE';
+    $('pageSub').textContent='Chưa có dữ liệu Pancake đã xác thực';
+    updateDataFreshness();
+    return;
+  }
+  updateDataFreshness();
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
   $('kpis').innerHTML=[
     card('Tổng tiền sau CK',compact(k.createdRevenue),`${numFmt(k.orders)} đơn · khớp logic Pancake`,true),
@@ -377,8 +405,18 @@ async function tryAutoLive(){
   try{applyPayload(await fetchLive(saved));return true}catch{sessionStorage.removeItem('sevenam_dashboard_password');return false}
 }
 async function init(){
-  dateRange('today');sourceOrders=mockData();setMode('DEMO');populateFilters();renderAll();await tryAutoLive();
-  setInterval(async()=>{if(meta.source==='PANCAKE'){const pwd=sessionStorage.getItem('sevenam_dashboard_password');if(pwd)try{applyPayload(await fetchLive(pwd))}catch(e){showError('Chưa tải được bản sync mới: '+e.message)}}},60000)
+  sourceOrders=[];
+  setMode('LOCKED');
+  dateRange('today');
+  populateFilters();
+  await tryAutoLive();
+  setInterval(async()=>{
+    updateDataFreshness();
+    if(meta.source==='PANCAKE'){
+      const pwd=sessionStorage.getItem('sevenam_dashboard_password');
+      if(pwd)try{applyPayload(await fetchLive(pwd))}catch(e){showError('Chưa tải được bản sync mới: '+e.message)}
+    }
+  },60000)
 }
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
 ['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
