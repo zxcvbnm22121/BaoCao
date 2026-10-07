@@ -258,8 +258,8 @@ function totalManualData(rows){
 }
 function gapClass(v){return v<-10?'red':v<=10?'orange':v<=20?'blue':'green'}
 function card(label,value,sub,primary=false,drillType='',drillValue='',drillTitle=''){
-  const drill=drillType?` clickable" data-drill-type="${esc(drillType)}" data-drill-value="${esc(drillValue)}" data-drill-title="${esc(drillTitle||label)}`:'';
-  return `<div class="card${primary?' primary':''}${drill}"><span class="cardLabel">${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`
+  const attrs=drillType?` data-drill-type="${esc(drillType)}" data-drill-value="${esc(drillValue)}" data-drill-title="${esc(drillTitle||label)}"`:'';
+  return `<div class="card${primary?' primary':''}${drillType?' clickable':''}"${attrs}><span class="cardLabel">${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`
 }
 function mini(label,value,cls=''){return `<div class="miniKpi ${cls}"><span>${label}</span><b>${value}</b></div>`}
 
@@ -278,6 +278,8 @@ function drillRows(type,value){
   }
   let rows=filteredRows();
   if(type==='status')rows=rows.filter(o=>o.status===value);
+  else if(type==='statusCodes'){const codes=String(value).split(',').map(Number);rows=rows.filter(o=>codes.includes(Number(o.statusCode)))}
+  else if(type==='successful')rows=rows.filter(o=>successful(o)>0||o.status==='THANH_CONG');
   else if(type==='channel')rows=rows.filter(o=>o.channel===value);
   else if(type==='staff')rows=rows.filter(o=>(o.salesStaff||'Chưa gán')===value);
   else if(type==='returnReason')rows=rows.filter(o=>o.status==='HOAN'&&returnReasonLabel(o)===value);
@@ -378,7 +380,7 @@ function renderFunnel(rows){
     stage('Tạo đơn',rows,money(k.createdRevenue),'all',''),
     stage('Treo',pending,money(sum(pending,o=>o.netAmount??o.totalAmount)),'status','TREO'),
     stage('Đang giao',shipping,money(sum(shipping,o=>o.netAmount??o.totalAmount)),'status','DANG_GIAO'),
-    stage('Thành công',success,money(k.successfulRevenue),'status','THANH_CONG'),
+    stage('Thành công',rows.filter(o=>successful(o)>0||o.status==='THANH_CONG'),money(k.successfulRevenue),'successful',''),
     stage('Hoàn',returns,money(k.returnRevenue),'status','HOAN')
   ].join('')
 }
@@ -438,7 +440,7 @@ function renderAll(){
     card('COD',money(k.codRevenue),'Tiền thu hộ',false,'all','','Đơn tạo trong kỳ'),
     card('Trả trước',money(k.prepaidRevenue),'Khách đã thanh toán trước',false,'all','','Đơn tạo trong kỳ'),
     card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`,false,'all','','Đơn tạo trong kỳ'),
-    card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`,false,'status','THANH_CONG','Đơn thành công'),
+    card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`,false,'successful','','Đơn có doanh thu thành công'),
     card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển',false,'status','DANG_GIAO','Đơn đang giao'),
     card('Treo',compact(k.pendingRevenue),'Mới / chờ hàng / xác nhận...',false,'status','TREO','Đơn treo'),
     card('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`,false,'status','HOAN','Đơn hoàn'),
@@ -506,7 +508,7 @@ function renderStatus(rows){
   $('statusDetail').innerHTML=detailed.map(item=>{
     const rr=rows.filter(o=>item.codes.includes(Number(o.statusCode)));
     const amount=sum(rr,o=>o.netAmount??o.totalAmount);
-    return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="status" data-drill-value="${rr[0].status}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
+    return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="statusCodes" data-drill-value="${item.codes.join(',')}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
   }).join('');
 }
 function channelStats(rows){
