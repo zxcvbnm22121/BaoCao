@@ -7,6 +7,7 @@ const PASSWORD=process.env.DASHBOARD_PASSWORD||'';
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
 const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
 const OUT='site/data/live.enc';
+const KEY_OUT='site/data/pancake-key.enc';
 const STATUS='site/data/status.json';
 const TZ='Asia/Bangkok';
 
@@ -210,7 +211,7 @@ async function fetchOrders(from,to){
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
 
 await fs.mkdir('site/data',{recursive:true});
-if(!API_KEY||!PASSWORD){await fs.rm(OUT,{force:true});await fs.writeFile(STATUS,JSON.stringify({mode:'DEMO',updatedAt:new Date().toISOString(),reason:'Missing GitHub Secrets'},null,2));console.log('DEMO mode: set PANCAKE_API_KEY and DASHBOARD_PASSWORD in GitHub Actions secrets. PANCAKE_SHOP_ID is optional.');process.exit(0)}
+if(!API_KEY||!PASSWORD){await fs.rm(OUT,{force:true});await fs.rm(KEY_OUT,{force:true});await fs.writeFile(STATUS,JSON.stringify({mode:'DEMO',updatedAt:new Date().toISOString(),reason:'Missing GitHub Secrets'},null,2));console.log('DEMO mode: set PANCAKE_API_KEY and DASHBOARD_PASSWORD in GitHub Actions secrets. PANCAKE_SHOP_ID is optional.');process.exit(0)}
 await discoverShopId();
 const today=dateKey(),from=today.slice(0,7)+'-01';
 console.log(`Sync Pancake shop ${SHOP_ID}: ${from} -> ${today}`);
@@ -297,5 +298,11 @@ if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stri
 console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
+await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
+  apiKey:API_KEY,
+  shopId:SHOP_ID,
+  issuedAt:new Date().toISOString(),
+  purpose:'PANCAKE_DIRECT_BACKEND'
+},PASSWORD)));
 await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length},null,2));
 console.log(`Synced ${orders.length} normalized orders; encrypted artifact written.`);
