@@ -410,3 +410,28 @@ tr.clickable:hover td{background:#fbf7f3}
   .productTablePanel .scroll{overflow:visible}
   .productDataNote{font-size:11px;margin:0 0 9px;padding:10px 12px}
 }
+
+/* Channel KPI configuration and automatic GAP */
+.settingsGrid{grid-template-columns:1fr 1fr}
+.targetTotalField{grid-column:1/-1}
+.targetTotalField input{background:#f5f1ec!important;font-weight:900;color:var(--ink)}
+.channelTargetBoard{margin-top:12px;border-top:1px solid var(--line);padding-top:7px}
+.channelTargetRow{display:grid;grid-template-columns:minmax(60px,.8fr) repeat(4,minmax(72px,1fr));gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid #f0ebe6;font-size:9px}
+.channelTargetRow:last-child{border-bottom:0}
+.channelTargetName{font-weight:900;color:var(--ink)}
+.channelTargetRow>span:not(.channelTargetName){display:grid;gap:2px;text-align:right}
+.channelTargetRow small{font-size:7px;color:#918a83}
+.channelTargetRow b{font-size:10px}
+.targetConfigNotice{margin-top:12px;padding:10px;border-radius:9px;background:#fff4e4;border:1px solid #efd7ae;color:#80591d;font-size:9px;line-height:1.45}
+
+@media(max-width:720px){
+  .settingsGrid{grid-template-columns:1fr}
+  .targetTotalField{grid-column:auto}
+  .channelTargetBoard{margin:0 14px 14px;padding-top:4px}
+  .channelTargetRow{grid-template-columns:1fr 1fr;gap:7px 12px;padding:10px 0}
+  .channelTargetName{grid-column:1/-1;font-size:13px}
+  .channelTargetRow>span:not(.channelTargetName){text-align:left}
+  .channelTargetRow small{font-size:9px}
+  .channelTargetRow b{font-size:12px}
+  .targetConfigNotice{margin:0 14px 14px;font-size:11px}
+}
