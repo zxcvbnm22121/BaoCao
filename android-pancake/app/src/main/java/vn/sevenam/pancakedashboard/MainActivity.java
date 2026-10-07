@@ -528,6 +528,13 @@ public class MainActivity extends Activity {
         box.addView(text("Target " + compact(target) + " · Phải đạt " + compact(expected)
                 + " · Dự báo " + compact(forecast), 11, MUTED, false));
 
+        TextView configure = actionText("Cấu hình KPI theo kênh", false);
+        configure.setOnClickListener(v -> showTargetDialog());
+        LinearLayout.LayoutParams configureLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(42));
+        configureLp.topMargin = dp(10);
+        box.addView(configure, configureLp);
+
         if (hasChannelTargets() && "Tất cả".equals(channelFilter)) {
             View divider = new View(this);
             divider.setBackgroundColor(Color.rgb(239, 234, 229));
@@ -1015,7 +1022,7 @@ public class MainActivity extends Activity {
             List<Order> rr = new ArrayList<>();
             for (Order o : monthRows) if (day.equals(o.createdDate)) rr.add(o);
             Stats s = stats(rr);
-            double gap = s.createdRevenue - dailyTarget;
+            double gap = dailyTarget - s.createdRevenue;
 
             LinearLayout box = compactCard();
             LinearLayout head = new LinearLayout(this);
@@ -1028,8 +1035,8 @@ public class MainActivity extends Activity {
             box.addView(head);
 
             String line = num(s.orders) + " đơn · TC " + compact(s.successfulRevenue)
-                    + " · Gap " + (gap >= 0 ? "+" : "") + compact(gap);
-            TextView sub = text(line, 11, gap >= 0 ? GREEN : MUTED, false);
+                    + (gap > 0 ? " · GAP " + compact(gap) : " · Vượt " + compact(Math.abs(gap)));
+            TextView sub = text(line, 11, gap > 0 ? RED : GREEN, false);
             sub.setPadding(0, dp(5), 0, 0);
             box.addView(sub);
 
