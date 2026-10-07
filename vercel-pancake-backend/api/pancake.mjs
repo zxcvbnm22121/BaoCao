@@ -219,27 +219,29 @@ function pageBounds(data){
 
 async function fetchOrders(from,to){
   const rawMap=new Map();
-  const first=await fetchOrderPage(from,to,1);
-  first.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
-  let stop=!first.data.length || (pageBounds(first.data).max&&pageBounds(first.data).max<from);
 
-  // Fetch in small parallel batches. Pancake often ignores from/to on the
-  // list endpoint; batching keeps live refresh fast without skipping pages.
-  for(let start=2;!stop&&start<=200;start+=4){
-    const pages=[start,start+1,start+2,start+3];
-    const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
-    for(let i=0;i<results.length;i++){
-      const page=pages[i],result=results[i],bounds=pageBounds(result.data);
-      result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
-      if(!result.data.length || (bounds.max&&bounds.max<from) || (result.totalPages&&page>=result.totalPages)){
-        stop=true;
-        break;
+  // Pancake pages can shift while orders are inserted or edited.
+  // Two complete batched passes close page-boundary gaps without giving up
+  // the faster parallel fetch used by the LIVE backend.
+  for(let pass=1;pass<=2;pass++){
+    let completed=false;
+    for(let start=1;start<=200;start+=4){
+      const pages=[start,start+1,start+2,start+3];
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
+      for(let i=0;i<results.length;i++){
+        const page=pages[i],result=results[i],bounds=pageBounds(result.data);
+        result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
+        if(!result.data.length || (bounds.max&&bounds.max<from) || (result.totalPages&&page>=result.totalPages)){
+          completed=true;
+          break;
+        }
       }
+      if(completed)break;
     }
+    if(!completed)throw new Error('Pancake pagination limit reached');
   }
-  if(!stop)throw new Error('Pancake pagination limit reached');
 
-  // Capture the newest page again after the scan to close insertion gaps.
+  // Re-read the newest page immediately before publishing the totals.
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
