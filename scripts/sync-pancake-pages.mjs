@@ -98,6 +98,7 @@ function normalize(raw){
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
 
   return{
+    orderCode:str(get(raw,'display_id|order_id|code|id'),'—'),
     createdAt:iso,
     createdDate,
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
@@ -106,6 +107,8 @@ function normalize(raw){
     status,
     statusCode,
     statusName,
+    returnedReasonName:str(get(raw,'returned_reason_name|return_reason_name|refund_reason_name|returned_reason'),'').trim(),
+    returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
     grossAmount,
     netAmount,
     discountAmount,
