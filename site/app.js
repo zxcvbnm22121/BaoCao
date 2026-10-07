@@ -44,10 +44,36 @@ async function decryptEnvelope(env,password){
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv,tagLength:128},key,data);
   return JSON.parse(new TextDecoder().decode(plain))
 }
-async function fetchLive(password){
+const DIRECT_PANCAKE_API='https://sevenam-pancake-live.vercel.app/api/pancake';
+async function fetchLiveStatic(password){
   const r=await fetch('./data/live.enc?ts='+Date.now(),{cache:'no-store'});
-  if(!r.ok)throw new Error('Chưa có bản dữ liệu LIVE');
+  if(!r.ok)throw new Error('Chưa có bản dữ liệu LIVE dự phòng');
   return decryptEnvelope(await r.json(),password)
+}
+async function fetchLiveDirect(password){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),55000);
+  try{
+    const r=await fetch(DIRECT_PANCAKE_API,{
+      method:'POST',
+      mode:'cors',
+      cache:'no-store',
+      headers:{'Content-Type':'application/json','X-Dashboard-Password':password},
+      body:JSON.stringify({}),
+      signal:controller.signal
+    });
+    const body=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(body.error||('Backend Pancake '+r.status));
+    return body
+  }finally{clearTimeout(timer)}
+}
+async function fetchLive(password,{directOnly=false}={}){
+  try{return await fetchLiveDirect(password)}
+  catch(error){
+    if(directOnly)throw error;
+    console.warn('Direct Pancake backend unavailable; using encrypted GitHub fallback.',error);
+    return fetchLiveStatic(password)
+  }
 }
 function applyPayload(p){
   if(!p||!Array.isArray(p.orders))throw new Error('Bản dữ liệu Pancake không hợp lệ');
@@ -64,8 +90,9 @@ function setMode(mode){
   const live=mode==='LIVE';
   $('modePill').textContent=live?'LIVE':'CHƯA MỞ';
   $('modePill').classList.toggle('demo',!live);
-  $('sourceText').textContent=live?'PANCAKE · GITHUB':'CHƯA MỞ LIVE';
-  $('sourceSub').textContent=live?'Dữ liệu đã giải mã':'Không hiển thị số liệu giả';
+  const direct=live&&meta.transport==='VERCEL_DIRECT';
+  $('sourceText').textContent=live?(direct?'PANCAKE · TRỰC TIẾP':'PANCAKE · DỰ PHÒNG'):'CHƯA MỞ LIVE';
+  $('sourceSub').textContent=live?(direct?'Backend cập nhật trực tiếp':'Bản mã hóa GitHub dự phòng'):'Không hiển thị số liệu giả';
   updateDataFreshness();
 }
 function updateDataFreshness(){
@@ -80,9 +107,13 @@ function updateDataFreshness(){
   const messages=[];
   const error=reportCoverageError();
   if(error)messages.push('⚠ '+esc(error));
-  if(ageMinutes>=6){
+  const direct=meta.transport==='VERCEL_DIRECT';
+  const staleAfter=direct?2:6;
+  if(ageMinutes>=staleAfter){
     const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
-    messages.push(`⚠ Dữ liệu đồng bộ lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}). GitHub Pages không kết nối Pancake trực tiếp; lịch đồng bộ 5 phút có thể trễ. Bấm ↻ chỉ lấy bản đã đồng bộ.`);
+    messages.push(direct
+      ? `⚠ Backend trực tiếp chưa cập nhật trong <b>${ageMinutes} phút</b> (lần cuối ${esc(when)}). Hệ thống sẽ tự thử lại.`
+      : `⚠ Đang dùng bản GitHub dự phòng, cập nhật lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}).`);
   }
   note.style.display=messages.length?'block':'none';
   note.innerHTML=messages.join(' ');
@@ -501,11 +532,8 @@ async function init(){
     if(active==='today'&&$('from').value!==vnDate())dateRange('today');
     if(active==='yesterday'&&$('to').value!==vnDate(new Date(Date.now()-86400000)))dateRange('yesterday');
     updateDataFreshness();
-    if(meta.source==='PANCAKE'){
-      const pwd=sessionStorage.getItem('sevenam_dashboard_password');
-      if(pwd)try{applyPayload(await fetchLive(pwd))}catch(e){showError('Chưa tải được bản sync mới: '+e.message)}
-    }
-  },60000)
+    await refreshLiveWhenVisible();
+  },30000)
 }
 let liveRefreshInFlight=false;
 async function refreshLiveWhenVisible(){
@@ -514,11 +542,13 @@ async function refreshLiveWhenVisible(){
   if(!pwd)return;
   liveRefreshInFlight=true;
   try{
-    const next=await fetchLive(pwd);
+    const next=await fetchLive(pwd,{directOnly:true});
     if(next.meta?.lastUpdated!==meta.lastUpdated)applyPayload(next);
     else updateDataFreshness();
-  }catch(e){showError('Chưa tải được bản đồng bộ mới: '+e.message)}
-  finally{liveRefreshInFlight=false}
+  }catch(e){
+    updateDataFreshness();
+    console.warn('Direct refresh failed:',e);
+  }finally{liveRefreshInFlight=false}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiveWhenVisible()});
 window.addEventListener('online',refreshLiveWhenVisible);
