@@ -1,26 +1,7 @@
 {
   "functions": {
-    "api/live.js": {
+    "api/pancake.mjs": {
       "maxDuration": 60
     }
-  },
-  "headers": [
-    {
-      "source": "/api/live",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "https://zxcvbnm22121.github.io"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type"
-        }
-      ]
-    }
-  ]
+  }
 }
