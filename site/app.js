@@ -77,14 +77,15 @@ function updateDataFreshness(){
   }
   const updatedMs=Date.parse(meta.lastUpdated||'');
   const ageMinutes=Number.isFinite(updatedMs)?Math.max(0,Math.floor((Date.now()-updatedMs)/60000)):Infinity;
-  if(ageMinutes<15){
-    note.style.display='none';
-    note.innerHTML='';
-    return;
+  const messages=[];
+  const error=reportCoverageError();
+  if(error)messages.push('⚠ '+esc(error));
+  if(ageMinutes>=6){
+    const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
+    messages.push(`⚠ Dữ liệu đồng bộ lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}). GitHub Pages không kết nối Pancake trực tiếp; lịch đồng bộ 5 phút có thể trễ. Bấm ↻ chỉ lấy bản đã đồng bộ.`);
   }
-  const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
-  note.style.display='block';
-  note.innerHTML=`⚠ Dữ liệu Pancake được đồng bộ lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}). <b>Số tổng có thể thấp hơn Pancake hiện tại.</b> Nút ↻ chỉ tải lại bản đã đồng bộ, không gọi trực tiếp Pancake.`;
+  note.style.display=messages.length?'block':'none';
+  note.innerHTML=messages.join(' ');
 }
 function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}
 function saveChannelData(){localStorage.setItem(DATA_KEY,JSON.stringify(channelData))}
@@ -227,11 +228,20 @@ function renderAll(){
     return;
   }
   updateDataFreshness();
+  const coverageError=reportCoverageError();
+  if(coverageError){
+    $('kpis').innerHTML=card('CHƯA CÓ ĐỦ DỮ LIỆU','Không thể đối soát',esc(coverageError),true);
+    $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
+    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['trendChart','channelChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    $('updatedAt').textContent='Khoảng lọc nằm ngoài dữ liệu đã đồng bộ';
+    return;
+  }
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
   $('kpis').innerHTML=[
     card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true),
-    card('COD',compact(k.codRevenue),'Tiền thu hộ'),
-    card('Trả trước',compact(k.prepaidRevenue),'Khách đã thanh toán trước'),
+    card('COD',money(k.codRevenue),'Tiền thu hộ'),
+    card('Trả trước',money(k.prepaidRevenue),'Khách đã thanh toán trước'),
     card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`),
     card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`),
     card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển'),
@@ -242,7 +252,7 @@ function renderAll(){
     card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình'),
     card('Đơn đã loại',numFmt(sourceOrders.filter(o=>orderDate(o)>=$('from').value&&orderDate(o)<=$('to').value&&isDefaultExcluded(o)).length),'Huỷ/Xoá + các nguồn Đơn đổi')
   ].join('');
-  $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Đã loại Hủy/Xóa + Đơn đổi`;
+  $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Ngày tạo đơn (giờ VN) · trạng thái tại lần đồng bộ`;
   renderTrend(rows);
   renderStatus(rows);
   renderChannelChart(rows,'channelChart');
@@ -333,7 +343,7 @@ function renderTarget(){
 }
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
-  $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${compact(x.createdRevenue)}</td><td data-label="Thành công">${compact(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
+  $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
   const fbAds=stats.find(x=>x.name==='Facebook Ads')?.createdRevenue||0,live=stats.find(x=>x.name==='Livestream')?.createdRevenue||0;
   $('channelDataSummary').textContent=`FB tổng: ${compact(fbAds+live)} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR tổng: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
   drawGroupedBars($('channelCompareChart'),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
@@ -346,7 +356,7 @@ function renderChannels(rows){
 }
 function renderSales(rows){
   const stats=Object.entries(group(rows,x=>x.salesStaff||'Chưa gán')).map(([name,r])=>({name,...overview(r)})).sort((a,b)=>b.createdRevenue-a.createdRevenue);
-  $('staffRows').innerHTML=stats.map(x=>`<tr><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Tạo đơn">${compact(x.createdRevenue)}</td><td data-label="Thành công">${compact(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td><td data-label="Treo">${compact(x.pendingRevenue)}</td><td data-label="Đang giao">${compact(x.shippingRevenue)}</td><td data-label="Hoàn">${compact(x.returnRevenue)}</td><td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td><td data-label="AOV">${compact(x.aov)}</td></tr>`).join('')||'<tr><td colspan="10">Không có dữ liệu</td></tr>';
+  $('staffRows').innerHTML=stats.map(x=>`<tr><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td><td data-label="Treo">${compact(x.pendingRevenue)}</td><td data-label="Đang giao">${compact(x.shippingRevenue)}</td><td data-label="Hoàn">${compact(x.returnRevenue)}</td><td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td><td data-label="AOV">${compact(x.aov)}</td></tr>`).join('')||'<tr><td colspan="10">Không có dữ liệu</td></tr>';
   drawGroupedBars($('staffChart'),stats.slice(0,12).map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
   drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
 }
@@ -485,6 +495,9 @@ async function init(){
   populateFilters();
   await tryAutoLive();
   setInterval(async()=>{
+    const active=document.querySelector('[data-range].active')?.dataset.range;
+    if(active==='today'&&$('from').value!==vnDate())dateRange('today');
+    if(active==='yesterday'&&$('to').value!==vnDate(new Date(Date.now()-86400000)))dateRange('yesterday');
     updateDataFreshness();
     if(meta.source==='PANCAKE'){
       const pwd=sessionStorage.getItem('sevenam_dashboard_password');
