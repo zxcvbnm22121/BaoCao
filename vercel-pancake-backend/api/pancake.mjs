@@ -31,21 +31,25 @@ function decryptEnvelope(env,password){
   const plain=Buffer.concat([decipher.update(ciphertext),decipher.final()]);
   return JSON.parse(plain.toString('utf8'));
 }
-let credentialCache={at:0,value:null};
+let credentialArtifactCache={at:0,env:null};
 async function loadCredentials(password){
   if(API_KEY){
     if(DASHBOARD_PASSWORD && !secureEqual(password,DASHBOARD_PASSWORD))throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
     return {apiKey:API_KEY,shopId:SHOP_ID};
   }
-  if(credentialCache.value&&Date.now()-credentialCache.at<300000)return credentialCache.value;
-  const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
-  if(!r.ok)throw new Error('Encrypted Pancake credential artifact unavailable');
+  let env=credentialArtifactCache.env;
+  if(!env||Date.now()-credentialArtifactCache.at>=300000){
+    const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
+    if(!r.ok)throw new Error('Encrypted Pancake credential artifact unavailable');
+    env=await r.json();
+    credentialArtifactCache={at:Date.now(),env};
+  }
   try{
-    const payload=decryptEnvelope(await r.json(),password);
+    // Decrypt on EVERY request. Never reuse a previously decrypted credential
+    // for a different password.
+    const payload=decryptEnvelope(env,password);
     if(!payload?.apiKey)throw new Error('Missing API key');
-    const value={apiKey:String(payload.apiKey),shopId:String(payload.shopId||'')};
-    credentialCache={at:Date.now(),value};
-    return value;
+    return {apiKey:String(payload.apiKey),shopId:String(payload.shopId||'')};
   }catch(e){
     throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
   }
