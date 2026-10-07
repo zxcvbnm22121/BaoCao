@@ -323,12 +323,13 @@ function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegat
   data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,val=Number(d.value)||0,yy=y(val),top=Math.min(yy,zero),h=Math.max(1,Math.abs(zero-yy)),cls=positiveNegative?(val>=0?'barGreen':'barRed'):'barRed';const rect=addSvg(svg,'rect',{x:cx-bw/2,y:top,width:bw,height:h,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${percentMode?(val.toFixed(1)+'%'):moneyMode?money(val):numFmt(val)}`);if(data.length<=15||i%Math.ceil(data.length/10)===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).slice(-5))})
 }
 function renderTarget(){
-  const month=($('from').value||vnDate()).slice(0,7),monthRows=filteredIgnoringDate(month),k=overview(monthRows),tm=targetMonth(),td=effectiveDailyTarget(month);
-  const current=month===vnDate().slice(0,7),elapsed=current?Number(vnDate().slice(8,10)):daysInMonth(month),totalDays=daysInMonth(month),time=elapsed/totalDays,completion=tm?k.createdRevenue/tm:0,gapPoints=(completion-time)*100,forecast=elapsed?k.createdRevenue/elapsed*totalDays:0;
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ THÁNG</span><strong>${compact(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapPoints>=0?'Vượt':'Chậm'} ${Math.abs(gapPoints).toFixed(2).replace('.',',')} điểm %</div></div>
-    <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,completion*100)}%"></i></div></div>
-    <div class="progressRow"><div class="progressLabel"><span>Tiến độ thời gian</span><b>${pct(time)}</b></div><div class="track gray"><i style="width:${Math.min(100,time*100)}%"></i></div></div>
-    <div class="targetStats"><div><span>Target tháng</span><b>${compact(tm)}</b></div><div><span>Target/ngày</span><b>${compact(td)}</b></div><div><span>Dự báo</span><b>${compact(forecast)}</b></div></div>`
+  const days=selectedCalendarDays(),rows=filteredRows(),k=overview(rows),goal=periodTarget(days);
+  const time=reportTimeProgress(days),completion=goal?k.createdRevenue/goal:0,gapPoints=(completion-time)*100;
+  const dayTarget=days.length?goal/days.length:0,forecast=time>0?k.createdRevenue/time:0;
+  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapPoints>=0?'Vượt':'Chậm'} ${Math.abs(gapPoints).toFixed(2).replace('.',',')} điểm %</div></div>
+    <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
+    <div class="progressRow"><div class="progressLabel"><span>Tiến độ thời gian khoảng lọc</span><b>${pct(time)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
+    <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>`;
 }
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
@@ -350,15 +351,35 @@ function renderSales(rows){
   drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
 }
 function renderMonthly(){
-  const month=($('from').value||vnDate()).slice(0,7),rows=filteredIgnoringDate(month),days=daysInMonth(month),g=group(rows,x=>orderDate(x)),dailyTarget=effectiveDailyTarget(month),tm=targetMonth(),daily=[],cumulative=[];let run=0;
-  for(let d=1;d<=days;d++){const key=`${month}-${pad(d)}`,rr=g[key]||[],o=overview(rr);run+=o.createdRevenue;daily.push({label:key,value:o.createdRevenue-dailyTarget,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders});cumulative.push({label:key,actual:run,target:tm*d/days})}
-  const nowMonth=month===vnDate().slice(0,7),lastDay=nowMonth?Number(vnDate().slice(8,10)):days,actualToDate=cumulative[Math.max(0,lastDay-1)]?.actual||0,time=lastDay/days,completion=tm?actualToDate/tm:0,gapPts=(completion-time)*100,forecast=lastDay?actualToDate/lastDay*days:0;
-  $('monthlyKpis').innerHTML=[mini('Target tháng',compact(tm)),mini('Đã đạt',compact(actualToDate)),mini('% hoàn thành',pct(completion)),mini('Tiến độ thời gian',pct(time)),mini('Dự báo cuối tháng',compact(forecast))].join('');
-  drawLineChart($('cumulativeChart'),cumulative.slice(0,lastDay),[{key:'actual',class:'lineRed',point:'pointRed'},{key:'target',class:'lineTarget',point:'pointDark'}],null);
-  drawSingleBars($('dailyGapChart'),daily.slice(0,lastDay),{moneyMode:true,positiveNegative:true});
-  $('dailyRows').innerHTML=daily.slice(0,lastDay).reverse().map(d=>`<tr><td data-label="Ngày">${d.label.split('-').reverse().slice(0,2).join('/')}</td><td data-label="Tạo đơn">${compact(d.created)}</td><td data-label="Thành công">${compact(d.success)}</td><td data-label="Target ngày">${compact(dailyTarget)}</td><td data-label="Gap" class="${d.value>=0?'good':'bad'}">${d.value>=0?'+':''}${compact(d.value)}</td><td data-label="% đạt">${pct(dailyTarget?d.created/dailyTarget:0)}</td><td data-label="Số đơn">${d.orders}</td></tr>`).join('');
+  const days=selectedCalendarDays(),rows=filteredRows(),g=group(rows,o=>orderDate(o)),daily=[],cumulative=[];
+  const periodGoal=periodTarget(days),time=reportTimeProgress(days);
+  let createdSum=0,targetSum=0;
+  for(const key of days){
+    const rr=g[key]||[],o=overview(rr),target=effectiveDailyTarget(key.slice(0,7));
+    createdSum+=o.createdRevenue;
+    targetSum+=target;
+    daily.push({label:key,value:o.createdRevenue-target,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders,target});
+    cumulative.push({label:key,actual:createdSum,target:targetSum});
+  }
+  const completion=periodGoal?createdSum/periodGoal:0,gapPts=(completion-time)*100,forecast=time>0?createdSum/time:0;
+  $('monthlyKpis').innerHTML=[
+    mini('Target khoảng lọc',compact(periodGoal)),mini('Đã đạt',money(createdSum)),
+    mini('% hoàn thành',pct(completion)),mini('Tiến độ thời gian',pct(time)),
+    mini('Dự báo cuối kỳ',time>0?compact(forecast):'—')
+  ].join('');
+  drawLineChart($('cumulativeChart'),cumulative,[{key:'actual',class:'lineRed',point:'pointRed'},{key:'target',class:'lineTarget',point:'pointDark'}],null);
+  drawSingleBars($('dailyGapChart'),daily,{moneyMode:true,positiveNegative:true});
+  $('dailyRows').innerHTML=daily.slice().reverse().map(d=>`<tr>
+    <td data-label="Ngày">${d.label.slice(8,10)}/${d.label.slice(5,7)}</td>
+    <td data-label="Tạo đơn">${money(d.created)}</td>
+    <td data-label="Thành công">${money(d.success)}</td>
+    <td data-label="Target ngày">${money(d.target)}</td>
+    <td data-label="Gap" class="${d.value>=0?'good':'bad'}">${d.value>=0?'+':''}${money(d.value)}</td>
+    <td data-label="% đạt">${pct(d.target?d.created/d.target:0)}</td>
+    <td data-label="Số đơn">${d.orders}</td>
+  </tr>`).join('');
   const gapText=`${gapPts>=0?'Vượt':'Chậm'} ${Math.abs(gapPts).toFixed(2).replace('.',',')} điểm %`;
-  document.querySelector('#view-monthly .sectionHead p').textContent=`Nhịp tháng ${month} · ${gapText}`
+  document.querySelector('#view-monthly .sectionHead p').textContent=`Khoảng lọc ${$('from').value} → ${$('to').value} · ${gapText}`;
 }
 function quickReportRows(){
   const from=$('from').value,to=$('to').value;
