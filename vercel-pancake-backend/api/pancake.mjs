@@ -179,18 +179,33 @@ function pageBounds(data){
 
 async function fetchOrders(from,to){
   const rawMap=new Map();
-  for(let pass=1;pass<=2;pass++){
-    for(let page=1;page<=200;page++){
-      const {data,totalPages}=await fetchOrderPage(from,to,page);
-      const bounds=pageBounds(data);
-      data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
-      if(!data.length||bounds.max&&bounds.max<from||totalPages&&page>=totalPages)break;
-      if(page===200)throw new Error('Pancake pagination limit reached');
+  const first=await fetchOrderPage(from,to,1);
+  first.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+  let stop=!first.data.length || (pageBounds(first.data).max&&pageBounds(first.data).max<from);
+
+  // Fetch in small parallel batches. Pancake often ignores from/to on the
+  // list endpoint; batching keeps live refresh fast without skipping pages.
+  for(let start=2;!stop&&start<=200;start+=4){
+    const pages=[start,start+1,start+2,start+3];
+    const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
+    for(let i=0;i<results.length;i++){
+      const page=pages[i],result=results[i],bounds=pageBounds(result.data);
+      result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
+      if(!result.data.length || (bounds.max&&bounds.max<from) || (result.totalPages&&page>=result.totalPages)){
+        stop=true;
+        break;
+      }
     }
   }
+  if(!stop)throw new Error('Pancake pagination limit reached');
+
+  // Capture the newest page again after the scan to close insertion gaps.
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
-  return [...rawMap.values()].map(normalize).filter(o=>o.createdDate>=from&&o.createdDate<=to);
+
+  const orders=[...rawMap.values()].map(normalize).filter(o=>o.createdDate>=from&&o.createdDate<=to);
+  if(orders.some(o=>!Number.isFinite(o.netAmount)||o.netAmount<0))throw new Error('Invalid Pancake amount');
+  return orders;
 }
 
 function buildPayload(orders,from,to){
