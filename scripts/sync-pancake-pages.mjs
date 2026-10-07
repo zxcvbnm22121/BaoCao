@@ -132,12 +132,28 @@ async function fetchOrderPage(from,to,page){
   // Explicitly request the full documented POS status set so dashboard totals
   // reconcile with the POS "Tất cả" view before applying our exclusions.
   [0,17,1,11,20,12,13,8,9,2,3,16,4,15,5,6,7].forEach(s=>url.searchParams.append('filter_status[]',String(s)));
-  const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(60000)});
-  if(!r.ok)throw new Error(`Pancake ${r.status}: ${(await r.text()).slice(0,180)}`);
-  const body=await r.json();
-  const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
-  const totalPages=num(get(body,'total_pages|pagination.total_pages|paging.total_pages|meta.total_pages'));
-  return {data,totalPages,body}
+  for(let attempt=1;attempt<=5;attempt++){
+    try{
+      const r=await fetch(url,{
+        headers:{Accept:'application/json','Cache-Control':'no-cache'},
+        signal:AbortSignal.timeout(45000)
+      });
+      if(!r.ok){
+        // Authentication and request issues should fail immediately.
+        if(r.status!==429 && r.status<500)throw Object.assign(new Error('Pancake API '+r.status),{permanent:true});
+        throw new Error('Pancake API temporarily unavailable, status '+r.status);
+      }
+      const body=await r.json();
+      const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
+      const totalPages=num(get(body,'total_pages|pagination.total_pages|paging.total_pages|meta.total_pages'));
+      return {data,totalPages,body}
+    }catch(e){
+      if(attempt===5||e.permanent)throw e;
+      const delay=Math.min(16000,1000*2**(attempt-1));
+      console.warn('Pancake page '+page+' failed attempt '+attempt+', retry in '+delay+'ms');
+      await new Promise(resolve=>setTimeout(resolve,delay));
+    }
+  }
 }
 
 function normalizedDateKey(order){
