@@ -435,6 +435,8 @@ function renderQuickReport({syncInputs=true}={}){
   $('quickTextBox').textContent=quickReportText(s)
 }
 function openQuickReport(){
+  const rangeError=reportCoverageError();
+  if(rangeError){showError(rangeError);return}
   renderQuickReport({syncInputs:true});
   $('quickReportDialog').showModal();
   setTimeout(()=>$('quickTotalData').focus(),60)
@@ -505,6 +507,22 @@ async function init(){
     }
   },60000)
 }
+let liveRefreshInFlight=false;
+async function refreshLiveWhenVisible(){
+  if(liveRefreshInFlight||meta.source!=='PANCAKE')return;
+  const pwd=sessionStorage.getItem('sevenam_dashboard_password');
+  if(!pwd)return;
+  liveRefreshInFlight=true;
+  try{
+    const next=await fetchLive(pwd);
+    if(next.meta?.lastUpdated!==meta.lastUpdated)applyPayload(next);
+    else updateDataFreshness();
+  }catch(e){showError('Chưa tải được bản đồng bộ mới: '+e.message)}
+  finally{liveRefreshInFlight=false}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiveWhenVisible()});
+window.addEventListener('online',refreshLiveWhenVisible);
+window.addEventListener('focus',refreshLiveWhenVisible);
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
 ['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
