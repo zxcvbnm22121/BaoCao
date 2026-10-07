@@ -382,3 +382,31 @@ tr.clickable:hover td{background:#fbf7f3}
   .returnReasonRow{grid-template-columns:1fr auto;gap:5px 9px}.returnReasonRow .returnReasonPct{grid-column:1}.returnReasonRow .moneyCell{grid-column:2;grid-row:2}
   .orderDrillDialog{width:calc(100vw - 14px);margin:7px}.orderDrillScroll{max-height:62vh}.orderDrillForm{padding:14px}
 }
+
+
+/* Product performance */
+.productToolbar{display:flex;align-items:end;gap:9px;margin:4px 0 10px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.productToolbar label{display:grid;gap:4px;min-width:150px}
+.productToolbar label span{font-size:8px;font-weight:900;color:#837d76;text-transform:uppercase;letter-spacing:.07em}
+.productToolbar input,.productToolbar select{min-height:36px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 9px;font-size:10px}
+.productPeriodGroup{display:flex;gap:5px;margin-right:auto}
+.productPeriodBtn{border:1px solid var(--line);background:#f8f5f2;color:#6f6963;border-radius:9px;min-height:36px;padding:0 13px;font-size:9px;font-weight:850;cursor:pointer}
+.productPeriodBtn.active{background:var(--red);border-color:var(--red);color:#fff}
+.productKpis{margin-bottom:8px}
+.productTable td:nth-child(1),.productTable th:nth-child(1){text-align:center;width:38px}
+.productTable td:nth-child(2),.productTable th:nth-child(2),.productTable td:nth-child(3),.productTable th:nth-child(3){text-align:left}
+.productTable td:nth-child(3){white-space:normal;min-width:190px;max-width:360px}
+.productDataNote{display:none;margin:0 10px 9px;padding:9px 11px;border-radius:9px;background:#fff4e4;border:1px solid #efd7ae;color:#80591d;font-size:9px;line-height:1.45}
+.warnText{color:#9a651c;font-weight:800}
+
+@media(max-width:720px){
+  .mobileBottomNav{grid-template-columns:repeat(5,1fr)}
+  .productToolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;margin-bottom:10px}
+  .productPeriodGroup{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin:0}
+  .productPeriodBtn{min-height:44px;font-size:12px}
+  .productToolbar label{min-width:0}
+  .productToolbar label span{font-size:10px}
+  .productToolbar input,.productToolbar select{width:100%;min-width:0;min-height:46px;font-size:15px}
+  .productTablePanel .scroll{overflow:visible}
+  .productDataNote{font-size:11px;margin:0 0 9px;padding:10px 12px}
+}
