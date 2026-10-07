@@ -18,15 +18,15 @@ function parsePancakeDate(value){
   if(value==null||value==='')throw new Error('Pancake order missing a creation timestamp; refusing an inaccurate daily total');
   const raw=String(value).trim();
   let dt;
-  if(/^\\d{10,13}$/.test(raw)){
+  if(/^\d{10,13}$/.test(raw)){
     const n=Number(raw);
     dt=new Date(raw.length===10?n*1000:n);
   }else{
     let iso=raw;
     // POS timestamps without an explicit offset are local Vietnam times,
     // never the timezone of the GitHub Actions runner.
-    if(/^\\d{4}-\\d{2}-\\d{2}$/.test(iso))iso+='T00:00:00+07:00';
-    else if(/^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$/.test(iso)){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(iso))iso+='T00:00:00+07:00';
+    else if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso)){
       iso=iso.replace(' ','T')+'+07:00';
     }
     dt=new Date(iso);
