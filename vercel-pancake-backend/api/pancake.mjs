@@ -154,11 +154,15 @@ function normalize(raw){
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
   return{
+    orderCode:str(get(raw,'display_id|order_id|code|id'),'—'),
     createdAt:dt.toISOString(),
     createdDate:dateKey(dt),
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
     channel:mapChannel(get(raw,'order_sources_name|order_sources|ads_source|p_utm_source|page.name'),source,raw),
-    sourceName,status,statusCode,statusName,grossAmount,netAmount,discountAmount,codAmount,prepaidAmount,
+    sourceName,status,statusCode,statusName,
+    returnedReasonName:str(get(raw,'returned_reason_name|return_reason_name|refund_reason_name|returned_reason'),'').trim(),
+    returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
+    grossAmount,netAmount,discountAmount,codAmount,prepaidAmount,
     totalAmount:netAmount,successfulAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,
     excludedFromDefaultReport:excludedStatus||excludedExchangeSource
   }
