@@ -50,7 +50,9 @@ async function fetchLive(password){
   return decryptEnvelope(await r.json(),password)
 }
 function applyPayload(p){
-  sourceOrders=Array.isArray(p.orders)?p.orders:[];
+  if(!p||!Array.isArray(p.orders))throw new Error('Bản dữ liệu Pancake không hợp lệ');
+  verifySnapshot(p);
+  sourceOrders=p.orders;
   meta=p.meta||meta;
   payloadMonthlyTarget=Number(p.monthlyTarget)||2300000000;
   if(settings.targetMonth==null) settings.targetMonth=payloadMonthlyTarget;
@@ -98,10 +100,61 @@ function dateRange(kind){
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===kind));
   renderAll()
 }
+
 function orderDate(o){
-  if(o&&o.createdDate)return String(o.createdDate).slice(0,10);
-  try{return vnDate(new Date(o&&o.createdAt||o))}catch{return String(o&&o.createdAt||o||'').slice(0,10)}
+  if(o&&/^\d{4}-\d{2}-\d{2}$/.test(String(o.createdDate||'')))return String(o.createdDate);
+  const d=new Date(o?.createdAt||'');
+  return Number.isFinite(d.getTime())?vnDate(d):''
 }
+function selectedCalendarDays(){
+  const from=$('from').value,to=$('to').value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to)return [];
+  const first=Date.parse(from+'T12:00:00Z'),last=Date.parse(to+'T12:00:00Z');
+  if(!Number.isFinite(first)||!Number.isFinite(last)||last-first>366*86400000)return [];
+  const days=[];
+  for(let t=first;t<=last;t+=86400000)days.push(new Date(t).toISOString().slice(0,10));
+  return days
+}
+function reportTimeProgress(days){
+  if(!days.length)return 0;
+  const today=vnDate();
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const hh=Number(parts.find(x=>x.type==='hour')?.value||0);
+  const mm=Number(parts.find(x=>x.type==='minute')?.value||0);
+  const fraction=(hh*60+mm)/1440;
+  return days.reduce((sum,day)=>sum+(day<today?1:day===today?fraction:0),0)/days.length
+}
+function periodTarget(days){return days.reduce((sum,date)=>sum+effectiveDailyTarget(date.slice(0,7)),0)}
+function reportCoverageError(){
+  if(meta.source!=='PANCAKE')return '';
+  const from=$('from').value,to=$('to').value;
+  if(!selectedCalendarDays().length)return 'Khoảng ngày không hợp lệ. Từ ngày phải trước hoặc bằng Đến ngày.';
+  if((meta.from&&from<meta.from)||(meta.to&&to>meta.to))
+    return 'Dữ liệu đã đồng bộ chỉ từ '+(meta.from||'?')+' đến '+(meta.to||'?')+'. Khoảng đang chọn '+from+' → '+to+' ngoài phạm vi nguồn.';
+  return ''
+}
+function verifySnapshot(p){
+  const expected=p?.meta?.dayReconciliation;
+  if(!expected)return;
+  const actual={};
+  for(const o of p.orders||[]){
+    if(isDefaultExcluded(o))continue;
+    const date=orderDate(o);
+    if(!actual[date])actual[date]={orders:0,net:0,cod:0,prepaid:0,gross:0};
+    const d=actual[date];
+    d.orders++;d.net+=Number(o.netAmount??o.totalAmount)||0;
+    d.cod+=Number(o.codAmount)||0;
+    d.prepaid+=Number(o.prepaidAmount)||0;
+    d.gross+=Number(o.grossAmount??o.totalAmount)||0;
+  }
+  if(Object.keys(expected).length!==Object.keys(actual).length)throw new Error('Dữ liệu Pancake không khớp số ngày báo cáo');
+  for(const [day,ref] of Object.entries(expected)){
+    const d=actual[day];
+    if(!d||d.orders!==ref.orders||['net','cod','prepaid','gross'].some(k=>Math.abs(d[k]-ref[k])>.01))
+      throw new Error('Dữ liệu đồng bộ chưa khớp tại ngày '+day);
+  }
+}
+
 function orderHour(o){
   try{return new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Bangkok',hour:'2-digit',hour12:false}).format(new Date(o.createdAt))+'h'}catch{return'—'}
 }
