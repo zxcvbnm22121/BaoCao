@@ -33,26 +33,32 @@ function decryptEnvelope(env,password){
 }
 let credentialArtifactCache={at:0,env:null};
 async function loadCredentials(password){
-  if(API_KEY){
-    if(DASHBOARD_PASSWORD && !secureEqual(password,DASHBOARD_PASSWORD))throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
-    return {apiKey:API_KEY,shopId:SHOP_ID};
-  }
+  // Authentication always uses the encrypted credential artifact. Even when
+  // Vercel happens to expose an API key env var, it must never bypass the
+  // dashboard password.
   let env=credentialArtifactCache.env;
   if(!env||Date.now()-credentialArtifactCache.at>=300000){
-    const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(15000)});
+    const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{
+      headers:{Accept:'application/json','Cache-Control':'no-cache'},
+      signal:AbortSignal.timeout(15000)
+    });
     if(!r.ok)throw new Error('Encrypted Pancake credential artifact unavailable');
     env=await r.json();
     credentialArtifactCache={at:Date.now(),env};
   }
+
+  let payload;
   try{
-    // Decrypt on EVERY request. Never reuse a previously decrypted credential
-    // for a different password.
-    const payload=decryptEnvelope(env,password);
-    if(!payload?.apiKey)throw new Error('Missing API key');
-    return {apiKey:String(payload.apiKey),shopId:String(payload.shopId||'')};
+    payload=decryptEnvelope(env,password);
   }catch(e){
     throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
   }
+  if(!payload?.apiKey && !API_KEY)throw new Error('Missing Pancake API key');
+
+  return {
+    apiKey:String(API_KEY||payload.apiKey),
+    shopId:String(SHOP_ID||payload.shopId||'')
+  };
 }
 
 function parsePancakeDate(value){
