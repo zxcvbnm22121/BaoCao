@@ -132,6 +132,55 @@ function mapChannel(raw,source='',rawOrder={}){
   return'Khác'
 }
 
+function firstArray(raw,paths){
+  for(const path of paths){
+    const value=path.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,raw);
+    if(Array.isArray(value)&&value.length)return value
+  }
+  return []
+}
+function productLine(rawItem){
+  if(!rawItem||typeof rawItem!=='object')return null;
+  const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')));
+  if(!quantity)return null;
+  const sku=str(get(rawItem,'sku|variation.sku|variation_info.sku|product_code|variation.product_code|code|variation.display_id')).trim();
+  const productId=str(get(rawItem,'product_id|product.id|variation.product_id|variation_info.product_id')).trim();
+  const variationId=str(get(rawItem,'variation_id|variation.id|variation_info.id|id')).trim();
+  const name=str(get(rawItem,'product_name|product.name|variation_name|variation.name|variation_info.name|display_name|name')).trim()||sku||productId||variationId||'Chưa rõ sản phẩm';
+  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
+  const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
+  return{sku:sku||productId||variationId||name,name,productId,variationId,quantity,returnedQuantity}
+}
+function productAliases(item){
+  return[
+    item?.sku&&'sku:'+String(item.sku).trim().toLowerCase(),
+    item?.productId&&'product:'+String(item.productId).trim().toLowerCase(),
+    item?.variationId&&'variation:'+String(item.variationId).trim().toLowerCase(),
+    item?.name&&'name:'+String(item.name).trim().toLowerCase()
+  ].filter(Boolean)
+}
+function extractProducts(raw,status,partial){
+  const base=firstArray(raw,[
+    'variations','items','order_items','orderItems','line_items','order_details',
+    'bill_full.variations','bill_full.items','bill.variations','bill.items','products'
+  ]).map(productLine).filter(Boolean);
+  const returned=firstArray(raw,[
+    'returned_variations','return_variations','returned_items','return_items',
+    'refund_items','returned_products','return_order.items','returns.items'
+  ]).map(productLine).filter(Boolean);
+  const returnedMap=new Map();
+  for(const item of returned){
+    const q=Math.max(item.returnedQuantity||0,item.quantity||0);
+    for(const key of productAliases(item))returnedMap.set(key,Math.max(q,returnedMap.get(key)||0))
+  }
+  return base.map(item=>{
+    let returnedQuantity=item.returnedQuantity||0;
+    for(const key of productAliases(item))returnedQuantity=Math.max(returnedQuantity,returnedMap.get(key)||0);
+    if(status==='HOAN'&&!partial&&returnedQuantity<=0)returnedQuantity=item.quantity;
+    returnedQuantity=Math.min(item.quantity,Math.max(0,returnedQuantity));
+    return{...item,returnedQuantity}
+  })
+}
 function normalize(raw){
   const statusCode=num(get(raw,'status|order_status|status_id'));
   const statusName=str(get(raw,'status_name|order_status_name|shipping_status_name'));
@@ -150,6 +199,8 @@ function normalize(raw){
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
   const dt=parsePancakeDate(get(raw,'inserted_at|created_at|creation_time'));
   const partial=statusCode===15||/part_returned|partial/i.test(statusName)||Boolean(get(raw,'is_partial_return|partial_return'));
+  const products=extractProducts(raw,status,partial);
+  const partialReturnProductDetailMissing=partial&&products.length>0&&!products.some(x=>Number(x.returnedQuantity)>0);
   const explicitSuccess=num(get(raw,'successful_amount|received_amount|collected_amount|paid_amount'));
   let successfulAmount=0;
   if(status==='THANH_CONG')successfulAmount=explicitSuccess||netAmount;
@@ -165,6 +216,7 @@ function normalize(raw){
     sourceName,status,statusCode,statusName,
     returnedReasonName:str(get(raw,'returned_reason_name|return_reason_name|refund_reason_name|returned_reason'),'').trim(),
     returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
+    products,partialReturnProductDetailMissing,
     grossAmount,netAmount,discountAmount,codAmount,prepaidAmount,
     totalAmount:netAmount,successfulAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,
     excludedFromDefaultReport:excludedStatus||excludedExchangeSource
