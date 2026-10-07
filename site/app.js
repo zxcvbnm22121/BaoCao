@@ -257,15 +257,166 @@ function totalManualData(rows){
   return channels.reduce((a,c)=>a+channelDataValue(c),0)
 }
 function gapClass(v){return v<-10?'red':v<=10?'orange':v<=20?'blue':'green'}
-function card(label,value,sub,primary=false){return `<div class="card${primary?' primary':''}"><span class="cardLabel">${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`}
+function card(label,value,sub,primary=false,drillType='',drillValue='',drillTitle=''){
+  const drill=drillType?` clickable" data-drill-type="${esc(drillType)}" data-drill-value="${esc(drillValue)}" data-drill-title="${esc(drillTitle||label)}`:'';
+  return `<div class="card${primary?' primary':''}${drill}"><span class="cardLabel">${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`
+}
 function mini(label,value,cls=''){return `<div class="miniKpi ${cls}"><span>${label}</span><b>${value}</b></div>`}
+
+
+function currentFilterLabel(){
+  const parts=[];
+  if($('channel').value!=='Tất cả')parts.push($('channel').value);
+  if($('staff').value!=='Tất cả')parts.push($('staff').value);
+  if($('status').value!=='Tất cả')parts.push(statusLabels[$('status').value]||$('status').value);
+  return parts.length?parts.join(' · '):'Tất cả kênh · Sale · trạng thái'
+}
+function drillRows(type,value){
+  if(type==='excluded'){
+    const from=$('from').value,to=$('to').value;
+    return sourceOrders.filter(o=>{const d=orderDate(o);return d>=from&&d<=to&&isDefaultExcluded(o)})
+  }
+  let rows=filteredRows();
+  if(type==='status')rows=rows.filter(o=>o.status===value);
+  else if(type==='channel')rows=rows.filter(o=>o.channel===value);
+  else if(type==='staff')rows=rows.filter(o=>(o.salesStaff||'Chưa gán')===value);
+  else if(type==='returnReason')rows=rows.filter(o=>o.status==='HOAN'&&returnReasonLabel(o)===value);
+  return rows
+}
+function formatOrderTime(o){
+  const d=new Date(o.createdAt||'');
+  return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):orderDate(o)
+}
+function returnReasonLabel(o){return String(o.returnedReasonName||'').trim()||'Chưa ghi lý do'}
+function openOrderDrill(type,value,title){
+  const rows=drillRows(type,value).slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  const k=overview(rows),shown=rows.slice(0,300);
+  $('orderDrillTitle').textContent=title||'Danh sách đơn';
+  $('orderDrillMeta').textContent=`${$('from').value} → ${$('to').value} · ${currentFilterLabel()}`;
+  $('orderDrillSummary').innerHTML=[
+    `<span><b>${numFmt(rows.length)}</b> đơn</span>`,
+    `<span>Tổng <b>${money(k.createdRevenue)}</b></span>`,
+    `<span>Thành công <b>${money(k.successfulRevenue)}</b></span>`,
+    rows.length>300?`<span>Đang hiển thị 300/${numFmt(rows.length)} đơn</span>`:''
+  ].join('');
+  $('orderDrillRows').innerHTML=shown.map(o=>`<tr>
+    <td data-label="Mã đơn">${esc(o.orderCode||'—')}</td>
+    <td data-label="Ngày giờ">${esc(formatOrderTime(o))}</td>
+    <td data-label="Sale">${esc(o.salesStaff||'Chưa gán')}</td>
+    <td data-label="Kênh">${esc(o.channel||'Khác')}</td>
+    <td data-label="Trạng thái">${esc(statusLabels[o.status]||o.status||'—')}</td>
+    <td data-label="Sau CK">${money(o.netAmount??o.totalAmount)}</td>
+    <td data-label="Lý do hoàn">${o.status==='HOAN'?esc(returnReasonLabel(o)):'—'}</td>
+  </tr>`).join('')||'<tr><td colspan="7">Không có đơn phù hợp bộ lọc.</td></tr>';
+  $('orderDrillDialog').showModal()
+}
+function bindDrilldowns(){
+  document.querySelectorAll('[data-drill-type]').forEach(el=>{
+    el.onclick=e=>{
+      if(e.target.closest('input,button,select,a'))return;
+      openOrderDrill(el.dataset.drillType,el.dataset.drillValue||'',el.dataset.drillTitle||'Chi tiết đơn')
+    }
+  })
+}
+function renderLiveAlerts(rows){
+  const alerts=[],days=selectedCalendarDays(),k=overview(rows),goal=periodTarget(days),time=reportTimeProgress(days);
+  const completion=goal?k.createdRevenue/goal:0,gapPts=(completion-time)*100;
+  if(gapPts<-10)alerts.push({level:'bad',title:'Doanh số đang chậm tiến độ',text:`Chậm ${Math.abs(gapPts).toFixed(1).replace('.',',')} điểm % so với tiến độ thời gian.`});
+
+  const ads=rows.filter(o=>o.channel==='Facebook Ads'),adsData=channelDataValue('Facebook Ads');
+  if(adsData>0&&ads.length/adsData<.10)alerts.push({level:'bad',title:'CR Ads dưới 10%',text:`${numFmt(ads.length)} đơn / ${numFmt(adsData)} data = ${pct(ads.length/adsData)}.`});
+
+  const todayOnly=$('from').value===vnDate()&&$('to').value===vnDate();
+  const liveRevenue=sum(rows.filter(o=>o.channel==='Livestream'),o=>o.netAmount??o.totalAmount);
+  if(todayOnly&&liveRevenue<=0)alerts.push({level:'warn',title:'Livestream chưa có doanh số',text:'Chưa ghi nhận doanh số Live trong dữ liệu hôm nay.'});
+
+  if(k.returnRate>.20)alerts.push({level:'bad',title:'Tỷ lệ hoàn trên 20%',text:`Hiện tại ${pct(k.returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn.`});
+
+  const age=(Date.now()-Date.parse(meta.lastUpdated||''))/60000;
+  const stale=meta.transport==='VERCEL_DIRECT'?2:6;
+  if(Number.isFinite(age)&&age>=stale)alerts.push({level:'warn',title:'Dữ liệu chưa đủ mới',text:`Lần cập nhật gần nhất ${Math.floor(age)} phút trước.`});
+
+  if(!alerts.length)alerts.push({level:'good',title:'Chưa có cảnh báo theo ngưỡng',text:'Tiến độ, CR Ads, Live, hoàn và độ mới dữ liệu chưa chạm ngưỡng cảnh báo.'});
+  $('alertHealth').textContent=alerts.some(a=>a.level==='bad')?'CẦN XỬ LÝ':alerts.some(a=>a.level==='warn')?'THEO DÕI':'ỔN';
+  $('alertHealth').className='healthPill '+(alerts.some(a=>a.level==='bad')?'bad':alerts.some(a=>a.level==='warn')?'warn':'good');
+  $('liveAlerts').innerHTML=alerts.map(a=>`<div class="alertItem ${a.level}"><i></i><div><b>${esc(a.title)}</b><span>${esc(a.text)}</span></div></div>`).join('')
+}
+function renderReconciliation(rows){
+  const k=overview(rows),checks=[];
+  const total=k.createdRevenue,eps=.01;
+  const channelTotal=Object.values(group(rows,o=>o.channel||'Khác')).reduce((n,r)=>n+overview(r).createdRevenue,0);
+  const staffTotal=Object.values(group(rows,o=>o.salesStaff||'Chưa gán')).reduce((n,r)=>n+overview(r).createdRevenue,0);
+  const statusTotal=Object.values(group(rows,o=>o.status||'TREO')).reduce((n,r)=>n+overview(r).createdRevenue,0);
+  checks.push({name:'Tổng theo kênh',ok:Math.abs(channelTotal-total)<eps,value:channelTotal});
+  checks.push({name:'Tổng theo Sale',ok:Math.abs(staffTotal-total)<eps,value:staffTotal});
+  checks.push({name:'Tổng theo trạng thái',ok:Math.abs(statusTotal-total)<eps,value:statusTotal});
+
+  const noDimensionFilter=$('channel').value==='Tất cả'&&$('staff').value==='Tất cả'&&$('status').value==='Tất cả';
+  if(noDimensionFilter&&meta.dayReconciliation){
+    const dates=selectedCalendarDays(),refs=dates.map(d=>meta.dayReconciliation[d]).filter(Boolean);
+    const expected={orders:sum(refs,x=>x.orders),net:sum(refs,x=>x.net),cod:sum(refs,x=>x.cod),prepaid:sum(refs,x=>x.prepaid)};
+    checks.push({name:'Khớp nguồn API · số đơn',ok:expected.orders===rows.length,text:`${numFmt(rows.length)} / ${numFmt(expected.orders)} đơn`});
+    checks.push({name:'Khớp nguồn API · sau CK',ok:Math.abs(expected.net-total)<eps,text:`${money(total)} / ${money(expected.net)}`});
+    checks.push({name:'Khớp nguồn API · COD + trả trước',ok:Math.abs((expected.cod+expected.prepaid)-(k.codRevenue+k.prepaidRevenue))<eps,text:`${money(k.codRevenue+k.prepaidRevenue)} / ${money(expected.cod+expected.prepaid)}`});
+  }else{
+    checks.push({name:'Đối soát nguồn API',ok:true,text:'Đang có bộ lọc · kiểm tra nội bộ'});
+  }
+  const bad=checks.filter(x=>!x.ok);
+  $('reconcileHealth').textContent=bad.length?'CÓ LỆCH':'DỮ LIỆU OK';
+  $('reconcileHealth').className='healthPill '+(bad.length?'bad':'good');
+  $('reconcileBoard').innerHTML=checks.map(x=>`<div class="reconcileRow ${x.ok?'':'bad'}"><span>${esc(x.name)}</span><b>${x.text?esc(x.text):money(x.value)} ${x.ok?'✓':'✕'}</b></div>`).join('')
+}
+function renderFunnel(rows){
+  const k=overview(rows),data=totalManualData(rows),orders=Math.max(1,rows.length);
+  const stage=(label,rr,value,type='',drillValue='')=>{
+    const count=rr==null?'—':numFmt(rr.length),share=rr==null?'':` · ${pct(rr.length/orders)}`;
+    return `<div class="funnelStage ${type?'clickable':''}" ${type?`data-drill-type="${type}" data-drill-value="${esc(drillValue)}" data-drill-title="${esc(label)}"`:''}><strong>${label}</strong><span>${count}${share}</span><b>${value}</b></div>`
+  };
+  const pending=rows.filter(o=>o.status==='TREO'),shipping=rows.filter(o=>o.status==='DANG_GIAO'),success=rows.filter(o=>o.status==='THANH_CONG'),returns=rows.filter(o=>o.status==='HOAN');
+  $('funnelBoard').innerHTML=[
+    `<div class="funnelStage"><strong>Data</strong><span>${data?numFmt(data):'Chưa nhập'}</span><b>${data?'CR '+pct(rows.length/data):'—'}</b></div>`,
+    stage('Tạo đơn',rows,money(k.createdRevenue),'all',''),
+    stage('Treo',pending,money(sum(pending,o=>o.netAmount??o.totalAmount)),'status','TREO'),
+    stage('Đang giao',shipping,money(sum(shipping,o=>o.netAmount??o.totalAmount)),'status','DANG_GIAO'),
+    stage('Thành công',success,money(k.successfulRevenue),'status','THANH_CONG'),
+    stage('Hoàn',returns,money(k.returnRevenue),'status','HOAN')
+  ].join('')
+}
+function renderReturnReasons(rows){
+  const returns=rows.filter(o=>o.status==='HOAN'),g=group(returns,returnReasonLabel);
+  const list=Object.entries(g).map(([reason,r])=>({reason,rows:r,count:r.length,value:sum(r,o=>o.netAmount??o.totalAmount)})).sort((a,b)=>b.count-a.count||b.value-a.value);
+  const missing=returns.filter(o=>returnReasonLabel(o)==='Chưa ghi lý do').length;
+  $('returnReasonSummary').textContent=`${numFmt(returns.length)} đơn hoàn${missing?' · '+missing+' chưa có lý do':''}`;
+  $('returnReasonList').innerHTML=list.length?list.map(x=>`<div class="returnReasonRow clickable" data-drill-type="returnReason" data-drill-value="${esc(x.reason)}" data-drill-title="Hoàn · ${esc(x.reason)}">
+    <strong>${esc(x.reason)}</strong>
+    <span>${numFmt(x.count)} đơn</span>
+    <span class="returnReasonPct">${pct(returns.length?x.count/returns.length:0)}</span>
+    <span class="moneyCell">${money(x.value)}</span>
+  </div>`).join(''):'<div class="returnReasonEmpty">Không có đơn hoàn trong khoảng đang chọn.</div>'
+}
+function renderOperationalPanels(rows){
+  renderLiveAlerts(rows);
+  renderReconciliation(rows);
+  renderFunnel(rows);
+  renderReturnReasons(rows)
+}
+function renderSaleLeaderboard(rows){
+  const stats=Object.entries(group(rows,o=>o.salesStaff||'Chưa gán'))
+    .map(([name,r])=>({name,rows:r,...overview(r)}))
+    .sort((a,b)=>b.createdRevenue-a.createdRevenue)
+    .slice(0,3);
+  $('saleLeaderboard').innerHTML=stats.map((x,i)=>`<article class="saleRankCard clickable" data-drill-type="staff" data-drill-value="${esc(x.name)}" data-drill-title="Sale · ${esc(x.name)}">
+    <div class="saleRankNo">#${i+1} SALE</div><h4>${esc(x.name)}</h4><div class="saleRankRevenue">${money(x.createdRevenue)}</div>
+    <div class="saleRankMeta"><div><span>Đơn</span><b>${numFmt(x.orders)}</b></div><div><span>Thành công</span><b>${numFmt(x.successfulOrders)}</b></div><div><span>Hoàn</span><b>${pct(x.returnRate)}</b></div></div>
+  </article>`).join('')||'<div class="returnReasonEmpty">Không có dữ liệu Sale.</div>'
+}
 
 function renderAll(){
   if(meta.source!=='PANCAKE'){
     $('kpis').innerHTML=card('DOANH SỐ PANCAKE','Chưa mở LIVE','Nhập mật khẩu qua nút 🔒 để xem tổng tiền thực tế',true);
     $('periodStat').textContent=`${$('from').value} → ${$('to').value} · Chưa có dữ liệu LIVE`;
     ['channelChart','trendChart','statusChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','monthlyChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
-    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Chưa mở Pancake LIVE';
     $('pageSub').textContent='Chưa có dữ liệu Pancake đã xác thực';
     updateDataFreshness();
@@ -276,34 +427,37 @@ function renderAll(){
   if(coverageError){
     $('kpis').innerHTML=card('CHƯA CÓ ĐỦ DỮ LIỆU','Không thể đối soát',esc(coverageError),true);
     $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
-    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     ['trendChart','channelChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Khoảng lọc nằm ngoài dữ liệu đã đồng bộ';
     return;
   }
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
   $('kpis').innerHTML=[
-    card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true),
-    card('COD',money(k.codRevenue),'Tiền thu hộ'),
-    card('Trả trước',money(k.prepaidRevenue),'Khách đã thanh toán trước'),
-    card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`),
-    card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`),
-    card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển'),
-    card('Treo',compact(k.pendingRevenue),'Mới / chờ hàng / xác nhận...'),
-    card('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`),
+    card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true,'all','','Tất cả đơn trong kỳ'),
+    card('COD',money(k.codRevenue),'Tiền thu hộ',false,'all','','Đơn tạo trong kỳ'),
+    card('Trả trước',money(k.prepaidRevenue),'Khách đã thanh toán trước',false,'all','','Đơn tạo trong kỳ'),
+    card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`,false,'all','','Đơn tạo trong kỳ'),
+    card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`,false,'status','THANH_CONG','Đơn thành công'),
+    card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển',false,'status','DANG_GIAO','Đơn đang giao'),
+    card('Treo',compact(k.pendingRevenue),'Mới / chờ hàng / xác nhận...',false,'status','TREO','Đơn treo'),
+    card('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`,false,'status','HOAN','Đơn hoàn'),
     card('Tổng Data',data?numFmt(data):'Chưa nhập',data?`CR chốt ${pct(k.orders/data)}`:'Nhập tại màn Theo kênh'),
     card('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Chưa có data'),
-    card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình'),
-    card('Đơn đã loại',numFmt(sourceOrders.filter(o=>orderDate(o)>=$('from').value&&orderDate(o)<=$('to').value&&isDefaultExcluded(o)).length),'Huỷ/Xoá + các nguồn Đơn đổi')
+    card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình',false,'all','','Đơn tạo trong kỳ'),
+    card('Đơn đã loại',numFmt(sourceOrders.filter(o=>orderDate(o)>=$('from').value&&orderDate(o)<=$('to').value&&isDefaultExcluded(o)).length),'Huỷ/Xoá + các nguồn Đơn đổi',false,'excluded','','Đơn đã loại')
   ].join('');
   $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Ngày tạo đơn (giờ VN) · trạng thái tại lần đồng bộ`;
   renderTrend(rows);
   renderStatus(rows);
   renderChannelChart(rows,'channelChart');
   renderTarget();
+  renderOperationalPanels(rows);
   renderChannels(rows);
   renderSales(rows);
+  renderSaleLeaderboard(rows);
   renderMonthly();
+  bindDrilldowns();
   $('updatedAt').textContent='Cập nhật dữ liệu: '+new Date(meta.lastUpdated||Date.now()).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'});
   $('pageSub').textContent=`${meta.source==='PANCAKE'?'Pancake POS':'Demo'} · ${numFmt(rows.length)} đơn · Tổng tiền dùng số sau chiết khấu`;
 }
@@ -337,7 +491,7 @@ function renderStatus(rows){
   const order=['TREO','DANG_GIAO','THANH_CONG','HOAN','HUY'];
   $('statusViz').innerHTML=order.map(s=>{
     const rr=g[s]||[],v=sum(rr,x=>x.netAmount??x.totalAmount),share=v/total*100;
-    return `<div class="statusItem"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`
+    return `<div class="statusItem clickable" data-drill-type="status" data-drill-value="${s}" data-drill-title="${statusLabels[s]}"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`
   }).join('');
 
   const detailed=[
@@ -352,7 +506,7 @@ function renderStatus(rows){
   $('statusDetail').innerHTML=detailed.map(item=>{
     const rr=rows.filter(o=>item.codes.includes(Number(o.statusCode)));
     const amount=sum(rr,o=>o.netAmount??o.totalAmount);
-    return `<div class="statusDetailRow ${rr.length?'':'zero'}"><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
+    return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="status" data-drill-value="${rr[0].status}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
   }).join('');
 }
 function channelStats(rows){
@@ -387,7 +541,7 @@ function renderTarget(){
 }
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
-  $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
+  $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr class="clickable" data-drill-type="channel" data-drill-value="${esc(x.name)}" data-drill-title="Kênh · ${esc(x.name)}"><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
   const fbAds=stats.find(x=>x.name==='Facebook Ads')?.createdRevenue||0,live=stats.find(x=>x.name==='Livestream')?.createdRevenue||0;
   $('channelDataSummary').textContent=`FB tổng: ${compact(fbAds+live)} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR tổng: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
   drawGroupedBars($('channelCompareChart'),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
@@ -400,7 +554,7 @@ function renderChannels(rows){
 }
 function renderSales(rows){
   const stats=Object.entries(group(rows,x=>x.salesStaff||'Chưa gán')).map(([name,r])=>({name,...overview(r)})).sort((a,b)=>b.createdRevenue-a.createdRevenue);
-  $('staffRows').innerHTML=stats.map(x=>`<tr><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td><td data-label="Treo">${compact(x.pendingRevenue)}</td><td data-label="Đang giao">${compact(x.shippingRevenue)}</td><td data-label="Hoàn">${compact(x.returnRevenue)}</td><td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td><td data-label="AOV">${compact(x.aov)}</td></tr>`).join('')||'<tr><td colspan="10">Không có dữ liệu</td></tr>';
+  $('staffRows').innerHTML=stats.map(x=>`<tr class="clickable" data-drill-type="staff" data-drill-value="${esc(x.name)}" data-drill-title="Sale · ${esc(x.name)}"><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td><td data-label="Treo">${compact(x.pendingRevenue)}</td><td data-label="Đang giao">${compact(x.shippingRevenue)}</td><td data-label="Hoàn">${compact(x.returnRevenue)}</td><td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td><td data-label="AOV">${compact(x.aov)}</td></tr>`).join('')||'<tr><td colspan="10">Không có dữ liệu</td></tr>';
   drawGroupedBars($('staffChart'),stats.slice(0,12).map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
   drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
 }
