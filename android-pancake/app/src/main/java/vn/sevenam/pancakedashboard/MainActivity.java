@@ -7,6 +7,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -30,6 +32,8 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
+import android.widget.AdapterView;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -50,6 +54,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.net.URL;
 
 public class MainActivity extends Activity {
     private static final int RED = Color.rgb(167, 25, 46);
@@ -68,6 +73,7 @@ public class MainActivity extends Activity {
     private static final NumberFormat VN_NUM = NumberFormat.getNumberInstance(new Locale("vi", "VN"));
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService imageExecutor = Executors.newFixedThreadPool(3);
 
     private SharedPreferences prefs;
     private DashboardData dashboard;
@@ -86,6 +92,9 @@ public class MainActivity extends Activity {
     private String channelFilter = "Tất cả";
     private String staffFilter = "Tất cả";
     private String statusFilter = "Tất cả";
+    private String productPeriod = "day";
+    private String productAnchorDate;
+    private String productChannelFilter = "Tất cả";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,6 +104,7 @@ public class MainActivity extends Activity {
         LocalDate today = LocalDate.now(VN_ZONE);
         fromDate = today.format(ISO);
         toDate = fromDate;
+        productAnchorDate = fromDate;
 
         getWindow().setStatusBarColor(Color.rgb(20, 20, 20));
         getWindow().setNavigationBarColor(Color.rgb(20, 20, 20));
@@ -220,7 +230,8 @@ public class MainActivity extends Activity {
         root.addView(bottom, bottomLp);
 
         addNav(bottom, "▦", "Hôm nay", "overview");
-        addNav(bottom, "◫", "Theo kênh", "channels");
+        addNav(bottom, "◫", "Kênh", "channels");
+        addNav(bottom, "◆", "Sản phẩm", "products");
         addNav(bottom, "◎", "Sale", "sales");
         addNav(bottom, "◒", "Tháng", "monthly");
         updateNav();
@@ -230,7 +241,7 @@ public class MainActivity extends Activity {
         TextView item = new TextView(this);
         item.setText(icon + "\n" + label);
         item.setGravity(Gravity.CENTER);
-        item.setTextSize(10);
+        item.setTextSize(9.5f);
         item.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         item.setLineSpacing(dp(2), 1f);
         item.setTag(view);
@@ -260,6 +271,7 @@ public class MainActivity extends Activity {
 
         String title;
         if ("channels".equals(currentView)) title = "Hiệu quả theo kênh";
+        else if ("products".equals(currentView)) title = "Sản phẩm bán chạy";
         else if ("sales".equals(currentView)) title = "Sale Online";
         else if ("monthly".equals(currentView)) title = "Tiến độ tháng";
         else title = "Hôm nay";
@@ -273,6 +285,7 @@ public class MainActivity extends Activity {
         }
 
         if ("channels".equals(currentView)) renderChannels();
+        else if ("products".equals(currentView)) renderProducts();
         else if ("sales".equals(currentView)) renderSales();
         else if ("monthly".equals(currentView)) renderMonthly();
         else renderOverview();
@@ -291,8 +304,11 @@ public class MainActivity extends Activity {
         box.setBackground(rounded(Color.rgb(241, 238, 234), Color.rgb(229, 224, 218), 1, 18));
 
         boolean todayView = "overview".equals(currentView);
+        boolean productView = "products".equals(currentView);
         String today = LocalDate.now(VN_ZONE).format(ISO);
-        String periodText = todayView ? today : fromDate + "  →  " + toDate;
+        String periodText = productView
+                ? productRangeStart() + "  →  " + productAnchorDate
+                : (todayView ? today : fromDate + "  →  " + toDate);
 
         LinearLayout left = new LinearLayout(this);
         left.setOrientation(LinearLayout.VERTICAL);
@@ -304,6 +320,8 @@ public class MainActivity extends Activity {
             summary = "Chưa mở dữ liệu LIVE";
         } else if (todayView) {
             summary = num(defaultRowsForDate(today).size()) + " đơn · toàn kênh hôm nay";
+        } else if (productView) {
+            summary = num(productRows().size()) + " đơn · " + productChannelFilter;
         } else {
             summary = num(filteredRows().size()) + " đơn · đã loại Huỷ/Xoá + Đơn đổi";
         }
@@ -476,16 +494,19 @@ public class MainActivity extends Activity {
         List<Order> monthRows = "overview".equals(currentView)
                 ? defaultRowsForMonth(month)
                 : filteredMonth(month);
-        Stats s = stats(monthRows);
-        double target = targetMonth();
+
         YearMonth ym = YearMonth.parse(month);
         LocalDate today = LocalDate.now(VN_ZONE);
         int elapsed = month.equals(today.format(DateTimeFormatter.ofPattern("yyyy-MM")))
                 ? today.getDayOfMonth() : ym.lengthOfMonth();
         elapsed = Math.max(1, Math.min(elapsed, ym.lengthOfMonth()));
-        double completion = target > 0 ? s.createdRevenue / target : 0;
         double time = elapsed / (double) ym.lengthOfMonth();
-        double gapPts = (completion - time) * 100;
+
+        double target = targetForFilter();
+        Stats s = stats(monthRows);
+        double expected = target * time;
+        double gapMoney = expected - s.createdRevenue;
+        double completion = target > 0 ? s.createdRevenue / target : 0;
         double forecast = s.createdRevenue / elapsed * ym.lengthOfMonth();
 
         LinearLayout box = card();
@@ -499,14 +520,63 @@ public class MainActivity extends Activity {
         box.addView(metricLine("Tiến độ thời gian", pct(time), time, Color.GRAY));
 
         TextView gap = text(
-                (gapPts >= 0 ? "Vượt " : "Chậm ") + oneDecimal(Math.abs(gapPts)) + " điểm %",
-                13, gapPts >= 0 ? GREEN : RED, true
+                gapMoney > 0 ? "GAP " + compact(gapMoney) : "Vượt " + compact(Math.abs(gapMoney)),
+                13, gapMoney > 0 ? RED : GREEN, true
         );
         gap.setPadding(0, dp(12), 0, dp(4));
         box.addView(gap);
-        box.addView(text("Target " + compact(target) + " · Dự báo " + compact(forecast), 12, MUTED, false));
+        box.addView(text("Target " + compact(target) + " · Phải đạt " + compact(expected)
+                + " · Dự báo " + compact(forecast), 11, MUTED, false));
+
+        if (hasChannelTargets() && "Tất cả".equals(channelFilter)) {
+            View divider = new View(this);
+            divider.setBackgroundColor(Color.rgb(239, 234, 229));
+            LinearLayout.LayoutParams dpv = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(1));
+            dpv.topMargin = dp(12);
+            dpv.bottomMargin = dp(5);
+            box.addView(divider, dpv);
+
+            String[] channels = {"Facebook Ads", "Livestream", "Zalo/CSKH", "Website"};
+            String[] labels = {"Ads", "Live", "Zalo", "Website"};
+            for (int i = 0; i < channels.length; i++) {
+                double actual = revenueForChannel(monthRows, channels[i]);
+                double channelTarget = channelTargetMonth(channels[i]);
+                double channelExpected = channelTarget * time;
+                double channelGap = channelExpected - actual;
+                box.addView(channelTargetRow(
+                        labels[i], actual, channelExpected, channelGap,
+                        channelExpected > 0 ? actual / channelExpected : Double.NaN
+                ));
+            }
+        }
 
         content.addView(box, fullLp());
+    }
+
+    private View channelTargetRow(String label, double actual, double expected, double gap, double pacing) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding(0, dp(7), 0, dp(7));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        TextView name = text(label, 12, INK, true);
+        TextView result = text(
+                gap > 0 ? "GAP " + compact(gap) : "Vượt " + compact(Math.abs(gap)),
+                11, gap > 0 ? RED : GREEN, true
+        );
+        result.setGravity(Gravity.END);
+        head.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        head.addView(result);
+        row.addView(head);
+
+        String pace = Double.isNaN(pacing) ? "—" : pct(pacing);
+        TextView sub = text("Thực đạt " + compact(actual) + " · Phải đạt " + compact(expected)
+                + " · " + pace, 9.5f, MUTED, false);
+        sub.setPadding(0, dp(3), 0, 0);
+        row.addView(sub);
+        return row;
     }
 
     private View metricLine(String label, String value, double progress, int color) {
@@ -612,6 +682,240 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private String productRangeStart() {
+        LocalDate anchor = LocalDate.parse(productAnchorDate);
+        if ("week".equals(productPeriod)) return anchor.minusDays(6).format(ISO);
+        if ("month".equals(productPeriod)) return anchor.withDayOfMonth(1).format(ISO);
+        return productAnchorDate;
+    }
+
+    private List<Order> productRows() {
+        List<Order> out = new ArrayList<>();
+        if (dashboard == null) return out;
+        String start = productRangeStart();
+        for (Order o : dashboard.orders) {
+            if (o.createdDate.compareTo(start) < 0 || o.createdDate.compareTo(productAnchorDate) > 0) continue;
+            if (o.excludedFromDefaultReport) continue;
+            if (!"Tất cả".equals(productChannelFilter) && !productChannelFilter.equals(o.channel)) continue;
+            out.add(o);
+        }
+        return out;
+    }
+
+    private void renderProducts() {
+        addSectionTitle("SẢN PHẨM BÁN CHẠY", "Theo SL bán · SL hoàn · tỷ lệ hoàn từng mã");
+
+        LinearLayout periodRow = new LinearLayout(this);
+        periodRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[][] periods = {{"day", "Ngày"}, {"week", "7 ngày"}, {"month", "Tháng"}};
+        for (String[] item : periods) {
+            boolean active = item[0].equals(productPeriod);
+            TextView b = actionText(item[1], active);
+            b.setOnClickListener(v -> {
+                productPeriod = item[0];
+                renderCurrentView();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            lp.setMargins(dp(2), 0, dp(2), 0);
+            periodRow.addView(b, lp);
+        }
+        LinearLayout.LayoutParams periodLp = fullLp();
+        periodLp.bottomMargin = dp(8);
+        content.addView(periodRow, periodLp);
+
+        LinearLayout filters = new LinearLayout(this);
+        filters.setOrientation(LinearLayout.HORIZONTAL);
+        Button date = new Button(this);
+        date.setAllCaps(false);
+        date.setText("Ngày mốc\n" + productAnchorDate);
+        date.setTextSize(11);
+        date.setOnClickListener(v -> pickDate(productAnchorDate, selected -> {
+            productAnchorDate = selected;
+            renderCurrentView();
+        }));
+        filters.addView(date, new LinearLayout.LayoutParams(0, dp(58), 1f));
+
+        Spinner channel = spinner(uniqueChannels());
+        setSpinner(channel, productChannelFilter);
+        final boolean[] ready = {false};
+        channel.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selected = String.valueOf(parent.getItemAtPosition(position));
+                if (!ready[0]) {
+                    ready[0] = true;
+                    return;
+                }
+                if (!selected.equals(productChannelFilter)) {
+                    productChannelFilter = selected;
+                    renderCurrentView();
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        LinearLayout.LayoutParams chLp = new LinearLayout.LayoutParams(0, dp(58), 1f);
+        chLp.leftMargin = dp(8);
+        filters.addView(channel, chLp);
+        LinearLayout.LayoutParams filtersLp = fullLp();
+        filtersLp.bottomMargin = dp(10);
+        content.addView(filters, filtersLp);
+
+        List<Order> rows = productRows();
+        Map<String, ProductStats> grouped = new LinkedHashMap<>();
+        int missingItems = 0;
+        int partialUnknown = 0;
+
+        for (Order o : rows) {
+            if (o.products.isEmpty()) {
+                missingItems++;
+                continue;
+            }
+            if (o.partialReturnProductDetailMissing) partialUnknown++;
+            Set<String> seen = new LinkedHashSet<>();
+            for (ProductLine item : o.products) {
+                if (item.quantity <= 0) continue;
+                String code = item.canonicalCode();
+                String fallback = !item.productId.isEmpty() ? item.productId
+                        : (!item.variationId.isEmpty() ? item.variationId : item.name);
+                String key = !code.isEmpty()
+                        ? "code:" + code.toLowerCase(Locale.ROOT)
+                        : "fallback:" + fallback.toLowerCase(Locale.ROOT);
+
+                ProductStats p = grouped.get(key);
+                if (p == null) {
+                    p = new ProductStats();
+                    p.code = code;
+                    p.name = item.name == null || item.name.trim().isEmpty()
+                            ? (!code.isEmpty() ? code : "Chưa rõ sản phẩm")
+                            : item.name.trim();
+                    p.imageUrl = item.imageUrl == null ? "" : item.imageUrl.trim();
+                    grouped.put(key, p);
+                } else if ((p.imageUrl == null || p.imageUrl.isEmpty())
+                        && item.imageUrl != null && !item.imageUrl.trim().isEmpty()) {
+                    p.imageUrl = item.imageUrl.trim();
+                }
+
+                p.soldQty += item.quantity;
+                p.returnedQty += Math.min(item.quantity, Math.max(0, item.returnedQuantity));
+                if (seen.add(key)) p.orders++;
+            }
+        }
+
+        List<ProductStats> products = new ArrayList<>(grouped.values());
+        for (ProductStats p : products) {
+            p.netQty = Math.max(0, p.soldQty - p.returnedQty);
+            p.returnRate = p.soldQty > 0 ? p.returnedQty / p.soldQty : 0;
+        }
+        products.sort((a, b) -> {
+            int bySold = Double.compare(b.soldQty, a.soldQty);
+            if (bySold != 0) return bySold;
+            int byNet = Double.compare(b.netQty, a.netQty);
+            if (byNet != 0) return byNet;
+            return Integer.compare(b.orders, a.orders);
+        });
+
+        double sold = 0, returned = 0;
+        for (ProductStats p : products) {
+            sold += p.soldQty;
+            returned += p.returnedQty;
+        }
+        double net = Math.max(0, sold - returned);
+        double rate = sold > 0 ? returned / sold : 0;
+
+        addKpiPair(
+                kpi("SL BÁN", num(sold), num(products.size()) + " mã"),
+                kpi("SL HOÀN", num(returned), "Tỷ lệ " + pct(rate))
+        );
+        addKpiPair(
+                kpi("SL BÁN THỰC", num(net), "Sau khi trừ hoàn"),
+                kpi("SỐ ĐƠN", num(rows.size()), productRangeStart() + " → " + productAnchorDate)
+        );
+
+        if (missingItems > 0 || partialUnknown > 0) {
+            LinearLayout warn = compactCard();
+            String note = "";
+            if (missingItems > 0) note += missingItems + " đơn chưa có chi tiết sản phẩm.";
+            if (partialUnknown > 0) {
+                if (!note.isEmpty()) note += " ";
+                note += partialUnknown + " đơn hoàn một phần chưa có SKU hoàn chi tiết.";
+            }
+            TextView w = text(note, 10, ORANGE, true);
+            warn.addView(w);
+            LinearLayout.LayoutParams lp = fullLp();
+            lp.bottomMargin = dp(8);
+            content.addView(warn, lp);
+        }
+
+        if (products.isEmpty()) {
+            addEmpty("Không có dữ liệu sản phẩm trong kỳ lọc");
+            return;
+        }
+
+        int limit = Math.min(100, products.size());
+        for (int i = 0; i < limit; i++) {
+            ProductStats p = products.get(i);
+            LinearLayout box = card();
+            box.setOrientation(LinearLayout.HORIZONTAL);
+            box.setGravity(Gravity.CENTER_VERTICAL);
+            box.setPadding(dp(10), dp(10), dp(12), dp(10));
+
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setBackground(rounded(Color.rgb(244, 240, 235), LINE, 1, 10));
+            LinearLayout.LayoutParams imageLp = new LinearLayout.LayoutParams(dp(70), dp(88));
+            box.addView(image, imageLp);
+            loadProductImage(image, p.imageUrl);
+
+            LinearLayout body = new LinearLayout(this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            bodyLp.leftMargin = dp(11);
+            box.addView(body, bodyLp);
+
+            LinearLayout head = new LinearLayout(this);
+            head.setOrientation(LinearLayout.HORIZONTAL);
+            TextView rank = text("#" + (i + 1), 10, RED, true);
+            TextView code = text(p.code == null || p.code.isEmpty() ? "Chưa có mã" : p.code, 15, INK, true);
+            code.setGravity(Gravity.END);
+            head.addView(rank, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, .3f));
+            head.addView(code, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            body.addView(head);
+
+            TextView name = text(p.name, 11, MUTED, false);
+            name.setMaxLines(2);
+            name.setPadding(0, dp(4), 0, dp(6));
+            body.addView(name);
+
+            body.addView(infoPairRow(
+                    "SL bán", num(p.soldQty),
+                    "SL hoàn", num(p.returnedQty)
+            ));
+            body.addView(infoPairRow(
+                    "Bán thực", num(p.netQty),
+                    "Tỷ lệ hoàn", pct(p.returnRate)
+            ));
+            body.addView(infoRow("Số đơn", num(p.orders)));
+
+            LinearLayout.LayoutParams lp = fullLp();
+            lp.bottomMargin = dp(9);
+            content.addView(box, lp);
+        }
+    }
+
+    private void loadProductImage(ImageView view, String url) {
+        if (url == null || url.trim().isEmpty()) {
+            view.setImageDrawable(null);
+            return;
+        }
+        String source = url.trim();
+        imageExecutor.submit(() -> {
+            try {
+                Bitmap bitmap = BitmapFactory.decodeStream(new URL(source).openStream());
+                if (bitmap != null) runOnUiThread(() -> view.setImageBitmap(bitmap));
+            } catch (Exception ignored) {}
+        });
+    }
+
     private void renderSales() {
         List<Order> rows = filteredRows();
         Map<String, List<Order>> grouped = new LinkedHashMap<>();
@@ -674,7 +978,7 @@ public class MainActivity extends Activity {
 
         List<Order> monthRows = filteredMonth(month);
         Stats total = stats(monthRows);
-        double target = targetMonth();
+        double target = targetForFilter();
         double completion = target > 0 ? total.createdRevenue / target : 0;
         double time = lastDay / (double) ym.lengthOfMonth();
         double forecast = lastDay > 0 ? total.createdRevenue / lastDay * ym.lengthOfMonth() : 0;
@@ -1311,22 +1615,80 @@ public class MainActivity extends Activity {
     }
 
     private void showTargetDialog() {
-        EditText input = numberInput();
-        input.setText(String.valueOf((long) targetMonth()));
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(2), dp(2), dp(2), 0);
+
+        EditText ads = numberInput();
+        EditText live = numberInput();
+        EditText zalo = numberInput();
+        EditText website = numberInput();
+        ads.setText(savedTargetText("targetAds"));
+        live.setText(savedTargetText("targetLive"));
+        zalo.setText(savedTargetText("targetZalo"));
+        website.setText(savedTargetText("targetWebsite"));
+
+        TextView total = text("", 16, RED, true);
+        total.setGravity(Gravity.END);
+
+        wrap.addView(labeled("Facebook Ads", ads));
+        wrap.addView(labeled("Livestream", live));
+        wrap.addView(labeled("Zalo / CSKH", zalo));
+        wrap.addView(labeled("Website", website));
+
+        LinearLayout totalRow = new LinearLayout(this);
+        totalRow.setOrientation(LinearLayout.HORIZONTAL);
+        totalRow.setPadding(0, dp(14), 0, dp(4));
+        totalRow.addView(text("TARGET TỔNG THÁNG", 11, MUTED, true),
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        totalRow.addView(total);
+        wrap.addView(totalRow);
+
+        Runnable updateTotal = () -> {
+            double v = parseDouble(ads.getText().toString())
+                    + parseDouble(live.getText().toString())
+                    + parseDouble(zalo.getText().toString())
+                    + parseDouble(website.getText().toString());
+            total.setText(money(v));
+        };
+        ads.addTextChangedListener(simpleWatcher(updateTotal));
+        live.addTextChangedListener(simpleWatcher(updateTotal));
+        zalo.addTextChangedListener(simpleWatcher(updateTotal));
+        website.addTextChangedListener(simpleWatcher(updateTotal));
+        updateTotal.run();
+
+        TextView hint = text(
+                "GAP tự tính = Target phải đạt theo tiến độ − Doanh thu thực đạt.",
+                10.5f, MUTED, false
+        );
+        hint.setPadding(0, dp(8), 0, 0);
+        wrap.addView(hint);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Target tháng")
-                .setView(input)
+                .setTitle("Target tháng theo kênh")
+                .setView(wrap)
                 .setNegativeButton("Đóng", null)
-                .setPositiveButton("Lưu", (d, w) -> {
-                    double v = parseDouble(input.getText().toString());
-                    prefs.edit().putFloat("targetMonth", (float) v).apply();
+                .setPositiveButton("Lưu & áp dụng", (d, w) -> {
+                    prefs.edit()
+                            .putFloat("targetAds", (float) Math.max(0, parseDouble(ads.getText().toString())))
+                            .putFloat("targetLive", (float) Math.max(0, parseDouble(live.getText().toString())))
+                            .putFloat("targetZalo", (float) Math.max(0, parseDouble(zalo.getText().toString())))
+                            .putFloat("targetWebsite", (float) Math.max(0, parseDouble(website.getText().toString())))
+                            .putBoolean("channelTargetsConfigured", true)
+                            .apply();
                     renderCurrentView();
                 })
                 .create();
         dialog.show();
+        styleDialog(dialog);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(RED);
     }
+
+    private String savedTargetText(String key) {
+        float value = prefs.getFloat(key, 0);
+        return value > 0 ? String.valueOf((long) value) : "";
+    }
+
 
     private List<Order> filteredRows() {
         List<Order> out = new ArrayList<>();
@@ -1436,10 +1798,35 @@ public class MainActivity extends Activity {
         return "quick|" + fromDate + "|" + toDate;
     }
 
+    private boolean hasChannelTargets() {
+        return prefs.getBoolean("channelTargetsConfigured", false);
+    }
+
+    private double channelTargetMonth(String channel) {
+        if ("Facebook Ads".equals(channel)) return prefs.getFloat("targetAds", 0);
+        if ("Livestream".equals(channel)) return prefs.getFloat("targetLive", 0);
+        if ("Zalo/CSKH".equals(channel)) return prefs.getFloat("targetZalo", 0);
+        if ("Website".equals(channel)) return prefs.getFloat("targetWebsite", 0);
+        return 0;
+    }
+
     private double targetMonth() {
+        if (hasChannelTargets()) {
+            return channelTargetMonth("Facebook Ads")
+                    + channelTargetMonth("Livestream")
+                    + channelTargetMonth("Zalo/CSKH")
+                    + channelTargetMonth("Website");
+        }
         float saved = prefs.getFloat("targetMonth", -1);
         if (saved >= 0) return saved;
         return dashboard != null ? dashboard.monthlyTarget : 2_300_000_000d;
+    }
+
+    private double targetForFilter() {
+        if (hasChannelTargets() && !"Tất cả".equals(channelFilter)) {
+            return channelTargetMonth(channelFilter);
+        }
+        return targetMonth();
     }
 
     private String[] uniqueChannels() {
@@ -1809,6 +2196,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         executor.shutdownNow();
+        imageExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -1827,6 +2215,17 @@ public class MainActivity extends Activity {
         int returnOrders;
         double returnRate;
         double aov;
+    }
+
+    private static final class ProductStats {
+        String code = "";
+        String name = "";
+        String imageUrl = "";
+        double soldQty;
+        double returnedQty;
+        double netQty;
+        double returnRate;
+        int orders;
     }
 
     private static final class NamedStats {
