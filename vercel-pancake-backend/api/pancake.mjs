@@ -139,9 +139,12 @@ function normalize(raw){
   const grossAmount=num(get(raw,'total_price|total_amount|total'));
   const afterDiscountRaw=get(raw,'total_price_after_sub_discount|buyer_total_amount');
   const afterDiscountField=afterDiscountRaw===undefined?null:num(afterDiscountRaw);
-  const codAmount=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
-  const prepaidAmount=num(get(raw,'prepaid|prepaid_amount'));
-  const netAmount=afterDiscountField!==null?afterDiscountField:((codAmount+prepaidAmount)||grossAmount);
+  const codRaw=get(raw,'cod|cod_amount|money_to_collect|total_cod');
+  const prepaidRaw=get(raw,'prepaid|prepaid_amount');
+  const codAmount=codRaw===undefined?0:num(codRaw);
+  const prepaidAmount=prepaidRaw===undefined?0:num(prepaidRaw);
+  const hasPancakePaymentTotal=codRaw!==undefined||prepaidRaw!==undefined;
+  const netAmount=hasPancakePaymentTotal?(codAmount+prepaidAmount):(afterDiscountField!==null?afterDiscountField:grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
