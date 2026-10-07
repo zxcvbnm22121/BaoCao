@@ -599,9 +599,22 @@ function shiftIsoDay(day,offset){
   d.setUTCDate(d.getUTCDate()+offset);
   return d.toISOString().slice(0,10)
 }
-function parentSku(raw){
-  const s=String(raw||'').trim();
-  return /^[A-Za-z]\d+[A-Za-z][1-5]$/.test(s)?s.slice(0,-1):s
+function normalizeSevenCode(raw){
+  const value=String(raw||'').trim().toUpperCase();
+  if(!value)return'';
+  const compact=value.replace(/\s+/g,'');
+  let m=compact.match(/^([A-Z]\d{6}[A-Z])[1-5]$/);
+  if(m)return m[1];
+  if(/^[A-Z]\d{6}[A-Z]$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z])[1-5]?(?=$|[^A-Z0-9])/);
+  if(m)return m[1];
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6})(?=$|[^A-Z0-9])/);
+  return m?m[1]:''
+}
+function productThumb(url,code){
+  const src=String(url||'').trim();
+  if(!src)return '<div class="productThumb empty"><span>7A</span></div>';
+  return `<div class="productThumb"><img loading="lazy" referrerpolicy="no-referrer" src="${esc(src)}" alt="${esc(code||'Sản phẩm')}" onerror="this.parentElement.classList.add('imageError')"><span>7A</span></div>`
 }
 function productDateRange(){
   const anchor=($('productAnchor')?.value||$('to').value||vnDate());
@@ -629,12 +642,24 @@ function aggregateProducts(rows){
       const quantity=Math.max(0,Number(item?.quantity)||0);
       if(!quantity)continue;
       const returned=Math.min(quantity,Math.max(0,Number(item?.returnedQuantity)||0));
-      const displayCode=String(item?.productCode||parentSku(item?.sku)||item?.productId||item?.variationId||item?.name||'Chưa rõ').trim();
-      const key=String(item?.productId||displayCode||item?.name||'unknown').trim().toLowerCase();
+      const displayCode=
+        normalizeSevenCode(item?.displayCode)||
+        normalizeSevenCode(item?.productCode)||
+        normalizeSevenCode(item?.sku)||
+        normalizeSevenCode(item?.name);
+      const fallbackKey=String(item?.productId||item?.variationId||item?.name||'unknown').trim().toLowerCase();
+      const key=displayCode?('code:'+displayCode.toLowerCase()):('fallback:'+fallbackKey);
       let p=map.get(key);
       if(!p){
-        p={code:displayCode,name:String(item?.name||displayCode||'Chưa rõ sản phẩm').trim(),soldQty:0,returnedQty:0,orders:0,returnOrders:0};
+        p={
+          code:displayCode,
+          name:String(item?.name||displayCode||'Chưa rõ sản phẩm').trim(),
+          imageUrl:String(item?.imageUrl||'').trim(),
+          soldQty:0,returnedQty:0,orders:0,returnOrders:0
+        };
         map.set(key,p)
+      }else if(!p.imageUrl&&item?.imageUrl){
+        p.imageUrl=String(item.imageUrl).trim()
       }
       p.soldQty+=quantity;
       p.returnedQty+=returned;
@@ -676,14 +701,15 @@ function renderProducts(){
   note.style.display=messages.length?'block':'none';
   tbody.innerHTML=list.slice(0,100).map((p,i)=>`<tr>
     <td data-label="#">${i+1}</td>
-    <td data-label="Mã SP"><strong>${esc(p.code||'—')}</strong></td>
+    <td data-label="Ảnh">${productThumb(p.imageUrl,p.code)}</td>
+    <td data-label="Mã SP"><strong>${esc(p.code||'Chưa có mã')}</strong></td>
     <td data-label="Tên SP">${esc(p.name||'—')}</td>
     <td data-label="SL bán">${numFmt(p.soldQty)}</td>
     <td data-label="SL hoàn" class="${p.returnedQty?'bad':''}">${numFmt(p.returnedQty)}</td>
     <td data-label="SL bán thực">${numFmt(p.netQty)}</td>
     <td data-label="Tỷ lệ hoàn" class="${p.returnRate>.20?'bad':p.returnRate>.10?'warnText':''}">${pct(p.returnRate)}</td>
     <td data-label="Số đơn">${numFmt(p.orders)}</td>
-  </tr>`).join('')||'<tr><td colspan="8">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
+  </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
 }
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
