@@ -328,3 +328,57 @@ dialog{border:0;border-radius:16px;width:min(510px,calc(100vw - 24px));max-heigh
   .cardValue{font-size:21px}
   .kpiGrid .card:first-child .cardValue{font-size:32px}
 }
+
+
+/* Pancake operations center */
+.opsGrid{display:grid;grid-template-columns:1.05fr 1fr 1.2fr;gap:8px;margin-top:8px}
+.opsPanel{padding:13px 14px;min-height:210px}
+.healthPill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:6px 9px;font-size:8px;font-weight:900;letter-spacing:.07em;background:#f0ece7;color:#716a63;border:1px solid var(--line);white-space:nowrap}
+.healthPill.good{background:#eaf6ef;color:var(--green);border-color:#cce6d6}
+.healthPill.warn{background:#fff4df;color:#9a641a;border-color:#ead2a7}
+.healthPill.bad{background:#fff0ef;color:#982d31;border-color:#edcccc}
+.alertList{display:grid;gap:7px;margin-top:9px}
+.alertItem{display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border-radius:11px;background:var(--soft);border:1px solid #eee8e1}
+.alertItem i{width:8px;height:8px;border-radius:50%;margin-top:3px;flex:none;background:#aaa}
+.alertItem.bad i{background:var(--red)}.alertItem.warn i{background:var(--orange)}.alertItem.good i{background:var(--green)}
+.alertItem b{display:block;font-size:10px;margin-bottom:2px}.alertItem span{font-size:9px;color:var(--muted);line-height:1.35}
+.reconcileBoard{display:grid;gap:6px;margin-top:9px}
+.reconcileRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px dashed #ece6df;font-size:9px}
+.reconcileRow:last-child{border-bottom:0}.reconcileRow span{color:var(--muted)}.reconcileRow b{font-size:10px}
+.reconcileRow.bad b{color:var(--red)}
+.funnelBoard{display:grid;gap:7px;margin-top:9px}
+.funnelStage{position:relative;display:grid;grid-template-columns:minmax(92px,1fr) auto auto;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--soft);border:1px solid #eee8e1;overflow:hidden}
+.funnelStage:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#d9d2ca}.funnelStage strong{font-size:10px;z-index:1}.funnelStage span{font-size:9px;color:var(--muted);z-index:1}.funnelStage b{font-size:10px;z-index:1}
+.funnelStage.clickable:before{background:var(--red)}
+.clickable{cursor:pointer}.clickable:hover{border-color:#cbbfb4;box-shadow:0 8px 22px rgba(42,34,28,.08)}
+.returnPanel{margin-top:8px}
+.returnReasonList{display:grid;gap:6px}
+.returnReasonRow{display:grid;grid-template-columns:minmax(180px,1fr) 100px 90px 130px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #eee8e1;border-radius:11px;background:var(--soft);font-size:9px}
+.returnReasonRow strong{font-size:10px}.returnReasonRow span{color:var(--muted)}.returnReasonRow .moneyCell{text-align:right;color:var(--ink);font-weight:700}
+.returnReasonEmpty{padding:18px;text-align:center;color:var(--muted);font-size:10px}
+.saleLeaderboard{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.saleRankCard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.saleRankCard:first-child{border-color:#d9b4ba;background:linear-gradient(145deg,#fff,#fff8f9)}
+.saleRankNo{font-size:9px;font-weight:900;color:var(--red);letter-spacing:.08em}.saleRankCard h4{margin:5px 0 7px;font-size:14px}.saleRankRevenue{font-size:20px;font-weight:900;letter-spacing:-.04em}
+.saleRankMeta{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:9px}.saleRankMeta div{background:var(--soft);border-radius:8px;padding:6px}.saleRankMeta span{display:block;font-size:7px;color:var(--muted);text-transform:uppercase}.saleRankMeta b{font-size:9px}
+.orderDrillDialog{width:min(1080px,calc(100vw - 28px));max-width:none}
+.orderDrillForm{width:100%;max-width:none}
+.orderDrillSummary{display:flex;gap:7px;flex-wrap:wrap;margin:2px 0 12px}
+.orderDrillSummary span{background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:6px 9px;font-size:9px}
+.orderDrillScroll{max-height:min(60vh,620px);border:1px solid var(--line);border-radius:12px}
+.orderDrillTable{min-width:850px}.orderDrillTable th{position:sticky;top:0;background:#fff;z-index:2}
+.orderDrillTable td,.orderDrillTable th{font-size:9px}
+.orderDrillTable td:last-child{max-width:230px;white-space:normal;line-height:1.35}
+.statusItem.clickable,.statusDetailRow.clickable,.returnReasonRow.clickable,.saleRankCard.clickable{transition:.16s ease}
+tr.clickable td:first-child{font-weight:800}
+tr.clickable:hover td{background:#fbf7f3}
+
+@media(max-width:1100px){
+  .opsGrid{grid-template-columns:1fr 1fr}.opsGrid .opsPanel:last-child{grid-column:1/-1}
+}
+@media(max-width:720px){
+  .opsGrid{grid-template-columns:1fr;gap:7px}.opsGrid .opsPanel:last-child{grid-column:auto}.opsPanel{min-height:0;padding:12px}
+  .saleLeaderboard{grid-template-columns:1fr}.saleRankCard{padding:12px}.saleRankMeta{grid-template-columns:repeat(3,1fr)}
+  .returnReasonRow{grid-template-columns:1fr auto;gap:5px 9px}.returnReasonRow .returnReasonPct{grid-column:1}.returnReasonRow .moneyCell{grid-column:2;grid-row:2}
+  .orderDrillDialog{width:calc(100vw - 14px);margin:7px}.orderDrillScroll{max-height:62vh}.orderDrillForm{padding:14px}
+}
