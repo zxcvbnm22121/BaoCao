@@ -208,67 +208,6 @@ async function fetchOrders(from,to){
     fields:candidates,perStatus:groupedStatus,
     availableAmountFieldNames:[...rawSeenFields].sort()
   }));
-  // Temporary audit: discover structured reason fields without logging customer data.
-  const returnFieldStats={};
-  const returnStatusStats={};
-  const auditReasons=(obj,prefix='',depth=0)=>{
-    if(!obj||typeof obj!=='object'||depth>2)return;
-    if(Array.isArray(obj))return;
-    for(const [key,value] of Object.entries(obj)){
-      if(/return|refund|reason|cause|cancel|remark|rejected|failed|motif|hoan|ly_do/i.test(key)){
-        const path=(prefix?prefix+'.':'')+key;
-        if(!returnFieldStats[path])returnFieldStats[path]={count:0,nonEmpty:0,types:{}};
-        const stat=returnFieldStats[path];
-        stat.count++;
-        const type=Array.isArray(value)?'array':value===null?'null':typeof value;
-        stat.types[type]=(stat.types[type]||0)+1;
-        if(value!==null && value!==undefined && value!=='' && !(Array.isArray(value)&&!value.length)){
-          stat.nonEmpty++;
-        }
-      }
-      if(value&&typeof value==='object'&&!Array.isArray(value)&&depth<2&&/(return|refund|shipping|order|metadata|delivery|tracking|extra|info|log|reason|status)/i.test(key)){
-        auditReasons(value,(prefix?prefix+'.':'')+key,depth+1);
-      }
-    }
-  };
-  for(const raw of rawMap.values()){
-    const order=normalize(raw);
-    if(order.createdDate<'2026-10-01'||!['HOAN'].includes(order.status)||order.excludedFromDefaultReport)continue;
-    returnStatusStats[order.statusCode]=(returnStatusStats[order.statusCode]||0)+1;
-    auditReasons(raw);
-  }
-  console.log('RETURN_REASON_FIELD_COVERAGE:',JSON.stringify({returnOrders:Object.values(returnStatusStats).reduce((a,b)=>a+b,0),byCode:returnStatusStats,fields:returnFieldStats}));
-  const reasonGroups={},channelGroups={},reasonByChannel={};
-  let countedReturnOrders=0,returnOrderValue=0;
-  for(const raw of rawMap.values()){
-    const order=normalize(raw);
-    if(order.createdDate<'2026-10-01'||order.createdDate>dateKey()||order.status!=='HOAN'||order.excludedFromDefaultReport)continue;
-    // returned_reason_name is a POS reason label, never a customer note.
-    let label=String(raw.returned_reason_name??'').trim();
-    if(!label)label='Chưa ghi lý do';
-    if(label.length>120)label='Nội dung quá dài';
-    // Do not publish phone/email/contact data in public workflow logs.
-    if(/\d{8,}|@/.test(label))label='Có thông tin riêng tư';
-    const code=String(raw.returned_reason??'');
-    const key=label;
-    if(!reasonGroups[key])reasonGroups[key]={reason:key,codes:{},orders:0,valueAfterDiscount:0,byStatus:{},byChannel:{}};
-    const row=reasonGroups[key];
-    row.orders++;
-    row.valueAfterDiscount+=order.netAmount;
-    row.codes[code]=(row.codes[code]||0)+1;
-    row.byStatus[String(order.statusCode)]=(row.byStatus[String(order.statusCode)]||0)+1;
-    row.byChannel[order.channel]=(row.byChannel[order.channel]||0)+1;
-    channelGroups[order.channel]=(channelGroups[order.channel]||0)+1;
-    countedReturnOrders++;
-    returnOrderValue+=order.netAmount;
-  }
-  console.log('OCT_RETURN_REASON_SUMMARY:',JSON.stringify({
-    from:'2026-10-01',to:dateKey(),total:countedReturnOrders,
-    returnOrderValueAfterDiscount:returnOrderValue,
-    byChannel:channelGroups,
-    reasons:Object.values(reasonGroups).sort((a,b)=>b.orders-a.orders||b.valueAfterDiscount-a.valueAfterDiscount)
-  }));
-
   const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
   const inRange=normalized.filter(x=>keepInRange(x,from,to));
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
