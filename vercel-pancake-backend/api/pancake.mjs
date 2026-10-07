@@ -139,22 +139,108 @@ function firstArray(raw,paths){
   }
   return []
 }
+function sevenParentCode(value){
+  const raw=str(value,'').trim().toUpperCase();
+  if(!raw)return'';
+  const compact=raw.replace(/\s+/g,'');
+  let m=compact.match(/^([A-Z]\d{6}[A-Z])[1-5]$/);
+  if(m)return m[1];
+  if(/^[A-Z]\d{6}[A-Z]$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
+  m=raw.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z])[1-5]?(?=$|[^A-Z0-9])/);
+  if(m)return m[1];
+  m=raw.match(/(?:^|[^A-Z0-9])([A-Z]\d{6})(?=$|[^A-Z0-9])/);
+  return m?m[1]:''
+}
+function firstImageUrl(value){
+  if(!value)return'';
+  if(typeof value==='string')return /^https?:\/\//i.test(value.trim())?value.trim():'';
+  if(Array.isArray(value)){
+    for(const item of value){const u=firstImageUrl(item);if(u)return u}
+    return''
+  }
+  if(typeof value==='object'){
+    for(const key of ['url','src','source','image_url','original_url','full_url','large_url','medium_url','thumbnail_url']){
+      const u=firstImageUrl(value[key]);if(u)return u
+    }
+  }
+  return''
+}
+function productImage(rawItem){
+  const paths=[
+    'variation.images','variation_info.images','product.images','images','photos',
+    'variation.image_url','variation_info.image_url','product.image_url','image_url',
+    'variation.image','variation_info.image','product.image','image',
+    'variation.thumbnail','variation_info.thumbnail','product.thumbnail','thumbnail'
+  ];
+  for(const path of paths){
+    const value=path.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,rawItem);
+    const u=firstImageUrl(value);if(u)return u
+  }
+  return''
+}
 function productLine(rawItem){
   if(!rawItem||typeof rawItem!=='object')return null;
   const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
   const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
   if(!quantity)return null;
-  const sku=str(get(rawItem,'sku|variation.sku|variation_info.sku|code|variation.display_id')).trim();
-  const productCode=str(get(rawItem,'product_code|product.code|product.sku|product.display_id|variation.product_code|variation_info.product_code')).trim();
+
+  const explicitCandidates=[
+    get(rawItem,'product_code'),
+    get(rawItem,'product.code'),
+    get(rawItem,'product.display_id'),
+    get(rawItem,'product.sku'),
+    get(rawItem,'variation.product_code'),
+    get(rawItem,'variation_info.product_code')
+  ];
+  const variantCandidates=[
+    get(rawItem,'sku'),
+    get(rawItem,'variation.sku'),
+    get(rawItem,'variation_info.sku'),
+    get(rawItem,'variation.display_id'),
+    get(rawItem,'variation_info.display_id'),
+    get(rawItem,'code')
+  ];
+  const nameCandidates=[
+    get(rawItem,'product.name'),
+    get(rawItem,'product_name'),
+    get(rawItem,'name'),
+    get(rawItem,'variation.name'),
+    get(rawItem,'variation_info.name'),
+    get(rawItem,'variation_name'),
+    get(rawItem,'display_name')
+  ];
+
+  let productCode='';
+  for(const v of explicitCandidates){productCode=sevenParentCode(v);if(productCode)break}
+  let sku='';
+  for(const v of variantCandidates){if(str(v,'').trim()){sku=str(v,'').trim();break}}
+  if(!productCode)productCode=sevenParentCode(sku);
+  if(!productCode){
+    for(const v of nameCandidates){productCode=sevenParentCode(v);if(productCode)break}
+  }
+
   const productId=str(get(rawItem,'product_id|product.id|variation.product_id|variation_info.product_id')).trim();
   const variationId=str(get(rawItem,'variation_id|variation.id|variation_info.id|id')).trim();
-  const name=str(get(rawItem,'product_name|product.name|variation_name|variation.name|variation_info.name|display_name|name')).trim()||sku||productId||variationId||'Chưa rõ sản phẩm';
+  const name=str(nameCandidates.find(v=>str(v,'').trim())||'','').trim()||productCode||'Chưa rõ sản phẩm';
   const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
-  return{sku:sku||productCode||productId||variationId||name,productCode,name,productId,variationId,quantity,returnedQuantity}
+  const imageUrl=productImage(rawItem);
+
+  return{
+    sku,
+    productCode,
+    displayCode:productCode||'',
+    name,
+    imageUrl,
+    productId,
+    variationId,
+    quantity,
+    returnedQuantity
+  }
 }
 function productAliases(item){
   return[
     item?.sku&&'sku:'+String(item.sku).trim().toLowerCase(),
+    item?.displayCode&&'display-code:'+String(item.displayCode).trim().toLowerCase(),
     item?.productCode&&'product-code:'+String(item.productCode).trim().toLowerCase(),
     item?.productId&&'product:'+String(item.productId).trim().toLowerCase(),
     item?.variationId&&'variation:'+String(item.variationId).trim().toLowerCase(),
