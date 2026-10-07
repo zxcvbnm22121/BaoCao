@@ -85,6 +85,21 @@
       </div>
       <section class="kpiGrid" id="kpis"></section>
 
+      <section class="opsGrid">
+        <article class="panel opsPanel">
+          <div class="panelHead"><div><h3>Cảnh báo real-time</h3><p>Chỉ hiển thị điểm cần chú ý theo khoảng đang chọn</p></div><span class="healthPill" id="alertHealth">—</span></div>
+          <div class="alertList" id="liveAlerts"></div>
+        </article>
+        <article class="panel opsPanel">
+          <div class="panelHead"><div><h3>Đối soát dữ liệu</h3><p>Tổng kỳ = ngày = kênh = Sale = trạng thái</p></div><span class="healthPill" id="reconcileHealth">—</span></div>
+          <div class="reconcileBoard" id="reconcileBoard"></div>
+        </article>
+        <article class="panel opsPanel">
+          <div class="panelHead"><div><h3>Phễu vận hành</h3><p>Data → tạo đơn → trạng thái hiện tại</p></div></div>
+          <div class="funnelBoard" id="funnelBoard"></div>
+        </article>
+      </section>
+
       <section class="chartGrid bigFirst">
         <article class="panel">
           <div class="panelHead">
@@ -113,6 +128,14 @@
           <div class="targetBoard" id="targetPanel"></div>
         </article>
       </section>
+
+      <article class="panel tablePanel returnPanel">
+        <div class="panelHead">
+          <div><h3>Lý do hoàn đơn</h3><p>Lấy trực tiếp trường lý do hoàn từ Pancake · bấm một lý do để xem đơn</p></div>
+          <div class="summaryChip" id="returnReasonSummary">—</div>
+        </div>
+        <div class="returnReasonList" id="returnReasonList"></div>
+      </article>
     </section>
 
     <section id="view-channels" class="view">
@@ -147,6 +170,7 @@
       <div class="sectionHead">
         <div><span class="sectionEyebrow">SALE ONLINE</span><h2>Hiệu suất nhân viên</h2><p>Doanh số, thành công, hoàn và AOV</p></div>
       </div>
+      <section class="saleLeaderboard" id="saleLeaderboard"></section>
       <section class="chartGrid">
         <article class="panel">
           <div class="panelHead"><div><h3>Doanh số theo Sale</h3><p>Xếp hạng theo tạo đơn</p></div></div>
@@ -215,6 +239,23 @@
     </form>
   </dialog>
 
+  <dialog id="orderDrillDialog" class="orderDrillDialog">
+    <form method="dialog" class="dialogForm orderDrillForm">
+      <div class="dialogHead">
+        <div><div class="eyebrow">CHI TIẾT ĐƠN HÀNG</div><h2 id="orderDrillTitle">Danh sách đơn</h2><p id="orderDrillMeta">—</p></div>
+        <button type="button" class="x" data-close-dialog="orderDrillDialog">×</button>
+      </div>
+      <div class="orderDrillSummary" id="orderDrillSummary"></div>
+      <div class="scroll orderDrillScroll">
+        <table class="orderDrillTable">
+          <thead><tr><th>Mã đơn</th><th>Ngày giờ</th><th>Sale</th><th>Kênh</th><th>Trạng thái</th><th>Sau CK</th><th>Lý do hoàn</th></tr></thead>
+          <tbody id="orderDrillRows"></tbody>
+        </table>
+      </div>
+      <div class="dialogActions"><button type="button" data-close-dialog="orderDrillDialog">Đóng</button></div>
+    </form>
+  </dialog>
+
   <dialog id="settingsDialog">
     <form method="dialog" id="settingsForm" class="dialogForm settingsForm">
       <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Mục tiêu doanh thu</h2></div><button type="button" class="x" data-close-dialog="settingsDialog">×</button></div>
@@ -266,6 +307,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=pancake-server-unlock-20261007"></script>
+  <script src="./app.js?v=pancake-ops-center-20261007"></script>
 </body>
 </html>
