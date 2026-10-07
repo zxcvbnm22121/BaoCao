@@ -9,7 +9,7 @@ on:
       - '.github/workflows/android-pancake-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sevenam-pancake-apk
@@ -58,3 +58,16 @@ jobs:
           path: SevenAM-Pancake-Dashboard.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish stable APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest SevenAM-Pancake-Dashboard.apk --clobber
+          else
+            gh release create android-latest SevenAM-Pancake-Dashboard.apk \
+              --title "SevenAM Pancake Dashboard Android" \
+              --notes "Bản Android mới nhất. File APK được cập nhật tự động từ nhánh main." \
+              --target "${GITHUB_SHA}"
+          fi
