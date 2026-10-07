@@ -75,6 +75,20 @@ async function fetchLive(password,{directOnly=false}={}){
     return fetchLiveStatic(password)
   }
 }
+async function openLiveFast(password){
+  // Open instantly from the encrypted snapshot. The same password protects
+  // the direct credential artifact, so a decrypt failure is a real auth failure.
+  try{return await fetchLiveStatic(password)}
+  catch(staticError){
+    // Only if the fallback snapshot itself is unavailable, try the direct
+    // backend as the recovery path.
+    if(/bản dữ liệu LIVE dự phòng|fetch|network|Failed to fetch/i.test(String(staticError?.message||staticError))){
+      return fetchLiveDirect(password)
+    }
+    throw staticError
+  }
+}
+
 function applyPayload(p){
   if(!p||!Array.isArray(p.orders))throw new Error('Bản dữ liệu Pancake không hợp lệ');
   verifySnapshot(p);
@@ -519,7 +533,14 @@ function openSettings(){
 function showError(msg){$('error').textContent=msg;$('error').style.display='block';setTimeout(()=>$('error').style.display='none',7000)}
 async function tryAutoLive(){
   const saved=sessionStorage.getItem('sevenam_dashboard_password');if(!saved)return false;
-  try{applyPayload(await fetchLive(saved));return true}catch{sessionStorage.removeItem('sevenam_dashboard_password');return false}
+  try{
+    applyPayload(await openLiveFast(saved));
+    setTimeout(refreshLiveWhenVisible,50);
+    return true
+  }catch{
+    sessionStorage.removeItem('sevenam_dashboard_password');
+    return false
+  }
 }
 async function init(){
   sourceOrders=[];
@@ -573,6 +594,36 @@ $('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
 $('settingsForm').onsubmit=e=>{e.preventDefault();settings.targetMonth=Math.max(0,Number($('targetMonthInput').value)||0);settings.targetDay=Math.max(0,Number($('targetDayInput').value)||0);settings.gapDay=Number($('gapDayInput').value)||0;saveSettings();$('settingsDialog').close();renderAll()};
 $('unlockBtn').onclick=()=>{$('unlockError').style.display='none';$('password').value='';$('unlockDialog').showModal();if(window.innerWidth>720)setTimeout(()=>$('password').focus(),50)};
-$('unlockForm').onsubmit=async e=>{e.preventDefault();const pwd=$('password').value,box=$('unlockError');box.style.display='none';try{$('app').classList.add('loading');const p=await fetchLive(pwd);sessionStorage.setItem('sevenam_dashboard_password',pwd);applyPayload(p);$('unlockDialog').close()}catch(err){box.textContent='Không mở được dữ liệu: sai mật khẩu hoặc bản LIVE chưa sẵn sàng.';box.style.display='block'}finally{$('app').classList.remove('loading')}};
-$('reloadBtn').onclick=async()=>{const pwd=sessionStorage.getItem('sevenam_dashboard_password');if(meta.source==='PANCAKE'&&pwd)try{$('app').classList.add('loading');applyPayload(await fetchLive(pwd))}catch(e){showError(e.message)}finally{$('app').classList.remove('loading')}else renderAll()};
+$('unlockForm').onsubmit=async e=>{
+  e.preventDefault();
+  const pwd=$('password').value,box=$('unlockError'),btn=$('unlockForm').querySelector('button[type="submit"]');
+  const oldText=btn?.textContent||'Mở dữ liệu';
+  box.textContent='Đang kiểm tra mật khẩu và mở dữ liệu...';
+  box.style.display='block';
+  if(btn){btn.disabled=true;btn.textContent='Đang mở...'}
+  try{
+    $('app').classList.add('loading');
+    const p=await openLiveFast(pwd);
+    sessionStorage.setItem('sevenam_dashboard_password',pwd);
+    applyPayload(p);
+    $('unlockDialog').close();
+    setTimeout(refreshLiveWhenVisible,80);
+  }catch(err){
+    box.textContent='Không mở được dữ liệu. Kiểm tra lại mật khẩu rồi thử lại.';
+    box.style.display='block'
+  }finally{
+    $('app').classList.remove('loading');
+    if(btn){btn.disabled=false;btn.textContent=oldText}
+  }
+};
+$('reloadBtn').onclick=async()=>{
+  const pwd=sessionStorage.getItem('sevenam_dashboard_password');
+  if(meta.source==='PANCAKE'&&pwd){
+    try{
+      $('app').classList.add('loading');
+      applyPayload(await fetchLive(pwd))
+    }catch(e){showError(e.message)}
+    finally{$('app').classList.remove('loading')}
+  }else renderAll()
+};
 init();
