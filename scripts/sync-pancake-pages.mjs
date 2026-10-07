@@ -160,6 +160,54 @@ async function fetchOrders(from,to){
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
+  // Aggregate-only reconciliation diagnostics. Never log customer or order records.
+  const inspectDate=dateKey(new Date(Date.now()-86400000));
+  const amountFields=[
+    'cod','cod_amount','money_to_collect','total_cod',
+    'total_price_after_sub_discount','buyer_total_amount',
+    'prepaid','prepaid_amount','total_price','total_amount',
+    'total','shipping_fee','total_shipping_fee','shipping_cost',
+    'total_discount','discount','discount_amount','total_price_before_discount',
+    'charge_amount','cash','cash_on_delivery','payment_amount',
+    'sub_discount','surcharge','total_surcharge',
+    'total_price_after_discount','remaining_amount','received_amount',
+    'payment','money_received','fee'
+  ];
+  const candidates=Object.fromEntries(amountFields.map(k=>[k,{count:0,sum:0}]));
+  const groupedStatus={};
+  const rawSeenFields=new Set();
+  let diagOrders=0;
+  let diagMoney=0;
+  for(const raw of rawMap.values()){
+    const o=normalize(raw);
+    if(o.createdDate!==inspectDate||o.excludedFromDefaultReport)continue;
+    diagOrders++;
+    diagMoney+=o.netAmount;
+    const group=String(o.statusCode);
+    if(!groupedStatus[group])groupedStatus[group]={count:0,cod:0,net:0,prepaid:0};
+    groupedStatus[group].count++;
+    groupedStatus[group].cod+=o.codAmount;
+    groupedStatus[group].net+=o.netAmount;
+    groupedStatus[group].prepaid+=o.prepaidAmount;
+    for(const field of Object.keys(raw)){
+      if(/^(cod|total|prepaid|price|payment|shipping|delivery|discount|amount|money|fee|cash|paid|deposit)/i.test(field))rawSeenFields.add(field);
+    }
+    for(const key of amountFields){
+      const val=raw[key];
+      if(val!==undefined&&val!==null&&val!==''){
+        const parsed=Number(val);
+        if(Number.isFinite(parsed)){
+          candidates[key].sum+=parsed;
+          candidates[key].count++;
+        }
+      }
+    }
+  }
+  console.log('Pancake AMOUNT_FIELD_AUDIT:',JSON.stringify({
+    date:inspectDate,orders:diagOrders,computedNet:diagMoney,
+    fields:candidates,perStatus:groupedStatus,
+    availableAmountFieldNames:[...rawSeenFields].sort()
+  }));
   const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
   const inRange=normalized.filter(x=>keepInRange(x,from,to));
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
