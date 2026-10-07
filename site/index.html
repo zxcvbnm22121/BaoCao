@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111111" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=product-performance-20261007-2" />
+  <link rel="stylesheet" href="./styles.css?v=channel-kpi-20261007-1" />
 </head>
 <body>
   <aside class="sidebar">
@@ -125,7 +125,7 @@
           <div class="chart" id="channelChart"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>Tiến độ mục tiêu</h3><p>Target tháng, target ngày và gap</p></div><button class="miniBtn" id="openSettingsInline">Chỉnh target</button></div>
+          <div class="panelHead"><div><h3>Tiến độ mục tiêu</h3><p>Target theo kênh · GAP tự tính theo tiến độ thời gian</p></div><button class="miniBtn" id="openSettingsInline">Chỉnh target</button></div>
           <div class="targetBoard" id="targetPanel"></div>
         </article>
       </section>
@@ -302,16 +302,18 @@
 
   <dialog id="settingsDialog">
     <form method="dialog" id="settingsForm" class="dialogForm settingsForm">
-      <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Mục tiêu doanh thu</h2></div><button type="button" class="x" data-close-dialog="settingsDialog">×</button></div>
-      <p>Các giá trị này được lưu trên trình duyệt hiện tại và áp dụng ngay vào biểu đồ.</p>
+      <div class="dialogHead"><div><div class="eyebrow">CẤU HÌNH KPI</div><h2>Target tháng theo kênh</h2></div><button type="button" class="x" data-close-dialog="settingsDialog">×</button></div>
+      <p>Chỉ cần nhập target tháng của từng kênh. Dashboard tự cộng target tổng, chia target theo ngày và tự tính GAP theo tiến độ.</p>
       <div class="settingsGrid">
-        <label class="field"><span>Target tháng</span><input id="targetMonthInput" type="number" min="0" step="1000000" /></label>
-        <label class="field"><span>Target ngày</span><input id="targetDayInput" type="number" min="0" step="100000" /></label>
-        <label class="field"><span>Gap bù/ngày</span><input id="gapDayInput" type="number" step="100000" /></label>
+        <label class="field"><span>Facebook Ads</span><input id="targetAdsInput" type="number" min="0" step="1000000" /></label>
+        <label class="field"><span>Livestream</span><input id="targetLiveInput" type="number" min="0" step="1000000" /></label>
+        <label class="field"><span>Zalo / CSKH</span><input id="targetZaloInput" type="number" min="0" step="1000000" /></label>
+        <label class="field"><span>Website</span><input id="targetWebsiteInput" type="number" min="0" step="1000000" /></label>
+        <label class="field targetTotalField"><span>Target tổng tháng</span><input id="targetTotalInput" type="text" readonly /></label>
       </div>
       <div class="settingsHint">
-        <b>Target thực/ngày = Target ngày + Gap bù/ngày.</b>
-        <span>Gap thực tế trên dashboard vẫn được tính tự động: Doanh số − Target thực/ngày.</span>
+        <b>Target tổng = Ads + Live + Zalo + Website.</b>
+        <span>GAP tự tính = Doanh thu thực đạt − Target phải đạt theo tiến độ thời gian.</span>
       </div>
       <div class="dialogActions"><button type="button" data-close-dialog="settingsDialog">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
     </form>
@@ -351,6 +353,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=product-performance-20261007-2"></script>
+  <script src="./app.js?v=channel-kpi-20261007-1"></script>
 </body>
 </html>
