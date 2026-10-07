@@ -49,11 +49,14 @@ function normalize(raw){
   const status=mapStatus(statusCode,statusName);
 
   const grossAmount=num(get(raw,'total_price|total_amount|total'));
-  const afterDiscountField=num(get(raw,'total_price_after_sub_discount|buyer_total_amount'));
+  // A valid after-discount amount can be 0 (fully discounted/refunded).
+  // Do not use || here: it incorrectly replaces 0 with COD or gross revenue.
+  const afterDiscountRaw=get(raw,'total_price_after_sub_discount|buyer_total_amount');
+  const afterDiscountField=afterDiscountRaw===undefined?null:num(afterDiscountRaw);
   const codAmount=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
   const prepaidAmount=num(get(raw,'prepaid|prepaid_amount'));
   const derivedPaid=codAmount+prepaidAmount;
-  const netAmount=afterDiscountField||derivedPaid||grossAmount;
+  const netAmount=afterDiscountField!==null?afterDiscountField:(derivedPaid||grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
 
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
@@ -201,7 +204,24 @@ console.log('YESTERDAY_SOURCE_ALL:',JSON.stringify(ySourceAll));
 const todayRows=orders.filter(o=>o.createdDate===today);
 const todayIncluded=todayRows.filter(o=>!o.excludedFromDefaultReport);
 const todayChannel=todayIncluded.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||{orders:0,revenue:0});m[k].orders++;m[k].revenue+=o.netAmount||o.totalAmount||0;return m},{});
+const todayRecon={
+  date:today,
+  all_orders:todayRows.length,
+  included_orders:todayIncluded.length,
+  total_after_discount:todayIncluded.reduce((a,o)=>a+o.netAmount,0),
+  cod:todayIncluded.reduce((a,o)=>a+o.codAmount,0),
+  prepaid:todayIncluded.reduce((a,o)=>a+o.prepaidAmount,0),
+  excluded_status:todayRows.filter(o=>o.excludedStatus).length,
+  excluded_exchange_source:todayRows.filter(o=>o.excludedExchangeSource).length
+};
+console.log('TODAY_RECONCILIATION:',JSON.stringify(todayRecon));
 console.log('TODAY_CHANNEL_RECONCILIATION:',JSON.stringify(todayChannel));
+const monthIncluded=orders.filter(o=>!o.excludedFromDefaultReport);
+console.log('MONTH_RECONCILIATION:',JSON.stringify({
+  from,to:today,orders:monthIncluded.length,
+  total_after_discount:monthIncluded.reduce((a,o)=>a+o.netAmount,0),
+  zero_net_orders:monthIncluded.filter(o=>o.netAmount===0).length
+}));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
