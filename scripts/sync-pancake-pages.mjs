@@ -14,6 +14,27 @@ const dateKey=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:
 const get=(o,path)=>String(path).split('|').map(x=>x.trim()).map(p=>p.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,o)).find(v=>v!==undefined&&v!==null&&v!=='');
 const num=v=>{const n=Number(v??0);return Number.isFinite(n)?n:0};
 const str=(v,f='')=>v==null?f:String(v);
+function parsePancakeDate(value){
+  if(value==null||value==='')throw new Error('Pancake order missing a creation timestamp; refusing an inaccurate daily total');
+  const raw=String(value).trim();
+  let dt;
+  if(/^\\d{10,13}$/.test(raw)){
+    const n=Number(raw);
+    dt=new Date(raw.length===10?n*1000:n);
+  }else{
+    let iso=raw;
+    // POS timestamps without an explicit offset are local Vietnam times,
+    // never the timezone of the GitHub Actions runner.
+    if(/^\\d{4}-\\d{2}-\\d{2}$/.test(iso))iso+='T00:00:00+07:00';
+    else if(/^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$/.test(iso)){
+      iso=iso.replace(' ','T')+'+07:00';
+    }
+    dt=new Date(iso);
+  }
+  if(!Number.isFinite(dt.getTime()))throw new Error('Pancake returned an invalid order creation timestamp; refusing an inaccurate daily total');
+  return dt;
+}
+
 function mapStatus(code,name=''){
   code=Number(code);name=str(name).toLowerCase();
   if([3,16].includes(code))return'THANH_CONG';
@@ -61,8 +82,8 @@ function normalize(raw){
 
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
-  const created=str(get(raw,'inserted_at|created_at|creation_time'),new Date().toISOString());
-  let dt;try{dt=new Date(created)}catch{dt=new Date()}
+  const created=get(raw,'inserted_at|created_at|creation_time');
+  const dt=parsePancakeDate(created);
   const iso=dt.toISOString();
   const createdDate=dateKey(dt);
 
@@ -138,78 +159,35 @@ async function fetchOrders(from,to){
   const rawMap=new Map();
   const maxPages=200;
 
-  for(let page=1;page<=maxPages;page++){
-    const res=await fetchOrderPage(from,to,page);
-    const data=res.data;
-    const bounds=pageDateBounds(data);
+  // The POS list changes as orders are added/edited. A second complete scan
+  // closes page-boundary gaps that arise when a new order shifts pagination.
+  for(let pass=1;pass<=2;pass++){
+    let completed=false;
+    for(let page=1;page<=maxPages;page++){
+      const res=await fetchOrderPage(from,to,page);
+      const data=res.data;
+      const bounds=pageDateBounds(data);
 
-    data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
-    console.log(`Orders page ${page}: ${data.length} rows${page===1&&res.totalPages?' / '+res.totalPages+' pages':''} · ${bounds.min||'?'} → ${bounds.max||'?'}`);
+      data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+      console.log(`Orders pass ${pass} page ${page}: ${data.length} rows${page===1&&res.totalPages?' / '+res.totalPages+' pages':''} · ${bounds.min||'?'} → ${bounds.max||'?'}`);
 
-    if(!data.length)break;
-
-    // Pancake may ignore from/to in the list endpoint. Stop only after the
-    // newest order on a page is already older than the requested range.
-    if(bounds.max && bounds.max < from)break;
-
-    // Safety fallback for APIs that report a correct total page count.
-    if(res.totalPages && page>=res.totalPages)break;
+      if(!data.length){completed=true;break;}
+      // This endpoint can ignore from/to. Only stop after a complete page
+      // lies before the beginning of the requested date range.
+      if(bounds.max&&bounds.max<from){completed=true;break;}
+      if(res.totalPages&&page>=res.totalPages){completed=true;break;}
+    }
+    if(!completed)throw new Error('Pancake pagination limit reached before the date range was fully read');
   }
 
-  // Re-fetch page 1 to capture orders inserted while the scan was running.
+  // Capture the first page again immediately before publishing the snapshot.
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
-  // Aggregate-only reconciliation diagnostics. Never log customer or order records.
-  const inspectDate=dateKey(new Date(Date.now()-86400000));
-  const amountFields=[
-    'cod','cod_amount','money_to_collect','total_cod',
-    'total_price_after_sub_discount','buyer_total_amount',
-    'prepaid','prepaid_amount','total_price','total_amount',
-    'total','shipping_fee','total_shipping_fee','shipping_cost',
-    'total_discount','discount','discount_amount','total_price_before_discount',
-    'charge_amount','cash','cash_on_delivery','payment_amount',
-    'sub_discount','surcharge','total_surcharge',
-    'total_price_after_discount','remaining_amount','received_amount',
-    'payment','money_received','fee'
-  ];
-  const candidates=Object.fromEntries(amountFields.map(k=>[k,{count:0,sum:0}]));
-  const groupedStatus={};
-  const rawSeenFields=new Set();
-  let diagOrders=0;
-  let diagMoney=0;
-  for(const raw of rawMap.values()){
-    const o=normalize(raw);
-    if(o.createdDate!==inspectDate||o.excludedFromDefaultReport)continue;
-    diagOrders++;
-    diagMoney+=o.netAmount;
-    const group=String(o.statusCode);
-    if(!groupedStatus[group])groupedStatus[group]={count:0,cod:0,net:0,prepaid:0};
-    groupedStatus[group].count++;
-    groupedStatus[group].cod+=o.codAmount;
-    groupedStatus[group].net+=o.netAmount;
-    groupedStatus[group].prepaid+=o.prepaidAmount;
-    for(const field of Object.keys(raw)){
-      if(/^(cod|total|prepaid|price|payment|shipping|delivery|discount|amount|money|fee|cash|paid|deposit)/i.test(field))rawSeenFields.add(field);
-    }
-    for(const key of amountFields){
-      const val=raw[key];
-      if(val!==undefined&&val!==null&&val!==''){
-        const parsed=Number(val);
-        if(Number.isFinite(parsed)){
-          candidates[key].sum+=parsed;
-          candidates[key].count++;
-        }
-      }
-    }
-  }
-  console.log('Pancake AMOUNT_FIELD_AUDIT:',JSON.stringify({
-    date:inspectDate,orders:diagOrders,computedNet:diagMoney,
-    fields:candidates,perStatus:groupedStatus,
-    availableAmountFieldNames:[...rawSeenFields].sort()
-  }));
-  const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
+  const normalized=[...rawMap.values()].map(normalize);
   const inRange=normalized.filter(x=>keepInRange(x,from,to));
+  if(inRange.some(x=>!Number.isFinite(x.netAmount)||x.netAmount<0))throw new Error('Pancake returned an invalid net amount; refusing to publish an inaccurate daily total');
+  if(!inRange.length&&from<dateKey())throw new Error('Pancake returned zero historical orders for the requested period; refusing to publish empty totals');
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
   return inRange
 }
@@ -272,7 +250,36 @@ console.log('MONTH_RECONCILIATION:',JSON.stringify({
 }));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
-const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
+const reportOrders=orders.filter(o=>!o.excludedFromDefaultReport);
+const dayReconciliation={};
+const channelReconciliation={};
+const staffReconciliation={};
+for(const o of reportOrders){
+  const k=o.createdDate;
+  if(!dayReconciliation[k])dayReconciliation[k]={orders:0,net:0,cod:0,prepaid:0,gross:0};
+  const d=dayReconciliation[k];
+  d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
+  const c=o.channel||'Khác',staff=o.salesStaff||'Chưa gán';
+  if(!channelReconciliation[c])channelReconciliation[c]={orders:0,net:0};
+  channelReconciliation[c].orders++;channelReconciliation[c].net+=o.netAmount;
+  if(!staffReconciliation[staff])staffReconciliation[staff]={orders:0,net:0};
+  staffReconciliation[staff].orders++;staffReconciliation[staff].net+=o.netAmount;
+}
+const reportCount=reportOrders.length, reportNet=reportOrders.reduce((n,o)=>n+o.netAmount,0);
+const checkAggregate=groups=>{
+  const v=Object.values(groups);
+  return v.reduce((n,x)=>n+x.orders,0)===reportCount &&
+    Math.abs(v.reduce((n,x)=>n+x.net,0)-reportNet)<0.01;
+};
+if(!checkAggregate(dayReconciliation)||!checkAggregate(channelReconciliation)||!checkAggregate(staffReconciliation)){
+  throw new Error('Daily, channel and staff totals do not reconcile; refusing to publish');
+}
+const moneyMismatchDays=Object.entries(dayReconciliation)
+  .filter(([,d])=>Math.abs(d.net-(d.cod+d.prepaid))>0.01)
+  .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
+if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
+console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
+const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length},null,2));
 console.log(`Synced ${orders.length} normalized orders; encrypted artifact written.`);
