@@ -208,6 +208,36 @@ async function fetchOrders(from,to){
     fields:candidates,perStatus:groupedStatus,
     availableAmountFieldNames:[...rawSeenFields].sort()
   }));
+  // Temporary audit: discover structured reason fields without logging customer data.
+  const returnFieldStats={};
+  const returnStatusStats={};
+  const auditReasons=(obj,prefix='',depth=0)=>{
+    if(!obj||typeof obj!=='object'||depth>2)return;
+    if(Array.isArray(obj))return;
+    for(const [key,value] of Object.entries(obj)){
+      if(/return|refund|reason|cause|cancel|remark|rejected|failed|motif|hoan|ly_do/i.test(key)){
+        const path=(prefix?prefix+'.':'')+key;
+        if(!returnFieldStats[path])returnFieldStats[path]={count:0,nonEmpty:0,types:{}};
+        const stat=returnFieldStats[path];
+        stat.count++;
+        const type=Array.isArray(value)?'array':value===null?'null':typeof value;
+        stat.types[type]=(stat.types[type]||0)+1;
+        if(value!==null && value!==undefined && value!=='' && !(Array.isArray(value)&&!value.length)){
+          stat.nonEmpty++;
+        }
+      }
+      if(value&&typeof value==='object'&&!Array.isArray(value)&&depth<2&&/(return|refund|shipping|order|metadata|delivery|tracking|extra|info|log|reason|status)/i.test(key)){
+        auditReasons(value,(prefix?prefix+'.':'')+key,depth+1);
+      }
+    }
+  };
+  for(const raw of rawMap.values()){
+    const order=normalize(raw);
+    if(order.createdDate<'2026-10-01'||!['HOAN'].includes(order.status)||order.excludedFromDefaultReport)continue;
+    returnStatusStats[order.statusCode]=(returnStatusStats[order.statusCode]||0)+1;
+    auditReasons(raw);
+  }
+  console.log('RETURN_REASON_FIELD_COVERAGE:',JSON.stringify({returnOrders:Object.values(returnStatusStats).reduce((a,b)=>a+b,0),byCode:returnStatusStats,fields:returnFieldStats}));
   const normalized=[...rawMap.values()].map(normalize).filter(x=>x.totalAmount>=0);
   const inRange=normalized.filter(x=>keepInRange(x,from,to));
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
