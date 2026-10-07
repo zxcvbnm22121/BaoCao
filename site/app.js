@@ -568,7 +568,7 @@ function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegat
 function renderTarget(){
   const days=selectedCalendarDays(),rows=filteredRows(),k=overview(rows),goal=periodTarget(days);
   const time=reportTimeProgress(days),expected=goal*time,completion=goal?k.createdRevenue/goal:0;
-  const gapMoney=k.createdRevenue-expected,gapPoints=goal?(k.createdRevenue/goal-time)*100:0;
+  const gapMoney=expected-k.createdRevenue,gapPoints=goal?(k.createdRevenue/goal-time)*100:0;
   const dayTarget=days.length?goal/days.length:0,forecast=time>0?k.createdRevenue/time:0;
   const selectedChannel=$('channel').value;
   const breakdown=KPI_CHANNELS
@@ -578,17 +578,17 @@ function renderTarget(){
       const actual=overview(rr).createdRevenue;
       const channelGoal=days.reduce((n,date)=>n+effectiveDailyTarget(date.slice(0,7),x.channel),0);
       const channelExpected=channelGoal*time;
-      const gap=actual-channelExpected;
+      const gap=channelExpected-actual;
       const pacing=channelExpected?actual/channelExpected:null;
       return `<div class="channelTargetRow">
         <span class="channelTargetName">${esc(x.label)}</span>
         <span><small>Thực đạt</small><b>${compact(actual)}</b></span>
         <span><small>Phải đạt</small><b>${compact(channelExpected)}</b></span>
-        <span class="${gap>=0?'good':'bad'}"><small>GAP</small><b>${gap>=0?'+':''}${compact(gap)}</b></span>
+        <span class="${gap>0?'bad':'good'}"><small>${gap>0?'GAP thiếu':'Vượt'}</small><b>${compact(Math.abs(gap))}</b></span>
         <span><small>% tiến độ</small><b>${pct(pacing)}</b></span>
       </div>`
     }).join('');
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>=0?'Vượt':'Thiếu'} ${compact(Math.abs(gapMoney))}</div></div>
+  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
     <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
     <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
