@@ -278,7 +278,7 @@ const moneyMismatchDays=Object.entries(dayReconciliation)
   .filter(([,d])=>Math.abs(d.net-(d.cod+d.prepaid))>0.01)
   .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
 if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
-console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
+console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
 const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length},null,2));
