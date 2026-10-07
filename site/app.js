@@ -187,7 +187,7 @@ function verifySnapshot(p){
     const date=orderDate(o);
     if(!actual[date])actual[date]={orders:0,net:0,cod:0,prepaid:0,gross:0};
     const d=actual[date];
-    d.orders++;d.net+=Number(o.netAmount??o.totalAmount)||0;
+    d.orders++;d.net+=orderRevenue(o);
     d.cod+=Number(o.codAmount)||0;
     d.prepaid+=Number(o.prepaidAmount)||0;
     d.gross+=Number(o.grossAmount??o.totalAmount)||0;
@@ -195,7 +195,7 @@ function verifySnapshot(p){
   if(Object.keys(expected).length!==Object.keys(actual).length)throw new Error('Dữ liệu Pancake không khớp số ngày báo cáo');
   for(const [day,ref] of Object.entries(expected)){
     const d=actual[day];
-    if(!d||d.orders!==ref.orders||['net','cod','prepaid','gross'].some(k=>Math.abs(d[k]-ref[k])>.01))
+    if(!d||d.orders!==ref.orders||['cod','prepaid','gross'].some(k=>Math.abs(d[k]-ref[k])>.01))
       throw new Error('Dữ liệu đồng bộ chưa khớp tại ngày '+day);
   }
 }
@@ -227,18 +227,27 @@ function filteredIgnoringDate(month){
   })
 }
 function sum(rows,fn){return rows.reduce((a,x)=>a+(Number(fn(x))||0),0)}
-function successful(o){return Number(o.successfulAmount)||0}
+function orderRevenue(o){
+  // Single source of truth for Pancake headline revenue:
+  // Tổng tiền sau CK = COD + Trả trước.
+  return (Number(o?.codAmount)||0)+(Number(o?.prepaidAmount)||0)
+}
+function successful(o){
+  if(o?.status==='THANH_CONG')return orderRevenue(o);
+  if(o?.isPartialReturn)return (Number(o?.codAmount)||0)||(Number(o?.successfulAmount)||0);
+  return Number(o?.successfulAmount)||0
+}
 function overview(rows){
-  const net=sum(rows,x=>x.netAmount??x.totalAmount),gross=sum(rows,x=>x.grossAmount??x.totalAmount),success=sum(rows,successful),returns=rows.filter(x=>x.status==='HOAN');
-  const cod=sum(rows,x=>x.codAmount??0),prepaid=sum(rows,x=>x.prepaidAmount??0),discount=sum(rows,x=>x.discountAmount??Math.max(0,(x.grossAmount||0)-(x.netAmount||x.totalAmount||0)));
+  const net=sum(rows,orderRevenue),gross=sum(rows,x=>x.grossAmount??x.totalAmount),success=sum(rows,successful),returns=rows.filter(x=>x.status==='HOAN');
+  const cod=sum(rows,x=>x.codAmount??0),prepaid=sum(rows,x=>x.prepaidAmount??0),discount=sum(rows,x=>Math.max(0,(Number(x.grossAmount??x.totalAmount)||0)-orderRevenue(x)));
   return {
     createdRevenue:net,grossRevenue:gross,discountRevenue:discount,codRevenue:cod,prepaidRevenue:prepaid,
     successfulRevenue:success,orders:rows.length,
     successfulOrders:rows.filter(x=>successful(x)>0||x.status==='THANH_CONG').length,
-    pendingRevenue:sum(rows,x=>x.status==='TREO'?(x.netAmount??x.totalAmount):0),
-    shippingRevenue:sum(rows,x=>x.status==='DANG_GIAO'?(x.netAmount??x.totalAmount):0),
-    returnRevenue:sum(rows,x=>x.status==='HOAN'?(x.netAmount??x.totalAmount):0),
-    cancelledRevenue:sum(rows,x=>x.status==='HUY'?(x.netAmount??x.totalAmount):0),
+    pendingRevenue:sum(rows,x=>x.status==='TREO'?orderRevenue(x):0),
+    shippingRevenue:sum(rows,x=>x.status==='DANG_GIAO'?orderRevenue(x):0),
+    returnRevenue:sum(rows,x=>x.status==='HOAN'?orderRevenue(x):0),
+    cancelledRevenue:sum(rows,x=>x.status==='HUY'?orderRevenue(x):0),
     returnRate:rows.length?returns.length/rows.length:0,
     aov:rows.length?net/rows.length:0
   }
@@ -307,7 +316,7 @@ function openOrderDrill(type,value,title){
     <td data-label="Sale">${esc(o.salesStaff||'Chưa gán')}</td>
     <td data-label="Kênh">${esc(o.channel||'Khác')}</td>
     <td data-label="Trạng thái">${esc(statusLabels[o.status]||o.status||'—')}</td>
-    <td data-label="Sau CK">${money(o.netAmount??o.totalAmount)}</td>
+    <td data-label="Sau CK">${money(orderRevenue(o))}</td>
     <td data-label="Lý do hoàn">${o.status==='HOAN'?esc(returnReasonLabel(o)):'—'}</td>
   </tr>`).join('')||'<tr><td colspan="7">Không có đơn phù hợp bộ lọc.</td></tr>';
   $('orderDrillDialog').showModal()
@@ -329,7 +338,7 @@ function renderLiveAlerts(rows){
   if(adsData>0&&ads.length/adsData<.10)alerts.push({level:'bad',title:'CR Ads dưới 10%',text:`${numFmt(ads.length)} đơn / ${numFmt(adsData)} data = ${pct(ads.length/adsData)}.`});
 
   const todayOnly=$('from').value===vnDate()&&$('to').value===vnDate();
-  const liveRevenue=sum(rows.filter(o=>o.channel==='Livestream'),o=>o.netAmount??o.totalAmount);
+  const liveRevenue=sum(rows.filter(o=>o.channel==='Livestream'),orderRevenue);
   if(todayOnly&&liveRevenue<=0)alerts.push({level:'warn',title:'Livestream chưa có doanh số',text:'Chưa ghi nhận doanh số Live trong dữ liệu hôm nay.'});
 
   if(k.returnRate>.20)alerts.push({level:'bad',title:'Tỷ lệ hoàn trên 20%',text:`Hiện tại ${pct(k.returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn.`});
@@ -378,15 +387,15 @@ function renderFunnel(rows){
   $('funnelBoard').innerHTML=[
     `<div class="funnelStage"><strong>Data</strong><span>${data?numFmt(data):'Chưa nhập'}</span><b>${data?'CR '+pct(rows.length/data):'—'}</b></div>`,
     stage('Tạo đơn',rows,money(k.createdRevenue),'all',''),
-    stage('Treo',pending,money(sum(pending,o=>o.netAmount??o.totalAmount)),'status','TREO'),
-    stage('Đang giao',shipping,money(sum(shipping,o=>o.netAmount??o.totalAmount)),'status','DANG_GIAO'),
+    stage('Treo',pending,money(sum(pending,orderRevenue)),'status','TREO'),
+    stage('Đang giao',shipping,money(sum(shipping,orderRevenue)),'status','DANG_GIAO'),
     stage('Thành công',rows.filter(o=>successful(o)>0||o.status==='THANH_CONG'),money(k.successfulRevenue),'successful',''),
     stage('Hoàn',returns,money(k.returnRevenue),'status','HOAN')
   ].join('')
 }
 function renderReturnReasons(rows){
   const returns=rows.filter(o=>o.status==='HOAN'),g=group(returns,returnReasonLabel);
-  const list=Object.entries(g).map(([reason,r])=>({reason,rows:r,count:r.length,value:sum(r,o=>o.netAmount??o.totalAmount)})).sort((a,b)=>b.count-a.count||b.value-a.value);
+  const list=Object.entries(g).map(([reason,r])=>({reason,rows:r,count:r.length,value:sum(r,orderRevenue)})).sort((a,b)=>b.count-a.count||b.value-a.value);
   const missing=returns.filter(o=>returnReasonLabel(o)==='Chưa ghi lý do').length;
   $('returnReasonSummary').textContent=`${numFmt(returns.length)} đơn hoàn${missing?' · '+missing+' chưa có lý do':''}`;
   $('returnReasonList').innerHTML=list.length?list.map(x=>`<div class="returnReasonRow clickable" data-drill-type="returnReason" data-drill-value="${esc(x.reason)}" data-drill-title="Hoàn · ${esc(x.reason)}">
@@ -489,10 +498,10 @@ function drawLineChart(el,data,series,target=null){
   const step=Math.max(1,Math.ceil(data.length/7));data.forEach((p,i)=>{if(i%step===0||i===data.length-1)addSvg(svg,'text',{x:x(i),y:H-8,'text-anchor':'middle',class:'axisText'},p.label.length>5?p.label.slice(5):p.label)})
 }
 function renderStatus(rows){
-  const g=group(rows,o=>o.status||'TREO'),total=Math.max(1,sum(rows,x=>x.netAmount??x.totalAmount));
+  const g=group(rows,o=>o.status||'TREO'),total=Math.max(1,sum(rows,orderRevenue));
   const order=['TREO','DANG_GIAO','THANH_CONG','HOAN','HUY'];
   $('statusViz').innerHTML=order.map(s=>{
-    const rr=g[s]||[],v=sum(rr,x=>x.netAmount??x.totalAmount),share=v/total*100;
+    const rr=g[s]||[],v=sum(rr,orderRevenue),share=v/total*100;
     return `<div class="statusItem clickable" data-drill-type="status" data-drill-value="${s}" data-drill-title="${statusLabels[s]}"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`
   }).join('');
 
@@ -507,7 +516,7 @@ function renderStatus(rows){
   ];
   $('statusDetail').innerHTML=detailed.map(item=>{
     const rr=rows.filter(o=>item.codes.includes(Number(o.statusCode)));
-    const amount=sum(rr,o=>o.netAmount??o.totalAmount);
+    const amount=sum(rr,orderRevenue);
     return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="statusCodes" data-drill-value="${item.codes.join(',')}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
   }).join('');
 }
@@ -609,8 +618,8 @@ function quickReportStats(){
     totalData,
     adsData,
     adsCr:adsData?adsOrders/adsData:null,
-    adsRevenue:sum(adsRows,o=>o.netAmount??o.totalAmount),
-    liveRevenue:sum(liveRows,o=>o.netAmount??o.totalAmount)
+    adsRevenue:sum(adsRows,orderRevenue),
+    liveRevenue:sum(liveRows,orderRevenue)
   }
 }
 function quickReportText(s=quickReportStats()){
