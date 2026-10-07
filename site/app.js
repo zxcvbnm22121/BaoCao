@@ -50,22 +50,28 @@ async function fetchLiveStatic(password){
   if(!r.ok)throw new Error('Chưa có bản dữ liệu LIVE dự phòng');
   return decryptEnvelope(await r.json(),password)
 }
-async function fetchLiveDirect(password){
+async function callPancakeBackend(password,action='live',timeoutMs=55000){
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),55000);
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
     const r=await fetch(DIRECT_PANCAKE_API,{
       method:'POST',
       mode:'cors',
       cache:'no-store',
       headers:{'Content-Type':'application/json','X-Dashboard-Password':password},
-      body:JSON.stringify({}),
+      body:JSON.stringify({action}),
       signal:controller.signal
     });
     const body=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(body.error||('Backend Pancake '+r.status));
     return body
   }finally{clearTimeout(timer)}
+}
+async function fetchLiveDirect(password){
+  return callPancakeBackend(password,'live',55000)
+}
+async function fetchLiveOpen(password){
+  return callPancakeBackend(password,'open',12000)
 }
 async function fetchLive(password,{directOnly=false}={}){
   try{return await fetchLiveDirect(password)}
@@ -76,17 +82,9 @@ async function fetchLive(password,{directOnly=false}={}){
   }
 }
 async function openLiveFast(password){
-  // Open instantly from the encrypted snapshot. The same password protects
-  // the direct credential artifact, so a decrypt failure is a real auth failure.
-  try{return await fetchLiveStatic(password)}
-  catch(staticError){
-    // Only if the fallback snapshot itself is unavailable, try the direct
-    // backend as the recovery path.
-    if(/bản dữ liệu LIVE dự phòng|fetch|network|Failed to fetch/i.test(String(staticError?.message||staticError))){
-      return fetchLiveDirect(password)
-    }
-    throw staticError
-  }
+  // Login no longer decrypts in the browser. The backend authenticates the
+  // password and returns the latest snapshot immediately.
+  return fetchLiveOpen(password)
 }
 
 function applyPayload(p){
@@ -105,8 +103,9 @@ function setMode(mode){
   $('modePill').textContent=live?'LIVE':'CHƯA MỞ';
   $('modePill').classList.toggle('demo',!live);
   const direct=live&&meta.transport==='VERCEL_DIRECT';
-  $('sourceText').textContent=live?(direct?'PANCAKE · TRỰC TIẾP':'PANCAKE · DỰ PHÒNG'):'CHƯA MỞ LIVE';
-  $('sourceSub').textContent=live?(direct?'Backend cập nhật trực tiếp':'Bản mã hóa GitHub dự phòng'):'Không hiển thị số liệu giả';
+  const serverSnapshot=live&&meta.transport==='VERCEL_SNAPSHOT';
+  $('sourceText').textContent=live?(direct?'PANCAKE · TRỰC TIẾP':serverSnapshot?'PANCAKE · ĐANG CẬP NHẬT':'PANCAKE · DỰ PHÒNG'):'CHƯA MỞ LIVE';
+  $('sourceSub').textContent=live?(direct?'Backend cập nhật trực tiếp':serverSnapshot?'Đã mở dữ liệu, đang lấy bản mới':'Bản mã hóa GitHub dự phòng'):'Không hiển thị số liệu giả';
   updateDataFreshness();
 }
 function updateDataFreshness(){
