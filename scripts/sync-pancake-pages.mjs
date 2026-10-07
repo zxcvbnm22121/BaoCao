@@ -75,10 +75,15 @@ function normalize(raw){
   // Do not use || here: it incorrectly replaces 0 with COD or gross revenue.
   const afterDiscountRaw=get(raw,'total_price_after_sub_discount|buyer_total_amount');
   const afterDiscountField=afterDiscountRaw===undefined?null:num(afterDiscountRaw);
-  const codAmount=num(get(raw,'cod|cod_amount|money_to_collect|total_cod'));
-  const prepaidAmount=num(get(raw,'prepaid|prepaid_amount'));
-  const derivedPaid=codAmount+prepaidAmount;
-  const netAmount=afterDiscountField!==null?afterDiscountField:(derivedPaid||grossAmount);
+  const codRaw=get(raw,'cod|cod_amount|money_to_collect|total_cod');
+  const prepaidRaw=get(raw,'prepaid|prepaid_amount');
+  const codAmount=codRaw===undefined?0:num(codRaw);
+  const prepaidAmount=prepaidRaw===undefined?0:num(prepaidRaw);
+  const hasPancakePaymentTotal=codRaw!==undefined||prepaidRaw!==undefined;
+  // Pancake reconciliation rule agreed with the dashboard:
+  // "Tổng tiền sau CK" = COD + Trả trước. Only fall back when those
+  // Pancake amount fields are genuinely absent from the API payload.
+  const netAmount=hasPancakePaymentTotal?(codAmount+prepaidAmount):(afterDiscountField!==null?afterDiscountField:grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
 
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
