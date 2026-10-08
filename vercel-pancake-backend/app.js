@@ -884,7 +884,9 @@ function renderProducts(){
   renderProductBreakdowns(rows)
 }
 function renderPages(rows){
-  const relevant=rows.filter(isPageRelevantOrder);
+  const relevant=rows.filter(isPageRevenueOrder);
+  const liveExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isLiveSourceOrder(o)).length;
+  const exchangeExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isExchangeSourceOrder(o)).length;
   const grouped=new Map();
   for(const o of relevant){
     const key=pageGroupKey(o);
@@ -918,10 +920,12 @@ function renderPages(rows){
 
   const note=$('pageDataNote'),notes=[];
   if(unidentifiedRows.length){
-    notes.push(`${numFmt(unidentifiedRows.length)} đơn Facebook/Live chưa có pageName/pageId từ Pancake; đang gom vào “Chưa xác định Page”.`)
+    notes.push(`${numFmt(unidentifiedRows.length)} đơn chưa xác định được Page; đang gom riêng vào “Chưa xác định Page”.`)
   }
+  if(liveExcluded)notes.push(`Đã loại ${numFmt(liveExcluded)} đơn nguồn Live/Livestream khỏi doanh thu Page.`);
+  if(exchangeExcluded)notes.push(`Đã loại ${numFmt(exchangeExcluded)} đơn đổi khỏi doanh thu Page.`);
   if(!relevant.length){
-    notes.push('Không có đơn Facebook Ads/Livestream hoặc thông tin Page trong khoảng lọc hiện tại.')
+    notes.push('Không có đơn Page hợp lệ sau khi loại Đơn đổi và nguồn Live/Livestream.')
   }
   note.style.display=notes.length?'block':'none';
   note.textContent=notes.join(' ');
