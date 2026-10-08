@@ -192,6 +192,9 @@ function productLine(rawItem){
   if(!quantity)return null;
 
   const explicitCandidates=[
+    get(rawItem,'variation_info.product_display_id'),
+    get(rawItem,'variation.product_display_id'),
+    get(rawItem,'product_display_id'),
     get(rawItem,'product_code'),
     get(rawItem,'product.code'),
     get(rawItem,'product.display_id'),
@@ -200,11 +203,13 @@ function productLine(rawItem){
     get(rawItem,'variation_info.product_code')
   ];
   const variantCandidates=[
+    get(rawItem,'variation_info.display_id'),
+    get(rawItem,'variation_info.barcode'),
+    get(rawItem,'variation.display_id'),
+    get(rawItem,'variation.barcode'),
     get(rawItem,'sku'),
     get(rawItem,'variation.sku'),
     get(rawItem,'variation_info.sku'),
-    get(rawItem,'variation.display_id'),
-    get(rawItem,'variation_info.display_id'),
     get(rawItem,'code')
   ];
   const nameCandidates=[
@@ -218,7 +223,11 @@ function productLine(rawItem){
   ];
 
   let productCode='';
-  for(const v of explicitCandidates){productCode=sevenParentCode(v);if(productCode)break}
+  const authoritativeProductCode=str(explicitCandidates[0]||explicitCandidates[1]||explicitCandidates[2]||'','').trim().toUpperCase();
+  if(authoritativeProductCode)productCode=authoritativeProductCode;
+  if(!productCode){
+    for(const v of explicitCandidates.slice(3)){productCode=sevenParentCode(v);if(productCode)break}
+  }
   let sku='';
   for(const v of variantCandidates){if(str(v,'').trim()){sku=str(v,'').trim();break}}
   if(!productCode)productCode=sevenParentCode(sku);
