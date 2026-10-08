@@ -750,6 +750,93 @@ function aggregateProducts(rows){
   })).sort((a,b)=>b.soldQty-a.soldQty||b.netQty-a.netQty||b.orders-a.orders||a.code.localeCompare(b.code,'vi'));
   return{products,ordersWithItems,ordersMissingItems,partialUnknown,totalLines}
 }
+
+function productGroupCard(title,subtitle,agg){
+  const list=(agg?.products||[]).slice(0,5);
+  const sold=sum(list,x=>x.soldQty);
+  const allSold=sum(agg?.products||[],x=>x.soldQty);
+  return `<article class="productGroupCard">
+    <div class="productGroupCardHead">
+      <div><h4>${esc(title)}</h4><p>${esc(subtitle||'')}</p></div>
+      <span>${numFmt(allSold)} SP</span>
+    </div>
+    <div class="productGroupList">
+      ${list.map((p,i)=>`<div class="productGroupRow">
+        <div class="productGroupRank">#${i+1}</div>
+        ${productThumb(p.imageUrl,p.code)}
+        <div class="productGroupInfo">
+          <strong>${esc(p.code||'Chưa có mã')}</strong>
+          <span>${esc(p.name||'—')}</span>
+        </div>
+        <div class="productGroupMetrics">
+          <b>${numFmt(p.soldQty)}</b>
+          <small>Bán</small>
+        </div>
+        <div class="productGroupMetrics">
+          <b>${numFmt(p.netQty)}</b>
+          <small>Thực</small>
+        </div>
+        <div class="productGroupMetrics ${p.returnRate>.20?'bad':''}">
+          <b>${pct(p.returnRate)}</b>
+          <small>Hoàn</small>
+        </div>
+      </div>`).join('')||'<div class="productGroupEmpty">Không có dữ liệu sản phẩm</div>'}
+    </div>
+  </article>`
+}
+
+function renderProductBreakdowns(rows){
+  const channelHost=$('channelProductGroups');
+  const pageHost=$('pageProductGroups');
+  const pageNote=$('pageProductNote');
+  if(!channelHost||!pageHost||!pageNote)return;
+
+  const channelGroups=Object.entries(group(rows,o=>o.channel||'Khác'))
+    .map(([name,r])=>{
+      const agg=aggregateProducts(r);
+      return {name,rows:r,agg,sold:sum(agg.products,x=>x.soldQty)}
+    })
+    .filter(x=>x.sold>0)
+    .sort((a,b)=>b.sold-a.sold||a.name.localeCompare(b.name,'vi'));
+
+  channelHost.innerHTML=channelGroups.map(x=>productGroupCard(
+    x.name,
+    ${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    x.agg
+  )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo kênh trong kỳ lọc.</div>';
+
+  const relevant=rows.filter(isPageRelevantOrder);
+  const pageMap=new Map();
+  for(const o of relevant){
+    const key=pageGroupKey(o);
+    let x=pageMap.get(key);
+    if(!x){
+      x={key,name:pageLabel(o),pageId:String(o.pageId||'').trim(),rows:[]};
+      pageMap.set(key,x)
+    }
+    x.rows.push(o)
+  }
+
+  const pageGroups=[...pageMap.values()]
+    .map(x=>{
+      const agg=aggregateProducts(x.rows);
+      return {...x,agg,sold:sum(agg.products,p=>p.soldQty)}
+    })
+    .filter(x=>x.sold>0)
+    .sort((a,b)=>b.sold-a.sold||a.name.localeCompare(b.name,'vi'));
+
+  pageHost.innerHTML=pageGroups.map(x=>productGroupCard(
+    x.name,
+    ${x.pageId?'ID '+x.pageId+' · ':''}${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    x.agg
+  )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo Page trong kỳ lọc.</div>';
+
+  const unidentified=pageGroups.find(x=>x.name==='Chưa xác định Page');
+  pageNote.style.display=unidentified?'block':'none';
+  pageNote.textContent=unidentified
+    ? §Có ${numFmt(unidentified.rows.length)} đơn Facebook/Live chưa có pageName/pageId; sản phẩm đang được gom riêng vào “Chưa xác định Page”.`
+    :'';
+}
 function renderProducts(){
   const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
   if(!kpis||!tbody||!summary||!note)return;
@@ -782,7 +869,8 @@ function renderProducts(){
     <td data-label="SL bán thực">${numFmt(p.netQty)}</td>
     <td data-label="Tỷ lệ hoàn" class="${p.returnRate>.20?'bad':p.returnRate>.10?'warnText':''}">${pct(p.returnRate)}</td>
     <td data-label="Số đơn">${numFmt(p.orders)}</td>
-  </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
+  </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>';
+  renderProductBreakdowns(rows)
 }
 function renderPages(rows){
   const relevant=rows.filter(isPageRelevantOrder);
