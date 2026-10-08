@@ -427,6 +427,15 @@ console.log('MONTH_RECONCILIATION:',JSON.stringify({
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const reportOrders=orders.filter(o=>!o.excludedFromDefaultReport);
+const pageRelevant=reportOrders.filter(o=>o.channel==='Facebook Ads'||o.channel==='Livestream'||o.pageName||o.pageUsername||o.pageId);
+const pageIdentified=pageRelevant.filter(o=>o.pageName||o.pageUsername||o.pageId);
+const pageCoverage={
+  relevantOrders:pageRelevant.length,
+  identifiedOrders:pageIdentified.length,
+  unidentifiedOrders:pageRelevant.length-pageIdentified.length,
+  distinctPages:new Set(pageIdentified.map(o=>String(o.pageId||o.pageName||o.pageUsername).trim().toLowerCase()).filter(Boolean)).size
+};
+console.log('PAGE_COVERAGE:',JSON.stringify(pageCoverage));
 const dayReconciliation={};
 const channelReconciliation={};
 const staffReconciliation={};
@@ -455,7 +464,7 @@ const moneyMismatchDays=Object.entries(dayReconciliation)
   .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
 if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
 console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
-const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
+const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   apiKey:API_KEY,
