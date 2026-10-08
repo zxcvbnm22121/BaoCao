@@ -324,29 +324,33 @@ function rawOrderKey(raw,index=0){
 async function fetchOrders(from,to){
   const rawMap=new Map();
   const maxPages=200;
+  const batchSize=4;
 
-  // The POS list changes as orders are added/edited. A second complete scan
-  // closes page-boundary gaps that arise when a new order shifts pagination.
+  // Read in small parallel batches. This keeps the fallback snapshot fast
+  // enough for scheduled Pages deploys while two passes still close the
+  // moving-page gap caused by new/edited Pancake orders.
   for(let pass=1;pass<=2;pass++){
     let completed=false;
-    for(let page=1;page<=maxPages;page++){
-      const res=await fetchOrderPage(from,to,page);
-      const data=res.data;
-      const bounds=pageDateBounds(data);
+    for(let startPage=1;startPage<=maxPages;startPage+=batchSize){
+      const pages=Array.from({length:batchSize},(_,i)=>startPage+i).filter(p=>p<=maxPages);
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
+      for(let i=0;i<results.length;i++){
+        const page=pages[i],res=results[i],data=res.data;
+        const bounds=pageDateBounds(data);
+        data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
+        console.log(`Orders pass ${pass} page ${page}: ${data.length} rows${page===1&&res.totalPages?' / '+res.totalPages+' pages':''} · ${bounds.min||'?'} → ${bounds.max||'?'}`);
 
-      data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
-      console.log(`Orders pass ${pass} page ${page}: ${data.length} rows${page===1&&res.totalPages?' / '+res.totalPages+' pages':''} · ${bounds.min||'?'} → ${bounds.max||'?'}`);
-
-      if(!data.length){completed=true;break;}
-      // This endpoint can ignore from/to. Only stop after a complete page
-      // lies before the beginning of the requested date range.
-      if(bounds.max&&bounds.max<from){completed=true;break;}
-      if(res.totalPages&&page>=res.totalPages){completed=true;break;}
+        if(!data.length || (bounds.max&&bounds.max<from) || (res.totalPages&&page>=res.totalPages)){
+          completed=true;
+          break;
+        }
+      }
+      if(completed)break;
     }
     if(!completed)throw new Error('Pancake pagination limit reached before the date range was fully read');
   }
 
-  // Capture the first page again immediately before publishing the snapshot.
+  // Capture the newest page immediately before publishing the snapshot.
   const latest=await fetchOrderPage(from,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
