@@ -323,6 +323,17 @@ function isPageRelevantOrder(o){
     || o?.channel==='Facebook Ads'
     || o?.channel==='Livestream'
 }
+function isLiveSourceOrder(o){
+  const source=String(o?.sourceName||'').trim();
+  return o?.channel==='Livestream'||/\blive(?:stream)?\b/i.test(source)
+}
+function isExchangeSourceOrder(o){
+  const source=String(o?.sourceName||'').trim();
+  return Boolean(o?.excludedExchangeSource)||/^\s*(đơn|don)\s+đổi\b/i.test(source)
+}
+function isPageRevenueOrder(o){
+  return isPageRelevantOrder(o)&&!isExchangeSourceOrder(o)&&!isLiveSourceOrder(o)
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 const KPI_CHANNELS=[
