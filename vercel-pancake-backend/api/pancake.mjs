@@ -421,13 +421,21 @@ function buildPayload(orders,from,to){
     unidentifiedOrders:pageRelevant.length-pageIdentified.length,
     distinctPages:new Set(pageIdentified.map(o=>String(o.pageId||o.pageName||o.pageUsername).trim().toLowerCase()).filter(Boolean)).size
   };
+  const productLines=reportOrders.flatMap(o=>Array.isArray(o.products)?o.products:[]);
+  const codedProductLines=productLines.filter(x=>String(x.productCode||x.displayCode||'').trim());
+  const productCoverage={
+    lineItems:productLines.length,
+    codedLineItems:codedProductLines.length,
+    missingCodeLineItems:productLines.length-codedProductLines.length,
+    distinctCodes:new Set(codedProductLines.map(x=>String(x.productCode||x.displayCode).trim().toUpperCase())).size
+  };
   const dayReconciliation={};
   for(const o of reportOrders){
     const d=dayReconciliation[o.createdDate]??={orders:0,net:0,cod:0,prepaid:0,gross:0};
     d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
   }
   return {
-    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage},
+    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},
     monthlyTarget:MONTHLY_TARGET,
     channelTargets:CHANNEL_TARGETS,
     orders
