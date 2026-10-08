@@ -800,7 +800,7 @@ function renderPages(rows){
 
   const identified=stats.filter(x=>x.name!=='Chưa xác định Page');
   const unidentifiedRows=relevant.filter(o=>pageLabel(o)==='Chưa xác định Page');
-  const baseRows=identified.length?identified.flatMap(x=>x.rows):relevant;
+  const baseRows=relevant;
   const totals=overview(baseRows);
   const total=totals.createdRevenue;
   const top=identified[0]||stats[0]||null;
