@@ -451,3 +451,25 @@ tr.clickable:hover td{background:#fbf7f3}
   .productTable tbody tr td[data-label="Ảnh"]{justify-content:flex-end}
   .productThumb{width:72px;height:88px;margin:0}
 }
+
+/* Page revenue performance */
+.pageChartGrid{margin-bottom:8px}
+.pageDataNote{display:none;margin:0 10px 9px;padding:9px 11px;border-radius:9px;background:#fff4e4;border:1px solid #efd7ae;color:#80591d;font-size:9px;line-height:1.45}
+.pageTable td:nth-child(1),.pageTable th:nth-child(1){text-align:center;width:38px}
+.pageTable td:nth-child(2),.pageTable th:nth-child(2){text-align:left;min-width:180px}
+.pageTable td:nth-child(3),.pageTable th:nth-child(3){text-align:left;min-width:110px}
+.pageTable td:nth-child(2) strong{font-size:10px}
+#view-pages .miniKpiGrid{grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:8px}
+#view-pages .miniKpi{min-width:0}
+#view-pages .miniKpi b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:720px){
+  .mobileBottomNav{grid-template-columns:repeat(6,1fr)}
+  .mobileNavBtn{min-width:0;padding-left:2px;padding-right:2px}
+  .mobileNavBtn b{font-size:9px}
+  .mobileNavBtn span{font-size:18px}
+  #view-pages .miniKpiGrid{grid-template-columns:1fr 1fr}
+  #view-pages .miniKpiGrid .miniKpi:nth-child(5){grid-column:1/-1}
+  .pageDataNote{font-size:11px;margin:0 0 9px;padding:10px 12px}
+  .pageTablePanel .scroll{overflow:visible}
+}
