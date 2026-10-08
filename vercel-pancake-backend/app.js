@@ -767,6 +767,8 @@ function renderProducts(){
   const messages=[];
   if(!agg.ordersWithItems&&rows.length)messages.push('Dữ liệu đơn trong kỳ chưa có line-item sản phẩm từ Pancake.');
   else if(agg.ordersMissingItems)messages.push(`${numFmt(agg.ordersMissingItems)} đơn chưa có chi tiết sản phẩm.`);
+  const missingCodeLines=list.filter(p=>!p.code).reduce((n,p)=>n+p.soldQty,0);
+  if(missingCodeLines)messages.push(`${numFmt(missingCodeLines)} sản phẩm chưa có mã cha từ Pancake — kiểm tra schema product_display_id.`);
   if(agg.partialUnknown)messages.push(`${numFmt(agg.partialUnknown)} đơn hoàn một phần chưa có SKU hoàn chi tiết — không tự gán hoàn cho toàn bộ sản phẩm.`);
   note.textContent=messages.join(' ');
   note.style.display=messages.length?'block':'none';
