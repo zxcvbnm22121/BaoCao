@@ -150,10 +150,10 @@ function sevenParentCode(value){
   const raw=str(value,'').trim().toUpperCase();
   if(!raw)return'';
   const compact=raw.replace(/\s+/g,'');
-  let m=compact.match(/^([A-Z]\d{6}[A-Z])[1-5]$/);
+  let m=compact.match(/^([A-Z]\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])$/);
   if(m)return m[1];
-  if(/^[A-Z]\d{6}[A-Z]$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
-  m=raw.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z])[1-5]?(?=$|[^A-Z0-9])/);
+  if(/^[A-Z]\d{6}[A-Z]{1,3}$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
+  m=raw.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])?(?=$|[^A-Z0-9])/);
   if(m)return m[1];
   m=raw.match(/(?:^|[^A-Z0-9])([A-Z]\d{6})(?=$|[^A-Z0-9])/);
   return m?m[1]:''
