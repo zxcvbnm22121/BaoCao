@@ -445,6 +445,15 @@ const pageCoverage={
   distinctPages:new Set(pageIdentified.map(o=>String(o.pageId||o.pageName||o.pageUsername).trim().toLowerCase()).filter(Boolean)).size
 };
 console.log('PAGE_COVERAGE:',JSON.stringify(pageCoverage));
+const productLines=reportOrders.flatMap(o=>Array.isArray(o.products)?o.products:[]);
+const codedProductLines=productLines.filter(x=>String(x.productCode||x.displayCode||'').trim());
+const productCoverage={
+  lineItems:productLines.length,
+  codedLineItems:codedProductLines.length,
+  missingCodeLineItems:productLines.length-codedProductLines.length,
+  distinctCodes:new Set(codedProductLines.map(x=>String(x.productCode||x.displayCode).trim().toUpperCase())).size
+};
+console.log('PRODUCT_CODE_COVERAGE:',JSON.stringify(productCoverage));
 const dayReconciliation={};
 const channelReconciliation={};
 const staffReconciliation={};
@@ -473,7 +482,7 @@ const moneyMismatchDays=Object.entries(dayReconciliation)
   .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
 if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
 console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
-const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
+const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   apiKey:API_KEY,
@@ -481,5 +490,5 @@ await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   issuedAt:new Date().toISOString(),
   purpose:'PANCAKE_DIRECT_BACKEND'
 },PASSWORD)));
-await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length,pageCoverage},null,2));
+await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length,pageCoverage,productCoverage},null,2));
 console.log(`Synced ${orders.length} normalized orders; encrypted artifact written.`);
