@@ -44,9 +44,12 @@ async function decryptEnvelope(env,password){
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv,tagLength:128},key,data);
   return JSON.parse(new TextDecoder().decode(plain))
 }
-const DIRECT_PANCAKE_API='https://sevenam-pancake-live.vercel.app/api/pancake';
+const DIRECT_PANCAKE_API=location.hostname.endsWith('.vercel.app')
+  ? '/api/pancake'
+  : 'https://sevenam-pancake-live.vercel.app/api/pancake';
+const STATIC_PANCAKE_SNAPSHOT='https://zxcvbnm22121.github.io/BaoCao/data/live.enc';
 async function fetchLiveStatic(password){
-  const r=await fetch('./data/live.enc?ts='+Date.now(),{cache:'no-store'});
+  const r=await fetch(STATIC_PANCAKE_SNAPSHOT+'?ts='+Date.now(),{cache:'no-store'});
   if(!r.ok)throw new Error('Chưa có bản dữ liệu LIVE dự phòng');
   return decryptEnvelope(await r.json(),password)
 }
