@@ -473,3 +473,48 @@ tr.clickable:hover td{background:#fbf7f3}
   .pageDataNote{font-size:11px;margin:0 0 9px;padding:10px 12px}
   .pageTablePanel .scroll{overflow:visible}
 }
+
+/* Product breakdown by channel and Page */
+.productBreakdownSection{margin-top:14px}
+.productBreakdownHead{display:flex;align-items:end;justify-content:space-between;margin-bottom:9px}
+.productBreakdownHead h3{margin:3px 0 2px;font-size:17px;letter-spacing:-.02em}
+.productBreakdownHead p{margin:0;color:var(--muted);font-size:9px}
+.productGroupGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.productGroupCard{background:#fff;border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);overflow:hidden}
+.productGroupCardHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px 13px;border-bottom:1px solid #eee8e1;background:linear-gradient(180deg,#fff,#fcfaf8)}
+.productGroupCardHead h4{margin:0;font-size:13px;color:var(--ink)}
+.productGroupCardHead p{margin:3px 0 0;color:var(--muted);font-size:8px;line-height:1.35}
+.productGroupCardHead>span{flex:none;border-radius:999px;background:#f3eee9;padding:6px 8px;font-size:8px;font-weight:900;color:#6e665f}
+.productGroupList{display:grid}
+.productGroupRow{display:grid;grid-template-columns:28px 42px minmax(0,1fr) 46px 46px 55px;gap:7px;align-items:center;padding:8px 10px;border-bottom:1px solid #f0ebe6}
+.productGroupRow:last-child{border-bottom:0}
+.productGroupRank{font-size:9px;font-weight:900;color:var(--red);text-align:center}
+.productGroupRow .productThumb{width:36px;height:46px;margin:0}
+.productGroupInfo{min-width:0;display:grid;gap:2px}
+.productGroupInfo strong{font-size:10px;color:var(--ink)}
+.productGroupInfo span{font-size:8px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.productGroupMetrics{display:grid;gap:1px;text-align:right}
+.productGroupMetrics b{font-size:10px;color:var(--ink)}
+.productGroupMetrics small{font-size:7px;color:var(--muted);text-transform:uppercase}
+.productGroupMetrics.bad b{color:var(--red)}
+.productGroupEmpty,.productBreakdownEmpty{padding:18px;text-align:center;color:var(--muted);font-size:10px;background:#fff;border:1px dashed var(--line);border-radius:12px}
+
+@media(max-width:900px){
+  .productGroupGrid{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  .productBreakdownSection{margin-top:18px}
+  .productBreakdownHead h3{font-size:18px}
+  .productBreakdownHead p{font-size:11px;line-height:1.4}
+  .productGroupGrid{grid-template-columns:1fr;gap:10px}
+  .productGroupCardHead{padding:13px}
+  .productGroupCardHead h4{font-size:15px}
+  .productGroupCardHead p{font-size:10px}
+  .productGroupCardHead>span{font-size:10px}
+  .productGroupRow{grid-template-columns:26px 52px minmax(0,1fr) 42px 42px 50px;gap:6px;padding:10px 8px}
+  .productGroupRow .productThumb{width:46px;height:58px}
+  .productGroupInfo strong{font-size:12px}
+  .productGroupInfo span{font-size:10px}
+  .productGroupMetrics b{font-size:11px}
+  .productGroupMetrics small{font-size:8px}
+}
