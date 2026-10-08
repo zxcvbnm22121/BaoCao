@@ -782,6 +782,69 @@ function renderProducts(){
     <td data-label="Số đơn">${numFmt(p.orders)}</td>
   </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
 }
+function renderPages(rows){
+  const relevant=rows.filter(isPageRelevantOrder);
+  const grouped=new Map();
+  for(const o of relevant){
+    const key=pageGroupKey(o);
+    let item=grouped.get(key);
+    if(!item){
+      item={key,name:pageLabel(o),pageId:String(o.pageId||'').trim(),rows:[]};
+      grouped.set(key,item)
+    }
+    item.rows.push(o)
+  }
+
+  const stats=[...grouped.values()].map(x=>({...x,...overview(x.rows)}))
+    .sort((a,b)=>b.createdRevenue-a.createdRevenue||b.orders-a.orders||a.name.localeCompare(b.name,'vi'));
+
+  const identified=stats.filter(x=>x.name!=='Chưa xác định Page');
+  const unidentifiedRows=relevant.filter(o=>pageLabel(o)==='Chưa xác định Page');
+  const baseRows=identified.length?identified.flatMap(x=>x.rows):relevant;
+  const totals=overview(baseRows);
+  const total=totals.createdRevenue;
+  const top=identified[0]||stats[0]||null;
+
+  $('pageKpis').innerHTML=[
+    mini('Số Page',numFmt(identified.length)),
+    mini('Doanh thu Page',money(total)),
+    mini('Thành công',money(totals.successfulRevenue)),
+    mini('Top Page',top?esc(top.name):'—'),
+    mini('Đơn chưa rõ Page',numFmt(unidentifiedRows.length))
+  ].join('');
+
+  $('pageSummary').textContent=`${numFmt(identified.length)} Page · ${money(total)}`;
+
+  const note=$('pageDataNote'),notes=[];
+  if(unidentifiedRows.length){
+    notes.push(`${numFmt(unidentifiedRows.length)} đơn Facebook/Live chưa có pageName/pageId từ Pancake; đang gom vào “Chưa xác định Page”.`)
+  }
+  if(!relevant.length){
+    notes.push('Không có đơn Facebook Ads/Livestream hoặc thông tin Page trong khoảng lọc hiện tại.')
+  }
+  note.style.display=notes.length?'block':'none';
+  note.textContent=notes.join(' ');
+
+  const chartStats=identified.slice(0,12);
+  drawGroupedBars($('pageRevenueChart'),chartStats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
+  drawSingleBars($('pageShareChart'),chartStats.map(x=>({label:x.name,value:total?x.createdRevenue/total*100:0})),{percentMode:true});
+
+  $('pageRows').innerHTML=stats.map((x,i)=>`<tr class="clickable" data-drill-type="page" data-drill-value="${esc(x.key)}" data-drill-title="Page · ${esc(x.name)}">
+    <td data-label="#">${i+1}</td>
+    <td data-label="Page"><strong>${esc(x.name)}</strong></td>
+    <td data-label="Page ID">${esc(x.pageId||'—')}</td>
+    <td data-label="Tạo đơn">${money(x.createdRevenue)}</td>
+    <td data-label="Thành công">${money(x.successfulRevenue)}</td>
+    <td data-label="Số đơn">${numFmt(x.orders)}</td>
+    <td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td>
+    <td data-label="Treo">${compact(x.pendingRevenue)}</td>
+    <td data-label="Đang giao">${compact(x.shippingRevenue)}</td>
+    <td data-label="Hoàn">${compact(x.returnRevenue)}</td>
+    <td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td>
+    <td data-label="AOV">${compact(x.aov)}</td>
+    <td data-label="Tỷ trọng">${pct(total?x.createdRevenue/total:0)}</td>
+  </tr>`).join('')||'<tr><td colspan="13">Không có dữ liệu Page trong khoảng lọc.</td></tr>'
+}
 function renderChannels(rows){
   const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
   $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr class="clickable" data-drill-type="channel" data-drill-value="${esc(x.name)}" data-drill-title="Kênh · ${esc(x.name)}"><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
