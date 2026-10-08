@@ -291,6 +291,9 @@ function normalize(raw){
   const netAmount=hasPancakePaymentTotal?(codAmount+prepaidAmount):(afterDiscountField!==null?afterDiscountField:grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
+  const pageName=str(get(raw,'page.name|page_name|fanpage_name|facebook_page_name|page_info.name|conversation.page.name'),'').trim();
+  const pageUsername=str(get(raw,'page.username|page_username|fanpage_username|page_info.username|conversation.page.username'),'').trim();
+  const pageId=str(get(raw,'page_id|page.id|facebook_page_id|fb_page_id|page_info.id|conversation.page.id'),'').trim();
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
   const dt=parsePancakeDate(get(raw,'inserted_at|created_at|creation_time'));
   const partial=statusCode===15||/part_returned|partial/i.test(statusName)||Boolean(get(raw,'is_partial_return|partial_return'));
@@ -308,7 +311,7 @@ function normalize(raw){
     createdDate:dateKey(dt),
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
     channel:mapChannel(get(raw,'order_sources_name|order_sources|ads_source|p_utm_source|page.name'),source,raw),
-    sourceName,status,statusCode,statusName,
+    sourceName,pageName,pageUsername,pageId,status,statusCode,statusName,
     returnedReasonName:str(get(raw,'returned_reason_name|return_reason_name|refund_reason_name|returned_reason'),'').trim(),
     returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
     products,partialReturnProductDetailMissing,
