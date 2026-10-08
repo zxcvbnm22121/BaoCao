@@ -472,5 +472,5 @@ await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   issuedAt:new Date().toISOString(),
   purpose:'PANCAKE_DIRECT_BACKEND'
 },PASSWORD)));
-await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length},null,2));
+await fs.writeFile(STATUS,JSON.stringify({mode:'LIVE',updatedAt:payload.meta.lastUpdated,count:orders.length,pageCoverage},null,2));
 console.log(`Synced ${orders.length} normalized orders; encrypted artifact written.`);
