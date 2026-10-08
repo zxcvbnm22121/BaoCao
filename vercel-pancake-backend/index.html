@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111111" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=product-code-schema-fix-20261008-1" />
+  <link rel="stylesheet" href="./styles.css?v=product-breakdown-20261008-1" />
 </head>
 <body>
   <aside class="sidebar">
@@ -255,6 +255,29 @@
           </table>
         </div>
       </article>
+
+      <section class="productBreakdownSection">
+        <div class="productBreakdownHead">
+          <div>
+            <span class="sectionEyebrow">CHANNEL PRODUCT RANKING</span>
+            <h3>Top sản phẩm theo từng Kênh</h3>
+            <p>Top 5 mã bán nhiều nhất trong từng kênh theo kỳ sản phẩm đang chọn</p>
+          </div>
+        </div>
+        <div class="productGroupGrid" id="channelProductGroups"></div>
+      </section>
+
+      <section class="productBreakdownSection">
+        <div class="productBreakdownHead">
+          <div>
+            <span class="sectionEyebrow">PAGE PRODUCT RANKING</span>
+            <h3>Top sản phẩm theo từng Page</h3>
+            <p>Top 5 mã bán nhiều nhất của từng Page · giữ nguyên logic mã cha và hoàn hàng</p>
+          </div>
+        </div>
+        <div class="productDataNote" id="pageProductNote"></div>
+        <div class="productGroupGrid" id="pageProductGroups"></div>
+      </section>
     </section>
 
     <section id="view-sales" class="view">
@@ -402,6 +425,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=product-code-schema-fix-20261008-1"></script>
+  <script src="./app.js?v=product-breakdown-20261008-1"></script>
 </body>
 </html>
