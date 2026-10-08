@@ -56,9 +56,16 @@ async function loadSnapshot(password){
 }
 
 async function loadCredentials(password){
-  // Authentication always uses the encrypted credential artifact. Even when
-  // Vercel happens to expose an API key env var, it must never bypass the
-  // dashboard password.
+  // Prefer Vercel's own protected environment when fully configured.
+  // This removes the runtime dependency on GitHub Pages while still requiring
+  // the dashboard password. The encrypted Pages credential remains fallback.
+  if(DASHBOARD_PASSWORD&&API_KEY){
+    if(!secureEqual(password,DASHBOARD_PASSWORD)){
+      throw Object.assign(new Error('Sai mật khẩu dashboard'),{auth:true});
+    }
+    return {apiKey:String(API_KEY),shopId:String(SHOP_ID||'')};
+  }
+
   let env=credentialArtifactCache.env;
   if(!env||Date.now()-credentialArtifactCache.at>=300000){
     const r=await fetch(KEY_ARTIFACT+'?ts='+Date.now(),{
@@ -441,9 +448,24 @@ export default async function handler(req,res){
 
     const action=String(req.body?.action||'live');
     if(action==='open'){
-      // Fast login path: authenticate and return the latest encrypted snapshot.
-      // Do not wait for a full Pancake pagination scan.
-      return res.status(200).json(await loadSnapshot(supplied));
+      // Fast path: use the encrypted snapshot when available. If Pages is
+      // unavailable or its encrypted snapshot is stale/incompatible, fall back
+      // to a direct month-to-date Pancake read instead of failing login.
+      try{
+        return res.status(200).json(await loadSnapshot(supplied));
+      }catch(snapshotError){
+        console.warn('Snapshot open failed; falling back to Pancake direct:',snapshotError?.message||snapshotError);
+        await discoverShopId();
+        const to=dateKey(),from=to.slice(0,7)+'-01';
+        const cacheKey='open-direct|'+from+'|'+to;
+        const now=Date.now();
+        const hit=responseCache.get(cacheKey);
+        if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+        const orders=await fetchOrders(from,to);
+        const payload=buildPayload(orders,from,to);
+        responseCache.set(cacheKey,{at:now,payload});
+        return res.status(200).json(payload);
+      }
     }
 
     await discoverShopId();
