@@ -304,6 +304,25 @@ function overview(rows){
   }
 }
 function group(rows,key){const m={};for(const r of rows)(m[key(r)]??=[]).push(r);return m}
+function pageLabel(o){
+  const name=String(o?.pageName||'').trim();
+  const username=String(o?.pageUsername||'').trim();
+  const id=String(o?.pageId||'').trim();
+  if(name)return name;
+  if(username)return username.replace(/^@/,'');
+  if(id)return 'Page '+id;
+  return 'Chưa xác định Page'
+}
+function pageGroupKey(o){
+  const id=String(o?.pageId||'').trim();
+  if(id)return 'id:'+id;
+  return 'name:'+pageLabel(o).toLowerCase()
+}
+function isPageRelevantOrder(o){
+  return Boolean(String(o?.pageName||o?.pageUsername||o?.pageId||'').trim())
+    || o?.channel==='Facebook Ads'
+    || o?.channel==='Livestream'
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 const KPI_CHANNELS=[
@@ -362,6 +381,7 @@ function drillRows(type,value){
   else if(type==='statusCodes'){const codes=String(value).split(',').map(Number);rows=rows.filter(o=>codes.includes(Number(o.statusCode)))}
   else if(type==='successful')rows=rows.filter(o=>successful(o)>0||o.status==='THANH_CONG');
   else if(type==='channel')rows=rows.filter(o=>o.channel===value);
+  else if(type==='page')rows=rows.filter(o=>pageGroupKey(o)===value);
   else if(type==='staff')rows=rows.filter(o=>(o.salesStaff||'Chưa gán')===value);
   else if(type==='returnReason')rows=rows.filter(o=>o.status==='HOAN'&&returnReasonLabel(o)===value);
   return rows
@@ -387,10 +407,11 @@ function openOrderDrill(type,value,title){
     <td data-label="Ngày giờ">${esc(formatOrderTime(o))}</td>
     <td data-label="Sale">${esc(o.salesStaff||'Chưa gán')}</td>
     <td data-label="Kênh">${esc(o.channel||'Khác')}</td>
+    <td data-label="Page">${esc(pageLabel(o))}</td>
     <td data-label="Trạng thái">${esc(statusLabels[o.status]||o.status||'—')}</td>
     <td data-label="Sau CK">${money(orderRevenue(o))}</td>
     <td data-label="Lý do hoàn">${o.status==='HOAN'?esc(returnReasonLabel(o)):'—'}</td>
-  </tr>`).join('')||'<tr><td colspan="7">Không có đơn phù hợp bộ lọc.</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="8">Không có đơn phù hợp bộ lọc.</td></tr>';
   $('orderDrillDialog').showModal()
 }
 function bindDrilldowns(){
@@ -537,6 +558,7 @@ function renderAll(){
   renderTarget();
   renderOperationalPanels(rows);
   renderChannels(rows);
+  renderPages(rows);
   renderProducts();
   renderSales(rows);
   renderSaleLeaderboard(rows);
@@ -894,7 +916,7 @@ function switchView(view){
   currentView=view;document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.mobileNavBtn').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
-  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
+  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',pages:'Doanh thu theo Page',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
   $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
 }
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
