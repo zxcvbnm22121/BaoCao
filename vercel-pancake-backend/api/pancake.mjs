@@ -404,13 +404,21 @@ function buildPayload(orders,from,to){
   const statusDistribution=orders.reduce((m,o)=>{const k=`${o.statusCode}:${o.status}`;m[k]=(m[k]||0)+1;return m},{});
   const channelDistribution=orders.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||0)+1;return m},{});
   const reportOrders=orders.filter(o=>!o.excludedFromDefaultReport);
+  const pageRelevant=reportOrders.filter(o=>o.channel==='Facebook Ads'||o.channel==='Livestream'||o.pageName||o.pageUsername||o.pageId);
+  const pageIdentified=pageRelevant.filter(o=>o.pageName||o.pageUsername||o.pageId);
+  const pageCoverage={
+    relevantOrders:pageRelevant.length,
+    identifiedOrders:pageIdentified.length,
+    unidentifiedOrders:pageRelevant.length-pageIdentified.length,
+    distinctPages:new Set(pageIdentified.map(o=>String(o.pageId||o.pageName||o.pageUsername).trim().toLowerCase()).filter(Boolean)).size
+  };
   const dayReconciliation={};
   for(const o of reportOrders){
     const d=dayReconciliation[o.createdDate]??={orders:0,net:0,cod:0,prepaid:0,gross:0};
     d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
   }
   return {
-    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation},
+    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage},
     monthlyTarget:MONTHLY_TARGET,
     channelTargets:CHANNEL_TARGETS,
     orders
