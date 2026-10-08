@@ -74,7 +74,7 @@ async function fetchLiveDirect(password){
   return callPancakeBackend(password,'live',55000)
 }
 async function fetchLiveOpen(password){
-  return callPancakeBackend(password,'open',12000)
+  return callPancakeBackend(password,'open',58000)
 }
 async function fetchLiveDelta(password){
   return callPancakeBackend(password,'delta',30000)
