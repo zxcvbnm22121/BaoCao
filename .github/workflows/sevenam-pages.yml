@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'vercel-pancake-backend/index.html'
+      - 'vercel-pancake-backend/app.js'
+      - 'vercel-pancake-backend/styles.css'
       - 'scripts/sync-pancake-pages.mjs'
       - 'scripts/sync-nhanh-pages.mjs'
       - '.github/workflows/sevenam-pages.yml'
@@ -36,6 +39,12 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
+
+      - name: Mirror canonical dashboard UI to Pages
+        run: |
+          cp vercel-pancake-backend/index.html site/index.html
+          cp vercel-pancake-backend/app.js site/app.js
+          cp vercel-pancake-backend/styles.css site/styles.css
 
       - name: Sync Pancake and encrypt dashboard data
         env:
