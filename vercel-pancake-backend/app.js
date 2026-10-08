@@ -392,7 +392,7 @@ function drillRows(type,value){
   else if(type==='statusCodes'){const codes=String(value).split(',').map(Number);rows=rows.filter(o=>codes.includes(Number(o.statusCode)))}
   else if(type==='successful')rows=rows.filter(o=>successful(o)>0||o.status==='THANH_CONG');
   else if(type==='channel')rows=rows.filter(o=>o.channel===value);
-  else if(type==='page')rows=rows.filter(o=>pageGroupKey(o)===value);
+  else if(type==='page')rows=rows.filter(o=>isPageRevenueOrder(o)&&pageGroupKey(o)===value);
   else if(type==='staff')rows=rows.filter(o=>(o.salesStaff||'Chưa gán')===value);
   else if(type==='returnReason')rows=rows.filter(o=>o.status==='HOAN'&&returnReasonLabel(o)===value);
   return rows
@@ -816,7 +816,7 @@ function renderProductBreakdowns(rows){
     x.agg
   )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo kênh trong kỳ lọc.</div>';
 
-  const relevant=rows.filter(isPageRelevantOrder);
+  const relevant=rows.filter(isPageRevenueOrder);
   const pageMap=new Map();
   for(const o of relevant){
     const key=pageGroupKey(o);
@@ -843,10 +843,14 @@ function renderProductBreakdowns(rows){
   )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo Page trong kỳ lọc.</div>';
 
   const unidentified=pageGroups.find(x=>x.name==='Chưa xác định Page');
-  pageNote.style.display=unidentified?'block':'none';
-  pageNote.textContent=unidentified
-    ? `Có ${numFmt(unidentified.rows.length)} đơn Facebook/Live chưa có pageName/pageId; sản phẩm đang được gom riêng vào “Chưa xác định Page”.`
-    :'';
+  const liveExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isLiveSourceOrder(o)).length;
+  const exchangeExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isExchangeSourceOrder(o)).length;
+  const pageMessages=[];
+  if(unidentified)pageMessages.push(`Có ${numFmt(unidentified.rows.length)} đơn chưa xác định Page; sản phẩm đang gom riêng vào “Chưa xác định Page”.`);
+  if(liveExcluded)pageMessages.push(`Đã loại ${numFmt(liveExcluded)} đơn Live/Livestream.`);
+  if(exchangeExcluded)pageMessages.push(`Đã loại ${numFmt(exchangeExcluded)} đơn đổi.`);
+  pageNote.style.display=pageMessages.length?'block':'none';
+  pageNote.textContent=pageMessages.join(' ');
 }
 function renderProducts(){
   const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
