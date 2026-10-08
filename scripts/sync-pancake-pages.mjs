@@ -65,6 +65,35 @@ function mapChannel(raw,source='',rawOrder={}){
   if(/pos|offline|showroom|tại quầy|tai quay|cửa hàng|cua hang/.test(v))return'Showroom/POS';
   return'Khác'
 }
+const PRODUCT_SCHEMA_AUDIT={samples:[],seen:new Set()};
+function auditProductItem(rawItem){
+  if(!rawItem||typeof rawItem!=='object'||PRODUCT_SCHEMA_AUDIT.samples.length>=8)return;
+  const topKeys=Object.keys(rawItem).sort();
+  const nested={};
+  for(const key of ['product','variation','variation_info']){
+    const v=rawItem[key];
+    if(v&&typeof v==='object'&&!Array.isArray(v))nested[key]=Object.keys(v).sort()
+  }
+  const scalar={};
+  const scan=(obj,prefix='',depth=0)=>{
+    if(!obj||typeof obj!=='object'||depth>2)return;
+    for(const [k,v] of Object.entries(obj)){
+      const path=prefix?prefix+'.'+k:k;
+      if(v&&typeof v==='object'&&!Array.isArray(v)){scan(v,path,depth+1);continue}
+      if(typeof v==='string'||typeof v==='number'){
+        if(/sku|code|display|product|variation|name|id/i.test(k)){
+          const text=String(v).trim();
+          if(text&&text.length<=160)scalar[path]=text
+        }
+      }
+    }
+  };
+  scan(rawItem);
+  const fingerprint=JSON.stringify({topKeys,nested,scalar});
+  if(PRODUCT_SCHEMA_AUDIT.seen.has(fingerprint))return;
+  PRODUCT_SCHEMA_AUDIT.seen.add(fingerprint);
+  PRODUCT_SCHEMA_AUDIT.samples.push({topKeys,nested,scalar})
+}
 function firstArray(raw,paths){
   for(const path of paths){
     const value=path.split('.').reduce((a,k)=>a&&typeof a==='object'?a[k]:undefined,raw);
@@ -112,6 +141,7 @@ function productImage(rawItem){
   return''
 }
 function productLine(rawItem){
+  auditProductItem(rawItem);
   if(!rawItem||typeof rawItem!=='object')return null;
   const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
   const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
@@ -424,6 +454,7 @@ console.log('MONTH_RECONCILIATION:',JSON.stringify({
   total_after_discount:monthIncluded.reduce((a,o)=>a+o.netAmount,0),
   zero_net_orders:monthIncluded.filter(o=>o.netAmount===0).length
 }));
+console.log('PRODUCT_LINE_SCHEMA_AUDIT:',JSON.stringify(PRODUCT_SCHEMA_AUDIT.samples));
 console.log('Seven.AM status distribution:',JSON.stringify(statusDistribution));
 console.log('Seven.AM channel distribution:',JSON.stringify(channelDistribution));
 const reportOrders=orders.filter(o=>!o.excludedFromDefaultReport);
