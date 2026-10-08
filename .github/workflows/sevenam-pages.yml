@@ -10,7 +10,7 @@ on:
       - 'scripts/sync-nhanh-pages.mjs'
       - '.github/workflows/sevenam-pages.yml'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
 
 permissions:
   contents: read
@@ -19,11 +19,12 @@ permissions:
 
 concurrency:
   group: sevenam-pages-v6
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -44,7 +45,13 @@ jobs:
           MONTHLY_TARGET: ${{ vars.MONTHLY_TARGET }}
         run: node scripts/sync-pancake-pages.mjs
 
+      - name: Verify fresh Pancake snapshot
+        run: |
+          node -e "const fs=require('fs');const p='site/data/status.json';if(!fs.existsSync(p))throw new Error('Missing Pancake status');const s=JSON.parse(fs.readFileSync(p,'utf8'));const age=Date.now()-Date.parse(s.updatedAt||'');if(s.mode!=='LIVE'||!Number.isFinite(age)||age>15*60*1000)throw new Error('Pancake snapshot is not fresh LIVE data');if(!fs.existsSync('site/data/live.enc')||!fs.existsSync('site/data/pancake-key.enc'))throw new Error('Missing encrypted Pancake artifacts');console.log('Fresh Pancake snapshot verified:',s.updatedAt,s.count);"
+
       - name: Sync Nhanh.vn showroom dashboard
+        continue-on-error: true
+        timeout-minutes: 4
         env:
           NHANH_APP_ID: ${{ secrets.NHANH_APP_ID }}
           NHANH_BUSINESS_ID: ${{ secrets.NHANH_BUSINESS_ID }}
