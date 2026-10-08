@@ -11,7 +11,7 @@ const ALLOWED_ORIGIN=(process.env.ALLOWED_ORIGIN||'https://zxcvbnm22121.github.i
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
 const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
 
-let cache={at:0,payload:null};
+const responseCache=new Map();
 const CACHE_MS=20000;
 
 const dateKey=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
@@ -446,13 +446,29 @@ export default async function handler(req,res){
       return res.status(200).json(await loadSnapshot(supplied));
     }
 
-    const now=Date.now();
-    if(cache.payload&&now-cache.at<CACHE_MS)return res.status(200).json(cache.payload);
     await discoverShopId();
-    const to=dateKey(),from=to.slice(0,7)+'-01';
+    const to=dateKey();
+    let from=to.slice(0,7)+'-01';
+    let partial=false;
+    if(action==='delta'){
+      const base=new Date(to+'T12:00:00+07:00');
+      base.setUTCDate(base.getUTCDate()-6);
+      from=dateKey(base);
+      partial=true;
+    }
+
+    const cacheKey=action+'|'+from+'|'+to;
+    const now=Date.now();
+    const hit=responseCache.get(cacheKey);
+    if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+
     const orders=await fetchOrders(from,to);
     const payload=buildPayload(orders,from,to);
-    cache={at:now,payload};
+    if(partial){
+      payload.meta.partial=true;
+      payload.meta.partialWindowDays=7;
+    }
+    responseCache.set(cacheKey,{at:now,payload});
     return res.status(200).json(payload);
   }catch(e){
     if(e?.auth)return res.status(401).json({error:'Sai mật khẩu dashboard'});
