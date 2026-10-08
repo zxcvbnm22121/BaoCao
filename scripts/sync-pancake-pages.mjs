@@ -224,6 +224,9 @@ function normalize(raw){
   const discountAmount=Math.max(0,grossAmount-netAmount);
 
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
+  const pageName=str(get(raw,'page.name|page_name|fanpage_name|facebook_page_name|page_info.name|conversation.page.name'),'').trim();
+  const pageUsername=str(get(raw,'page.username|page_username|fanpage_username|page_info.username|conversation.page.username'),'').trim();
+  const pageId=str(get(raw,'page_id|page.id|facebook_page_id|fb_page_id|page_info.id|conversation.page.id'),'').trim();
   const source=get(raw,'order_sources|order_sources_name|source|page_id|conversation_id');
   const created=get(raw,'inserted_at|created_at|creation_time');
   const dt=parsePancakeDate(created);
@@ -248,6 +251,9 @@ function normalize(raw){
     salesStaff:str(get(raw,'assigning_seller.name|seller.name|creator.name|assigned_user.name|user_name'),'Chưa gán'),
     channel:mapChannel(get(raw,'order_sources_name|order_sources|ads_source|p_utm_source|page.name'),source,raw),
     sourceName,
+    pageName,
+    pageUsername,
+    pageId,
     status,
     statusCode,
     statusName,
