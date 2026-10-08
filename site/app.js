@@ -73,6 +73,9 @@ async function fetchLiveDirect(password){
 async function fetchLiveOpen(password){
   return callPancakeBackend(password,'open',12000)
 }
+async function fetchLiveDelta(password){
+  return callPancakeBackend(password,'delta',30000)
+}
 async function fetchLive(password,{directOnly=false}={}){
   try{return await fetchLiveDirect(password)}
   catch(error){
@@ -98,6 +101,49 @@ function applyPayload(p){
   populateFilters();
   renderAll()
 }
+function mergeLiveDelta(p){
+  if(!p||!Array.isArray(p.orders))throw new Error('Bản cập nhật Pancake không hợp lệ');
+  if(!p.meta?.partial)return applyPayload(p);
+  verifySnapshot(p);
+
+  const from=String(p.meta.from||''),to=String(p.meta.to||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
+    throw new Error('Khoảng cập nhật Pancake không hợp lệ')
+  }
+
+  const previousMeta=meta||{};
+  const kept=sourceOrders.filter(o=>{
+    const d=orderDate(o);
+    return d<from||d>to
+  });
+  const mergedOrders=[...kept,...p.orders];
+
+  const mergedRecon={...(previousMeta.dayReconciliation||{})};
+  Object.keys(mergedRecon).forEach(day=>{if(day>=from&&day<=to)delete mergedRecon[day]});
+  Object.assign(mergedRecon,p.meta.dayReconciliation||{});
+
+  const mergedFrom=previousMeta.from&&previousMeta.from<from?previousMeta.from:from;
+  const mergedTo=previousMeta.to&&previousMeta.to>to?previousMeta.to:to;
+  const mergedMeta={
+    ...previousMeta,
+    ...p.meta,
+    partial:false,
+    transport:'VERCEL_DIRECT',
+    from:mergedFrom,
+    to:mergedTo,
+    count:mergedOrders.length,
+    dayReconciliation:mergedRecon
+  };
+
+  verifySnapshot({orders:mergedOrders,meta:{dayReconciliation:mergedRecon}});
+  sourceOrders=mergedOrders;
+  meta=mergedMeta;
+  payloadMonthlyTarget=Number(p.monthlyTarget)||payloadMonthlyTarget||2300000000;
+  setMode('LIVE');
+  populateFilters();
+  renderAll()
+}
+
 function setMode(mode){
   const live=mode==='LIVE';
   $('modePill').textContent=live?'LIVE':'CHƯA MỞ';
@@ -897,8 +943,8 @@ async function refreshLiveWhenVisible(){
   if(!pwd)return;
   liveRefreshInFlight=true;
   try{
-    const next=await fetchLive(pwd,{directOnly:true});
-    if(next.meta?.lastUpdated!==meta.lastUpdated)applyPayload(next);
+    const next=await fetchLiveDelta(pwd);
+    if(next.meta?.lastUpdated!==meta.lastUpdated)mergeLiveDelta(next);
     else updateDataFreshness();
   }catch(e){
     updateDataFreshness();
