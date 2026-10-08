@@ -801,7 +801,7 @@ function renderProductBreakdowns(rows){
 
   channelHost.innerHTML=channelGroups.map(x=>productGroupCard(
     x.name,
-    ${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    `${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
     x.agg
   )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo kênh trong kỳ lọc.</div>';
 
@@ -827,14 +827,14 @@ function renderProductBreakdowns(rows){
 
   pageHost.innerHTML=pageGroups.map(x=>productGroupCard(
     x.name,
-    ${x.pageId?'ID '+x.pageId+' · ':''}${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    `${x.pageId?'ID '+x.pageId+' · ':''}${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
     x.agg
   )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo Page trong kỳ lọc.</div>';
 
   const unidentified=pageGroups.find(x=>x.name==='Chưa xác định Page');
   pageNote.style.display=unidentified?'block':'none';
   pageNote.textContent=unidentified
-    ? §Có ${numFmt(unidentified.rows.length)} đơn Facebook/Live chưa có pageName/pageId; sản phẩm đang được gom riêng vào “Chưa xác định Page”.`
+    ? `Có ${numFmt(unidentified.rows.length)} đơn Facebook/Live chưa có pageName/pageId; sản phẩm đang được gom riêng vào “Chưa xác định Page”.`
     :'';
 }
 function renderProducts(){
