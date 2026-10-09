@@ -287,7 +287,8 @@ function populateFilters(){
   fill('staff',sourceOrders.map(x=>x.salesStaff))
 }
 function isDefaultExcluded(o){
-  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedCskhSource||o.excludedStatus)
+  const cskh=/^\s*cskh\b/i.test(String(o?.sourceName||''));
+  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedCskhSource||cskh||o.excludedStatus)
 }
 function filteredRows(opts={}){
   const from=opts.from||$('from').value,to=opts.to||$('to').value,ch=$('channel').value,staff=$('staff').value,status=$('status').value;
