@@ -109,9 +109,11 @@ async function fetchLive(password,{directOnly=false}={}){
   }
 }
 async function openLiveFast(password){
-  // Login no longer decrypts in the browser. The backend authenticates the
-  // password and returns the latest snapshot immediately.
-  return fetchLiveOpen(password)
+  try{return await fetchLiveOpen(password)}
+  catch(error){
+    console.warn('Backend mở LIVE không khả dụng; thử bản GitHub mã hóa dự phòng.',error);
+    return fetchLiveStatic(password)
+  }
 }
 
 function applyPayload(p){
@@ -672,15 +674,16 @@ function shiftIsoDay(day,offset){
 function normalizeSevenCode(raw){
   const value=String(raw||'').trim().toUpperCase();
   if(!value)return'';
-  const compact=value.replace(/\s+/g,'');
-  let m=compact.match(/^([A-Z]\d{6}[A-Z])[1-5]$/);
+  const compact=value.replace(/\\s+/g,'');
+  let m=compact.match(/^([A-Z]\\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])$/);
   if(m)return m[1];
-  if(/^[A-Z]\d{6}[A-Z]$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
-  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z])[1-5]?(?=$|[^A-Z0-9])/);
+  if(/^[A-Z]\\d{6}[A-Z]{1,3}$/.test(compact)||/^[A-Z]\\d{6}$/.test(compact))return compact;
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])?(?=$|[^A-Z0-9])/);
   if(m)return m[1];
-  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6})(?=$|[^A-Z0-9])/);
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\\d{6})(?=$|[^A-Z0-9])/);
   return m?m[1]:''
 }
+
 function productThumb(url,code){
   const src=String(url||'').trim();
   if(!src)return '<div class="productThumb empty"><span>7A</span></div>';
@@ -708,7 +711,8 @@ function aggregateProducts(rows){
     ordersWithItems++;
     if(o.partialReturnProductDetailMissing)partialUnknown++;
     const seen=new Set();
-    for(const item of items){
+    for(let itemIndex=0;itemIndex<items.length;itemIndex++){
+      const item=items[itemIndex];
       const quantity=Math.max(0,Number(item?.quantity)||0);
       if(!quantity)continue;
       const returned=Math.min(quantity,Math.max(0,Number(item?.returnedQuantity)||0));
@@ -717,8 +721,10 @@ function aggregateProducts(rows){
         normalizeSevenCode(item?.productCode)||
         normalizeSevenCode(item?.sku)||
         normalizeSevenCode(item?.name);
-      const fallbackKey=String(item?.productId||item?.variationId||item?.name||'unknown').trim().toLowerCase();
-      const key=displayCode?('code:'+displayCode.toLowerCase()):('fallback:'+fallbackKey);
+      const fallbackKey=String(item?.productId||item?.variationId||item?.name||'').trim().toLowerCase();
+      const orderKey=String(o.orderCode||o.createdAt||'unknown-order');
+      const safeFallback=fallbackKey||('unknown:'+orderKey+':'+itemIndex);
+      const key=displayCode?('code:'+displayCode.toLowerCase()):('fallback:'+safeFallback);
       let p=map.get(key);
       if(!p){
         p={
@@ -734,7 +740,6 @@ function aggregateProducts(rows){
       p.soldQty+=quantity;
       p.returnedQty+=returned;
       totalLines++;
-      const orderKey=String(o.orderCode||o.createdAt||'');
       if(!seen.has(key)){p.orders++;seen.add(key)}
       if(returned>0){
         const returnKey=key+'|'+orderKey;
