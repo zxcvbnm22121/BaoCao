@@ -677,7 +677,7 @@ function renderTarget(){
       </div>`
     }).join('');
   const heroLabel=hasChannelTargets()&&selectedChannel==='Tất cả'?'DOANH SỐ 4 KÊNH KPI':'DOANH SỐ KHOẢNG LỌC';
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>${heroLabel}</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}>${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
+  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>${heroLabel}</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
     <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
     <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
