@@ -418,8 +418,14 @@ function currentFilterLabel(){
 }
 function drillRows(type,value){
   if(type==='excluded'){
-    const from=$('from').value,to=$('to').value;
-    return sourceOrders.filter(o=>{const d=orderDate(o);return d>=from&&d<=to&&isDefaultExcluded(o)})
+    const from=$('from').value,to=$('to').value,ch=$('channel').value,staff=$('staff').value;
+    return sourceOrders.filter(o=>{
+      const d=orderDate(o);
+      return d>=from&&d<=to&&
+        (ch==='Tất cả'||o.channel===ch)&&
+        (staff==='Tất cả'||o.salesStaff===staff)&&
+        isDefaultExcluded(o)
+    })
   }
   let rows=filteredRows();
   if(type==='status')rows=rows.filter(o=>o.status===value);
