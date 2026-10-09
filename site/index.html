@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#111111" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=website-audit-20261009-1" />
+  <link rel="stylesheet" href="./styles.css?v=website-audit-20261009-2" />
 </head>
 <body>
   <aside class="sidebar">
@@ -20,6 +20,7 @@
     <nav class="nav">
       <button class="navBtn active" data-view="overview"><span>▦</span><b>Tổng quan</b></button>
       <button class="navBtn" data-view="channels"><span>◫</span><b>Theo kênh</b></button>
+      <button class="navBtn" data-view="pages"><span>▤</span><b>Theo Page</b></button>
       <button class="navBtn" data-view="products"><span>◆</span><b>Sản phẩm</b></button>
       <button class="navBtn" data-view="sales"><span>◎</span><b>Sale Online</b></button>
       <button class="navBtn" data-view="monthly"><span>◒</span><b>Tiến độ tháng</b></button>
@@ -171,6 +172,50 @@
     </section>
 
 
+    <section id="view-pages" class="view">
+      <div class="sectionHead">
+        <div>
+          <span class="sectionEyebrow">PAGE PERFORMANCE</span>
+          <h2>Doanh thu theo Page</h2>
+          <p>Dùng đúng logic doanh thu Tổng quan · loại Đơn đổi + nguồn Live/Livestream · lọc theo ngày, kênh, Sale và trạng thái</p>
+        </div>
+        <div class="summaryChip" id="pageSummary">—</div>
+      </div>
+
+      <section class="miniKpiGrid" id="pageKpis"></section>
+
+      <section class="chartGrid bigFirst pageChartGrid">
+        <article class="panel">
+          <div class="panelHead">
+            <div><h3>Top Page theo doanh thu</h3><p>Tạo đơn vs doanh thu thành công</p></div>
+          </div>
+          <div class="chart chartLarge" id="pageRevenueChart"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead">
+            <div><h3>Tỷ trọng doanh thu Page</h3><p>Tỷ trọng trên tổng doanh thu các Page xác định được</p></div>
+          </div>
+          <div class="chart chartLarge" id="pageShareChart"></div>
+        </article>
+      </section>
+
+      <article class="panel tablePanel pageTablePanel">
+        <div class="panelHead">
+          <div><h3>Bảng doanh thu từng Page</h3><p>Bấm vào một Page để xem chi tiết đơn</p></div>
+        </div>
+        <div class="pageDataNote" id="pageDataNote"></div>
+        <div class="scroll">
+          <table class="pageTable">
+            <thead>
+              <tr><th>#</th><th>Page</th><th>Page ID</th><th>Tạo đơn</th><th>Thành công</th><th>Số đơn</th><th>Đơn TC</th><th>Treo</th><th>Đang giao</th><th>Hoàn</th><th>Tỷ lệ hoàn</th><th>AOV</th><th>Tỷ trọng</th></tr>
+            </thead>
+            <tbody id="pageRows"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+
     <section id="view-products" class="view">
       <div class="sectionHead productSectionHead">
         <div>
@@ -210,6 +255,29 @@
           </table>
         </div>
       </article>
+
+      <section class="productBreakdownSection">
+        <div class="productBreakdownHead">
+          <div>
+            <span class="sectionEyebrow">CHANNEL PRODUCT RANKING</span>
+            <h3>Top sản phẩm theo từng Kênh</h3>
+            <p>Top 5 mã bán nhiều nhất trong từng kênh theo kỳ sản phẩm đang chọn</p>
+          </div>
+        </div>
+        <div class="productGroupGrid" id="channelProductGroups"></div>
+      </section>
+
+      <section class="productBreakdownSection">
+        <div class="productBreakdownHead">
+          <div>
+            <span class="sectionEyebrow">PAGE PRODUCT RANKING</span>
+            <h3>Top sản phẩm theo từng Page</h3>
+            <p>Top 5 mã từng Page · loại Đơn đổi + Live/Livestream · giữ nguyên logic mã cha và hoàn hàng</p>
+          </div>
+        </div>
+        <div class="productDataNote" id="pageProductNote"></div>
+        <div class="productGroupGrid" id="pageProductGroups"></div>
+      </section>
     </section>
 
     <section id="view-sales" class="view">
@@ -271,6 +339,7 @@
   <nav class="mobileBottomNav" aria-label="Điều hướng dashboard">
     <button type="button" class="mobileNavBtn active" data-mobile-view="overview"><span>▦</span><b>Tổng quan</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="channels"><span>◫</span><b>Kênh</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="pages"><span>▤</span><b>Page</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="products"><span>◆</span><b>Sản phẩm</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="sales"><span>◎</span><b>Sale</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="monthly"><span>◒</span><b>Tháng</b></button>
@@ -295,7 +364,7 @@
       <div class="orderDrillSummary" id="orderDrillSummary"></div>
       <div class="scroll orderDrillScroll">
         <table class="orderDrillTable">
-          <thead><tr><th>Mã đơn</th><th>Ngày giờ</th><th>Sale</th><th>Kênh</th><th>Trạng thái</th><th>Sau CK</th><th>Lý do hoàn</th></tr></thead>
+          <thead><tr><th>Mã đơn</th><th>Ngày giờ</th><th>Sale</th><th>Kênh</th><th>Page</th><th>Trạng thái</th><th>Sau CK</th><th>Lý do hoàn</th></tr></thead>
           <tbody id="orderDrillRows"></tbody>
         </table>
       </div>
@@ -356,6 +425,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=website-audit-20261009-1"></script>
+  <script src="./app.js?v=website-audit-20261009-2"></script>
 </body>
 </html>
