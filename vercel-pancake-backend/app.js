@@ -52,7 +52,7 @@ function mockData(days=40){
     for(let i=0;i<count;i++){
       const h=Math.floor(8+r()*Math.max(1,maxHour-7)),m=Math.floor(r()*60),base=pick(r,[699000,799000,899000,999000,1199000,1399000,1599000,1999000,2499000]),qty=r()<.16?2:1,discount=r()<.31?(r()<.55?.3:.5):0,total=Math.round(base*qty*(1-discount));
       const st=pick(r,['THANH_CONG','THANH_CONG','THANH_CONG','THANH_CONG','DANG_GIAO','TREO','HOAN','HUY']);
-      const ch=pick(r,['Facebook Ads','Facebook Ads','Facebook Ads','Livestream','Livestream','Shopee','Website','Zalo/CSKH']);
+      const ch=pick(r,['Facebook Ads','Facebook Ads','Facebook Ads','Livestream','Livestream','Shopee','Website','Zalo']);
       const staff=ch==='Livestream'&&r()<.7?'Linh live':pick(r,['Hương','Diễm','Thu']);
       out.push({createdAt:`${key}T${pad(h)}:${pad(m)}:00+07:00`,createdDate:key,salesStaff:staff,channel:ch,sourceName:ch,status:st,grossAmount:Math.round(total/(1-discount||1)),netAmount:total,discountAmount:0,codAmount:total,prepaidAmount:0,totalAmount:total,successfulAmount:st==='THANH_CONG'?total:0,isPartialReturn:false,statusCode:null,statusName:'demo',excludedStatus:st==='HUY',excludedExchangeSource:false,excludedFromDefaultReport:st==='HUY'});
     }
@@ -287,7 +287,7 @@ function populateFilters(){
   fill('staff',sourceOrders.map(x=>x.salesStaff))
 }
 function isDefaultExcluded(o){
-  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedStatus)
+  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedCskhSource||o.excludedStatus)
 }
 function filteredRows(opts={}){
   const from=opts.from||$('from').value,to=opts.to||$('to').value,ch=$('channel').value,staff=$('staff').value,status=$('status').value;
@@ -377,7 +377,7 @@ function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new 
 const KPI_CHANNELS=[
   {key:'ads',channel:'Facebook Ads',label:'Ads'},
   {key:'live',channel:'Livestream',label:'Live'},
-  {key:'zalo',channel:'Zalo/CSKH',label:'Zalo'},
+  {key:'zalo',channel:'Zalo',label:'Zalo'},
   {key:'website',channel:'Website',label:'Website'}
 ];
 const KPI_CHANNEL_SET=new Set(KPI_CHANNELS.map(x=>x.channel));
@@ -697,7 +697,7 @@ function renderStatus(rows){
 }
 function channelStats(rows){
   const grouped=group(rows,x=>x.channel||'Khác');
-  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo/CSKH','TikTok Shop','Lazada','Showroom/POS'];
+  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo','TikTok Shop','Lazada','Showroom/POS'];
   const names=Array.from(new Set([...canonical,...Object.keys(grouped)]));
   return names.map(name=>({name,...overview(grouped[name]||[]),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
 }
