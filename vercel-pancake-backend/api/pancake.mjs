@@ -509,6 +509,25 @@ export default async function handler(req,res){
     }
 
     await discoverShopId();
+
+    if(action==='products'){
+      const from=String(req.body?.from||'').trim();
+      const to=String(req.body?.to||'').trim();
+      const valid=/^\d{4}-\d{2}-\d{2}$/;
+      if(!valid.test(from)||!valid.test(to)||from>to){
+        return res.status(400).json({error:'Khoảng ngày sản phẩm không hợp lệ'})
+      }
+      const cacheKey='products|'+from+'|'+to;
+      const now=Date.now();
+      const hit=responseCache.get(cacheKey);
+      if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+      const orders=await fetchOrders(from,to);
+      const payload=buildPayload(orders,from,to);
+      payload.meta.productRange=true;
+      responseCache.set(cacheKey,{at:now,payload});
+      return res.status(200).json(payload)
+    }
+
     const to=dateKey();
     let from=to.slice(0,7)+'-01';
     let partial=false;
