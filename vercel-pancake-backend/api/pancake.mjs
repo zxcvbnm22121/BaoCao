@@ -337,33 +337,42 @@ function normalize(raw){
   }
 }
 
-async function fetchJson(url,attempt=1){
+// The function has maxDuration 60s. Every Pancake read shares one per-request
+// budget so retries and the optional second pass never push past it.
+const REQUEST_BUDGET_MS=50000;
+const FETCH_TIMEOUT_MS=15000;
+const FETCH_ATTEMPTS=3;
+
+async function fetchJson(url,deadline,attempt=1){
+  const remaining=deadline-Date.now();
+  if(remaining<1000)throw Object.assign(new Error('Pancake time budget exhausted'),{permanent:true});
   try{
-    const r=await fetch(url,{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(25000)});
+    const r=await fetch(url,{headers:{Accept:'application/json','Cache-Control':'no-cache'},signal:AbortSignal.timeout(Math.min(FETCH_TIMEOUT_MS,remaining))});
     if(!r.ok){
       if(r.status!==429&&r.status<500)throw Object.assign(new Error('Pancake API '+r.status),{permanent:true});
       throw new Error('Pancake API '+r.status);
     }
     return await r.json();
   }catch(e){
-    if(attempt>=4||e.permanent)throw e;
-    await new Promise(resolve=>setTimeout(resolve,500*2**(attempt-1)));
-    return fetchJson(url,attempt+1);
+    const backoff=500*2**(attempt-1);
+    if(attempt>=FETCH_ATTEMPTS||e.permanent||deadline-Date.now()<backoff+2000)throw e;
+    await new Promise(resolve=>setTimeout(resolve,backoff));
+    return fetchJson(url,deadline,attempt+1);
   }
 }
 
-async function discoverShopId(){
+async function discoverShopId(deadline){
   if(SHOP_ID)return SHOP_ID;
   const url=new URL('https://pos.pages.fm/api/v1/shops');
   url.searchParams.set('api_key',API_KEY);
-  const body=await fetchJson(url);
+  const body=await fetchJson(url,deadline);
   const shops=Array.isArray(body.shops)?body.shops:Array.isArray(body.data)?body.data:[];
   if(!shops.length)throw new Error('No Pancake shop found');
   SHOP_ID=String(shops[0].id);
   return SHOP_ID;
 }
 
-async function fetchOrderPage(from,to,page){
+async function fetchOrderPage(from,to,page,deadline){
   const url=new URL(`https://pos.pages.fm/api/v1/shops/${encodeURIComponent(SHOP_ID)}/orders`);
   url.searchParams.set('api_key',API_KEY);
   url.searchParams.set('from_date',from);
@@ -371,19 +380,34 @@ async function fetchOrderPage(from,to,page){
   url.searchParams.set('page_number',String(page));
   url.searchParams.set('page_size','500');
   [0,17,1,11,20,12,13,8,9,2,3,16,4,15,5,6,7].forEach(s=>url.searchParams.append('filter_status[]',String(s)));
-  const body=await fetchJson(url);
+  const body=await fetchJson(url,deadline);
   const data=Array.isArray(body.data)?body.data:Array.isArray(body.orders)?body.orders:Array.isArray(body)?body:[];
   const totalPages=num(get(body,'total_pages|pagination.total_pages|paging.total_pages|meta.total_pages'));
   return {data,totalPages}
 }
 
 function rawOrderKey(raw,index=0){return str(get(raw,'id|display_id|order_id|code'))||`${str(get(raw,'inserted_at|created_at|creation_time'))}:${index}`}
+// One malformed Pancake order (missing timestamp, negative amount) must not
+// fail the whole dashboard: skip it, log it and report the count in meta.
+const normalizedCache=new WeakMap();
+function safeNormalize(raw){
+  if(normalizedCache.has(raw))return normalizedCache.get(raw);
+  let order=null;
+  try{
+    order=normalize(raw);
+    if(!Number.isFinite(order.netAmount)||order.netAmount<0)throw new Error('Invalid Pancake amount');
+  }catch{
+    order=null;
+  }
+  normalizedCache.set(raw,order);
+  return order;
+}
 function pageBounds(data){
-  const dates=data.map(x=>normalize(x).createdDate).sort();
+  const dates=data.map(safeNormalize).filter(Boolean).map(o=>o.createdDate).sort();
   return {min:dates[0]||null,max:dates[dates.length-1]||null}
 }
 
-async function fetchOrders(from,to){
+async function fetchOrders(from,to,deadline){
   const rawMap=new Map();
   // Vietnam is UTC+7. Pancake's naive timestamps are UTC, so the first
   // seven hours of a Vietnam business day sit on the previous UTC date.
@@ -393,13 +417,15 @@ async function fetchOrders(from,to){
   const apiFrom=apiFromDate.toISOString().slice(0,10);
 
   // Pancake pages can shift while orders are inserted or edited.
-  // Two complete batched passes close page-boundary gaps without giving up
-  // the faster parallel fetch used by the LIVE backend.
+  // A second batched pass closes page-boundary gaps, but only when the
+  // first pass left enough of the time budget to repeat it safely.
+  let passes=0;
   for(let pass=1;pass<=2;pass++){
+    const passStart=Date.now();
     let completed=false;
     for(let start=1;start<=200;start+=4){
       const pages=[start,start+1,start+2,start+3];
-      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page)));
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page,deadline)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],result=results[i],bounds=pageBounds(result.data);
         result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
@@ -411,18 +437,28 @@ async function fetchOrders(from,to){
       if(completed)break;
     }
     if(!completed)throw new Error('Pancake pagination limit reached');
+    passes=pass;
+    const passMs=Date.now()-passStart;
+    if(deadline-Date.now()<passMs*1.5+5000)break;
   }
 
-  // Re-read the newest page immediately before publishing the totals.
-  const latest=await fetchOrderPage(apiFrom,to,1);
-  latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+  // Re-read the newest page immediately before publishing the totals,
+  // unless only one pass fit (that pass already read page 1 recently).
+  if(passes===2&&deadline-Date.now()>FETCH_TIMEOUT_MS){
+    const latest=await fetchOrderPage(apiFrom,to,1,deadline);
+    latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+  }
 
-  const orders=[...rawMap.values()].map(normalize).filter(o=>o.createdDate>=from&&o.createdDate<=to);
-  if(orders.some(o=>!Number.isFinite(o.netAmount)||o.netAmount<0))throw new Error('Invalid Pancake amount');
-  return orders;
+  const raws=[...rawMap.values()];
+  const normalized=raws.map(safeNormalize);
+  const skippedIds=raws.filter((raw,i)=>!normalized[i]).map(raw=>str(get(raw,'display_id|id|order_id|code'),'?'));
+  const skippedOrders=skippedIds.length;
+  if(skippedOrders)console.warn(`Skipped ${skippedOrders} malformed Pancake order(s):`,skippedIds.slice(0,20).join(', '));
+  const orders=normalized.filter(o=>o&&o.createdDate>=from&&o.createdDate<=to);
+  return {orders,stats:{passes,skippedOrders}};
 }
 
-function buildPayload(orders,from,to){
+function buildPayload({orders,stats},from,to){
   const statusDistribution=orders.reduce((m,o)=>{const k=`${o.statusCode}:${o.status}`;m[k]=(m[k]||0)+1;return m},{});
   const channelDistribution=orders.reduce((m,o)=>{const k=o.channel||'Khác';m[k]=(m[k]||0)+1;return m},{});
   const reportOrders=orders.filter(o=>!o.excludedFromDefaultReport);
@@ -448,7 +484,7 @@ function buildPayload(orders,from,to){
     d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
   }
   return {
-    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},
+    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,fetchPasses:stats.passes,skippedOrders:stats.skippedOrders,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},
     monthlyTarget:MONTHLY_TARGET,
     channelTargets:CHANNEL_TARGETS,
     orders
@@ -481,6 +517,7 @@ export default async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   const supplied=req.headers['x-dashboard-password']||req.body?.password||'';
   if(!supplied)return res.status(401).json({error:'Cần mật khẩu dashboard'});
+  const deadline=Date.now()+REQUEST_BUDGET_MS;
 
   try{
     const creds=await loadCredentials(supplied);
@@ -496,20 +533,20 @@ export default async function handler(req,res){
         return res.status(200).json(await loadSnapshot(supplied));
       }catch(snapshotError){
         console.warn('Snapshot open failed; falling back to Pancake direct:',snapshotError?.message||snapshotError);
-        await discoverShopId();
+        await discoverShopId(deadline);
         const to=dateKey(),from=to.slice(0,7)+'-01';
         const cacheKey='open-direct|'+from+'|'+to;
         const now=Date.now();
         const hit=responseCache.get(cacheKey);
         if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
-        const orders=await fetchOrders(from,to);
-        const payload=buildPayload(orders,from,to);
+        const result=await fetchOrders(from,to,deadline);
+        const payload=buildPayload(result,from,to);
         responseCache.set(cacheKey,{at:now,payload});
         return res.status(200).json(payload);
       }
     }
 
-    await discoverShopId();
+    await discoverShopId(deadline);
 
     if(action==='products'){
       const from=String(req.body?.from||'').trim();
@@ -522,8 +559,8 @@ export default async function handler(req,res){
       const now=Date.now();
       const hit=responseCache.get(cacheKey);
       if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
-      const orders=await fetchOrders(from,to);
-      const payload=buildPayload(orders,from,to);
+      const result=await fetchOrders(from,to,deadline);
+      const payload=buildPayload(result,from,to);
       payload.meta.productRange=true;
       responseCache.set(cacheKey,{at:now,payload});
       return res.status(200).json(payload)
@@ -544,8 +581,8 @@ export default async function handler(req,res){
     const hit=responseCache.get(cacheKey);
     if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
 
-    const orders=await fetchOrders(from,to);
-    const payload=buildPayload(orders,from,to);
+    const result=await fetchOrders(from,to,deadline);
+    const payload=buildPayload(result,from,to);
     if(partial){
       payload.meta.partial=true;
       payload.meta.partialWindowDays=7;
