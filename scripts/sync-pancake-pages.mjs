@@ -50,12 +50,14 @@ function mapStatus(code,name=''){
   return'TREO'
 }
 function mapChannel(raw,source='',rawOrder={}){
-  const liveFlag=get(rawOrder,'is_live|is_livestream|is_live_shopping|livestream_id|live_id|live_video_id');
   const marketplace=get(rawOrder,'marketplace_id|partner|system_id');
   const utm=get(rawOrder,'p_utm_source|p_utm_medium|p_utm_campaign|ads_source');
   const page=get(rawOrder,'page.name|page.username');
   const v=`${str(raw)} ${str(source)} ${str(marketplace)} ${str(utm)} ${str(page)}`.toLowerCase();
-  if(liveFlag===true||liveFlag===1||liveFlag==='1'||/live|livestream/.test(v))return'Livestream';
+  // A Live order is one whose Pancake order source is Live/Livestream.
+  // Page names, UTM tags and live-flag fields do not decide it.
+  const orderSource=str(get(rawOrder,'order_sources_name|order_source_name|source_name'));
+  if(/(?:^|[^a-z0-9])live/i.test(orderSource))return'Livestream';
   if(/shopee/.test(v))return'Shopee';
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';

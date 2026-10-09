@@ -9,8 +9,8 @@ const statusLabels={TREO:'Treo',DANG_GIAO:'Đang giao',THANH_CONG:'Thành công'
 const statusColors={TREO:'#b57a21',DANG_GIAO:'#386ba7',THANH_CONG:'#28734c',HOAN:'#a7192e',HUY:'#77716b'};
 const b64bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},payloadMonthlyTarget=2300000000,currentView='overview',productPeriod='day';
+let mainRangeRequestId=0,mainRangeLoadingKey='',mainRangeError='';
 let productRangeOrders=[],productRangeLoadedKey='',productRangeLoadingKey='',productRangeError='',productRangeRequestId=0;
-const productRangeCache=new Map();
 
 const SETTINGS_KEY='sevenam_kpi_settings_v3';
 const DATA_KEY='sevenam_channel_data_v3';
@@ -93,24 +93,48 @@ async function callPancakeBackend(password,action='live',timeoutMs=55000,extra={
     return body
   }finally{clearTimeout(timer)}
 }
-async function fetchLiveDirect(password){
-  return callPancakeBackend(password,'live',55000)
-}
 async function fetchLiveOpen(password){
   return callPancakeBackend(password,'open',58000)
 }
-async function fetchLiveDelta(password){
-  return callPancakeBackend(password,'delta',55000)
+// Any date range is read straight from Pancake POS, one calendar month per
+// backend call (each call fits the backend's time budget). The month that
+// contains today is always re-read; older months are reused for up to
+// PAST_CHUNK_MAX_AGE_MS so long ranges stay live without hammering Pancake.
+const PAST_CHUNK_MAX_AGE_MS=120000;
+const rangeChunkCache=new Map();
+async function fetchRangeChunks(password,from,to,{force=false}={}){
+  const today=vnDate(),payloads=[];
+  const chunks=productMonthChunks(from,to);
+  for(let i=0;i<chunks.length;i+=3){
+    const batch=await Promise.all(chunks.slice(i,i+3).map(async chunk=>{
+      const key=chunk.from+'|'+chunk.to,hit=rangeChunkCache.get(key);
+      const maxAge=chunk.to<today?PAST_CHUNK_MAX_AGE_MS:0;
+      if(!force&&hit&&Date.now()-hit.at<maxAge)return hit.payload;
+      const payload=await callPancakeBackend(password,'range',58000,chunk);
+      if(!payload||!Array.isArray(payload.orders))throw new Error('Dữ liệu Pancake không hợp lệ');
+      rangeChunkCache.set(key,{at:Date.now(),payload});
+      return payload
+    }));
+    payloads.push(...batch)
+  }
+  return payloads
 }
-async function fetchProductRangeChunk(password,from,to){
-  return callPancakeBackend(password,'products',58000,{from,to})
-}
-async function fetchLive(password,{directOnly=false}={}){
-  try{return await fetchLiveDirect(password)}
-  catch(error){
-    if(directOnly)throw error;
-    console.warn('Direct Pancake backend unavailable; using encrypted GitHub fallback.',error);
-    return fetchLiveStatic(password)
+function combineRangePayloads(payloads,from,to){
+  const orders=[],dayReconciliation={};
+  let skippedOrders=0,latest=payloads[payloads.length-1];
+  for(const p of payloads){
+    orders.push(...p.orders);
+    Object.assign(dayReconciliation,p.meta?.dayReconciliation||{});
+    skippedOrders+=Number(p.meta?.skippedOrders)||0
+  }
+  return {
+    orders,
+    monthlyTarget:latest?.monthlyTarget,
+    meta:{
+      source:'PANCAKE',transport:'VERCEL_DIRECT',from,to,count:orders.length,skippedOrders,dayReconciliation,
+      // Freshness follows the newest chunk, which is the one re-read every time.
+      lastUpdated:latest?.meta?.lastUpdated||new Date().toISOString()
+    }
   }
 }
 async function openLiveFast(password){
@@ -132,50 +156,6 @@ function applyPayload(p){
   populateFilters();
   renderAll()
 }
-function mergeLiveDelta(p){
-  if(!p||!Array.isArray(p.orders))throw new Error('Bản cập nhật Pancake không hợp lệ');
-  if(!p.meta?.partial)return applyPayload(p);
-  verifySnapshot(p);
-
-  const from=String(p.meta.from||''),to=String(p.meta.to||'');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to){
-    throw new Error('Khoảng cập nhật Pancake không hợp lệ')
-  }
-
-  const previousMeta=meta||{};
-  const kept=sourceOrders.filter(o=>{
-    const d=orderDate(o);
-    return d<from||d>to
-  });
-  const mergedOrders=[...kept,...p.orders];
-
-  const mergedRecon={...(previousMeta.dayReconciliation||{})};
-  Object.keys(mergedRecon).forEach(day=>{if(day>=from&&day<=to)delete mergedRecon[day]});
-  Object.assign(mergedRecon,p.meta.dayReconciliation||{});
-
-  const mergedFrom=previousMeta.from&&previousMeta.from<from?previousMeta.from:from;
-  const mergedTo=previousMeta.to&&previousMeta.to>to?previousMeta.to:to;
-  const mergedMeta={
-    ...previousMeta,
-    ...p.meta,
-    partial:false,
-    transport:'VERCEL_DIRECT',
-    from:mergedFrom,
-    to:mergedTo,
-    count:mergedOrders.length,
-    skippedOrders:Math.max(Number(previousMeta.skippedOrders)||0,Number(p.meta.skippedOrders)||0),
-    dayReconciliation:mergedRecon
-  };
-
-  verifySnapshot({orders:mergedOrders,meta:{dayReconciliation:mergedRecon}});
-  sourceOrders=mergedOrders;
-  meta=mergedMeta;
-  payloadMonthlyTarget=Number(p.monthlyTarget)||payloadMonthlyTarget||2300000000;
-  setMode('LIVE');
-  populateFilters();
-  renderAll()
-}
-
 function setMode(mode){
   const live=mode==='LIVE';
   $('modePill').textContent=live?'LIVE':'CHƯA MỞ';
@@ -223,7 +203,8 @@ function dateRange(kind){
   else if(kind==='month')from=today.slice(0,7)+'-01';
   $('from').value=from;$('to').value=to;
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===kind));
-  renderAll()
+  renderAll();
+  loadMainRange()
 }
 
 function orderDate(o){
@@ -254,8 +235,11 @@ function reportCoverageError(){
   if(meta.source!=='PANCAKE')return '';
   const from=$('from').value,to=$('to').value;
   if(!selectedCalendarDays().length)return 'Khoảng ngày không hợp lệ. Từ ngày phải trước hoặc bằng Đến ngày.';
-  if((meta.from&&from<meta.from)||(meta.to&&to>meta.to))
+  if((meta.from&&from<meta.from)||(meta.to&&to>meta.to)){
+    if(mainRangeLoadingKey===from+'|'+to)return 'Đang lấy dữ liệu Pancake POS cho '+from+' → '+to+'…';
+    if(mainRangeError)return 'Không tải được '+from+' → '+to+' từ Pancake: '+mainRangeError;
     return 'Dữ liệu đã đồng bộ chỉ từ '+(meta.from||'?')+' đến '+(meta.to||'?')+'. Khoảng đang chọn '+from+' → '+to+' ngoài phạm vi nguồn.';
+  }
   return ''
 }
 function verifySnapshot(p){
@@ -376,7 +360,7 @@ function isPageRelevantOrder(o){
 }
 function isLiveSourceOrder(o){
   const source=String(o?.sourceName||'').trim();
-  return o?.channel==='Livestream'||/\blive(?:stream)?\b/i.test(source)
+  return o?.channel==='Livestream'||/(?:^|[^a-z0-9])live/i.test(source)
 }
 function isExchangeSourceOrder(o){
   const source=String(o?.sourceName||'').trim();
@@ -617,7 +601,8 @@ function renderAll(){
     return
   }
   if(coverageError){
-    $('kpis').innerHTML=card('CHƯA CÓ ĐỦ DỮ LIỆU','Không thể đối soát',esc(coverageError),true);
+    const loading=mainRangeLoadingKey===$('from').value+'|'+$('to').value;
+    $('kpis').innerHTML=card(loading?'ĐANG TẢI TỪ PANCAKE':'CHƯA CÓ ĐỦ DỮ LIỆU',loading?'Đang tải…':'Không thể đối soát',esc(coverageError),true);
     $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
     ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     ['trendChart','channelChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
@@ -842,14 +827,6 @@ async function loadProductRange(force=false){
     renderProducts();
     return
   }
-  const today=vnDate();
-  if(!force&&range.to<today&&productRangeCache.has(key)){
-    productRangeOrders=productRangeCache.get(key);
-    productRangeLoadedKey=key;
-    fillProductChannelFromRows(productRangeOrders);
-    renderProducts();
-    return
-  }
   const pwd=sessionGet('sevenam_dashboard_password');
   if(!pwd){
     productRangeError='Cần mở dữ liệu LIVE để tải khoảng thời gian này.';
@@ -860,28 +837,9 @@ async function loadProductRange(force=false){
   productRangeLoadingKey=key;
   renderProducts();
   try{
-    const chunks=productMonthChunks(range.from,range.to);
-    const orders=[];
-    for(let i=0;i<chunks.length;i+=3){
-      const batch=chunks.slice(i,i+3);
-      const payloads=await Promise.all(batch.map(async chunk=>{
-        const chunkKey=chunk.from+'|'+chunk.to;
-        if(chunk.to<today&&productRangeCache.has('chunk:'+chunkKey))return {orders:productRangeCache.get('chunk:'+chunkKey)};
-        const payload=await fetchProductRangeChunk(pwd,chunk.from,chunk.to);
-        if(!payload||!Array.isArray(payload.orders))throw new Error('Dữ liệu sản phẩm Pancake không hợp lệ');
-        productRangeCache.set('chunk:'+chunkKey,payload.orders);
-        return payload
-      }));
-      for(const payload of payloads)orders.push(...payload.orders)
-    }
+    const payloads=await fetchRangeChunks(pwd,range.from,range.to);
     if(requestId!==productRangeRequestId)return;
-    const unique=new Map();
-    for(const o of orders){
-      const k=String(o.orderCode||'')+'|'+String(o.createdAt||'');
-      unique.set(k,o)
-    }
-    productRangeOrders=[...unique.values()].filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to});
-    productRangeCache.set(key,productRangeOrders);
+    productRangeOrders=payloads.flatMap(p=>p.orders).filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to});
     productRangeLoadedKey=key;
     fillProductChannelFromRows(productRangeOrders);
   }catch(e){
@@ -1045,7 +1003,7 @@ function renderProducts(){
   summary.textContent=`${range.from} → ${range.to} · ${ch}`;
 
   const needsRemote=!productRangeInsideMain(range)&&productRangeLoadedKey!==key;
-  if(productRangeLoadingKey===key){
+  if(productRangeLoadingKey===key&&productRangeLoadedKey!==key){
     kpis.innerHTML=[mini('Sản phẩm','…'),mini('SL bán','…'),mini('SL hoàn','…'),mini('SL bán thực','…'),mini('Tỷ lệ hoàn','…')].join('');
     note.textContent=`Đang lấy dữ liệu Pancake cho ${range.from} → ${range.to}…`;
     note.style.display='block';
@@ -1370,21 +1328,34 @@ async function init(){
     await refreshLiveWhenVisible();
   },30000)
 }
-let liveRefreshInFlight=false;
-
-async function refreshLiveWhenVisible(){
-  if(liveRefreshInFlight||meta.source!=='PANCAKE')return;
+// The selected From/To range is always read from Pancake POS: on every
+// range change and again on each refresh tick, so the whole range stays live.
+async function loadMainRange({force=false}={}){
+  if(meta.source!=='PANCAKE')return;
   const pwd=sessionGet('sevenam_dashboard_password');
-  if(!pwd)return;
-  liveRefreshInFlight=true;
+  if(!pwd||!selectedCalendarDays().length)return;
+  const from=$('from').value,to=$('to').value,requestId=++mainRangeRequestId;
+  mainRangeLoadingKey=from+'|'+to;
+  mainRangeError='';
+  if(reportCoverageError())renderAll();
   try{
-    const next=await fetchLiveDelta(pwd);
-    if(next.meta?.lastUpdated!==meta.lastUpdated)mergeLiveDelta(next);
-    else updateDataFreshness();
+    const payloads=await fetchRangeChunks(pwd,from,to,{force});
+    if(requestId!==mainRangeRequestId)return;
+    mainRangeLoadingKey='';
+    applyPayload(combineRangePayloads(payloads,from,to));
   }catch(e){
-    updateDataFreshness();
-    console.warn('Direct refresh failed:',e);
-  }finally{liveRefreshInFlight=false}
+    if(requestId!==mainRangeRequestId)return;
+    mainRangeLoadingKey='';
+    mainRangeError=e?.message||'Không tải được dữ liệu Pancake';
+    console.warn('Pancake range load failed:',e);
+    if(reportCoverageError())renderAll();else updateDataFreshness();
+    if(force)showError(mainRangeError);
+  }
+}
+async function refreshLiveWhenVisible(){
+  if(document.hidden||mainRangeLoadingKey||meta.source!=='PANCAKE')return;
+  await loadMainRange();
+  if(currentView==='products'&&!productRangeLoadingKey&&productDateRange().to>=vnDate())loadProductRange();
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiveWhenVisible()});
 window.addEventListener('online',refreshLiveWhenVisible);
@@ -1411,7 +1382,8 @@ document.querySelectorAll('[data-product-period]').forEach(b=>b.onclick=()=>{
   }
 });
 if($('productChannel'))$('productChannel').onchange=renderProducts;
-['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
+['from','to'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll();loadMainRange()});
+['channel','staff','status'].forEach(id=>$(id).onchange=renderAll);
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 document.querySelectorAll('.mobileNavBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.mobileView));
 $('mobileFilterBtn').onclick=()=>setMobileFilter(true);
@@ -1472,9 +1444,8 @@ $('reloadBtn').onclick=async()=>{
   if(meta.source==='PANCAKE'&&pwd){
     try{
       $('app').classList.add('loading');
-      applyPayload(await fetchLive(pwd))
-    }catch(e){showError(e.message)}
-    finally{$('app').classList.remove('loading')}
+      await loadMainRange({force:true})
+    }finally{$('app').classList.remove('loading')}
   }else renderAll()
 };
 init();

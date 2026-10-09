@@ -125,12 +125,14 @@ function mapStatus(code,name=''){
 }
 
 function mapChannel(raw,source='',rawOrder={}){
-  const liveFlag=get(rawOrder,'is_live|is_livestream|is_live_shopping|livestream_id|live_id|live_video_id');
   const marketplace=get(rawOrder,'marketplace_id|partner|system_id');
   const utm=get(rawOrder,'p_utm_source|p_utm_medium|p_utm_campaign|ads_source');
   const page=get(rawOrder,'page.name|page.username');
   const v=`${str(raw)} ${str(source)} ${str(marketplace)} ${str(utm)} ${str(page)}`.toLowerCase();
-  if(liveFlag===true||liveFlag===1||liveFlag==='1'||/live|livestream/.test(v))return'Livestream';
+  // A Live order is one whose Pancake order source is Live/Livestream.
+  // Page names, UTM tags and live-flag fields do not decide it.
+  const orderSource=str(get(rawOrder,'order_sources_name|order_source_name|source_name'));
+  if(/(?:^|[^a-z0-9])live/i.test(orderSource))return'Livestream';
   if(/shopee/.test(v))return'Shopee';
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';
@@ -548,20 +550,20 @@ export default async function handler(req,res){
 
     await discoverShopId(deadline);
 
-    if(action==='products'){
+    if(action==='products'||action==='range'){
       const from=String(req.body?.from||'').trim();
       const to=String(req.body?.to||'').trim();
       const valid=/^\d{4}-\d{2}-\d{2}$/;
       if(!valid.test(from)||!valid.test(to)||from>to){
-        return res.status(400).json({error:'Khoảng ngày sản phẩm không hợp lệ'})
+        return res.status(400).json({error:'Khoảng ngày không hợp lệ'})
       }
-      const cacheKey='products|'+from+'|'+to;
+      const cacheKey='range|'+from+'|'+to;
       const now=Date.now();
       const hit=responseCache.get(cacheKey);
       if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
       const result=await fetchOrders(from,to,deadline);
       const payload=buildPayload(result,from,to);
-      payload.meta.productRange=true;
+      if(action==='products')payload.meta.productRange=true;
       responseCache.set(cacheKey,{at:now,payload});
       return res.status(200).json(payload)
     }
