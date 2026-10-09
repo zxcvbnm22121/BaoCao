@@ -24,11 +24,11 @@ function parsePancakeDate(value){
     dt=new Date(raw.length===10?n*1000:n);
   }else{
     let iso=raw;
-    // POS timestamps without an explicit offset are local Vietnam times,
-    // never the timezone of the GitHub Actions runner.
-    if(/^\d{4}-\d{2}-\d{2}$/.test(iso))iso+='T00:00:00+07:00';
+    // Pancake POS returns naive order timestamps in UTC.
+    // Convert them as UTC, then derive Vietnam business dates via dateKey().
+    if(/^\d{4}-\d{2}-\d{2}$/.test(iso))iso+='T00:00:00Z';
     else if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso)){
-      iso=iso.replace(' ','T')+'+07:00';
+      iso=iso.replace(' ','T')+'Z';
     }
     dt=new Date(iso);
   }
@@ -341,6 +341,13 @@ async function fetchOrders(from,to){
   const maxPages=200;
   const batchSize=4;
 
+  // Vietnam is UTC+7. Pancake's naive timestamps are UTC, so the first
+  // seven hours of a Vietnam business day sit on the previous UTC date.
+  // Read one extra API date at the beginning, then filter by Vietnam date.
+  const apiFromDate=new Date(from+'T00:00:00Z');
+  apiFromDate.setUTCDate(apiFromDate.getUTCDate()-1);
+  const apiFrom=apiFromDate.toISOString().slice(0,10);
+
   // Read in small parallel batches. This keeps the fallback snapshot fast
   // enough for scheduled Pages deploys while two passes still close the
   // moving-page gap caused by new/edited Pancake orders.
@@ -348,7 +355,7 @@ async function fetchOrders(from,to){
     let completed=false;
     for(let startPage=1;startPage<=maxPages;startPage+=batchSize){
       const pages=Array.from({length:batchSize},(_,i)=>startPage+i).filter(p=>p<=maxPages);
-      const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],res=results[i],data=res.data;
         const bounds=pageDateBounds(data);
@@ -366,7 +373,7 @@ async function fetchOrders(from,to){
   }
 
   // Capture the newest page immediately before publishing the snapshot.
-  const latest=await fetchOrderPage(from,to,1);
+  const latest=await fetchOrderPage(apiFrom,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
   const normalized=[...rawMap.values()].map(normalize);
@@ -374,40 +381,9 @@ async function fetchOrders(from,to){
   if(inRange.some(x=>!Number.isFinite(x.netAmount)||x.netAmount<0))throw new Error('Pancake returned an invalid net amount; refusing to publish an inaccurate daily total');
   if(!inRange.length&&from<dateKey())throw new Error('Pancake returned zero historical orders for the requested period; refusing to publish empty totals');
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
-  const rawTimestampSamples=[...rawMap.values()].slice(0,8).map(raw=>{
-    const rawTs=get(raw,'inserted_at|created_at|creation_time');
-    let parsed='';
-    try{parsed=parsePancakeDate(rawTs).toISOString()}catch(e){parsed='INVALID'}
-    return {raw:String(rawTs??''),parsed}
-  });
-  const newestRaw=[...rawMap.values()]
-    .map(raw=>String(get(raw,'inserted_at|created_at|creation_time')??''))
-    .filter(Boolean)
-    .sort()
-    .slice(-8);
-  console.log('PANCAKE_TIMESTAMP_AUDIT:',JSON.stringify({samples:rawTimestampSamples,newestRaw}));
-  const utcCorrected={orders:0,net:0,cod:0,prepaid:0,gross:0,excluded:0};
-  for(const raw of rawMap.values()){
-    const rawTs=String(get(raw,'inserted_at|created_at|creation_time')??'').trim();
-    if(!rawTs)continue;
-    let corrected;
-    if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(rawTs)){
-      corrected=new Date(rawTs.replace(' ','T')+'Z');
-    }else{
-      corrected=new Date(rawTs);
-    }
-    if(!Number.isFinite(corrected.getTime())||dateKey(corrected)!==today)continue;
-    const o=normalize(raw);
-    if(o.excludedFromDefaultReport){utcCorrected.excluded++;continue}
-    utcCorrected.orders++;
-    utcCorrected.net+=o.netAmount;
-    utcCorrected.cod+=o.codAmount;
-    utcCorrected.prepaid+=o.prepaidAmount;
-    utcCorrected.gross+=o.grossAmount;
-  }
-  console.log('UTC_CORRECTED_TODAY_RECONCILIATION:',JSON.stringify({date:today,...utcCorrected}));
   return inRange
 }
+
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
 
 await fs.mkdir('site/data',{recursive:true});
