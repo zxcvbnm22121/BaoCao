@@ -386,6 +386,26 @@ async function fetchOrders(from,to){
     .sort()
     .slice(-8);
   console.log('PANCAKE_TIMESTAMP_AUDIT:',JSON.stringify({samples:rawTimestampSamples,newestRaw}));
+  const utcCorrected={orders:0,net:0,cod:0,prepaid:0,gross:0,excluded:0};
+  for(const raw of rawMap.values()){
+    const rawTs=String(get(raw,'inserted_at|created_at|creation_time')??'').trim();
+    if(!rawTs)continue;
+    let corrected;
+    if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(rawTs)){
+      corrected=new Date(rawTs.replace(' ','T')+'Z');
+    }else{
+      corrected=new Date(rawTs);
+    }
+    if(!Number.isFinite(corrected.getTime())||dateKey(corrected)!==today)continue;
+    const o=normalize(raw);
+    if(o.excludedFromDefaultReport){utcCorrected.excluded++;continue}
+    utcCorrected.orders++;
+    utcCorrected.net+=o.netAmount;
+    utcCorrected.cod+=o.codAmount;
+    utcCorrected.prepaid+=o.prepaidAmount;
+    utcCorrected.gross+=o.grossAmount;
+  }
+  console.log('UTC_CORRECTED_TODAY_RECONCILIATION:',JSON.stringify({date:today,...utcCorrected}));
   return inRange
 }
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
