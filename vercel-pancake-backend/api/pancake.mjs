@@ -407,11 +407,19 @@ async function discoverShopId(deadline){
   return SHOP_ID;
 }
 
-async function fetchOrderPage(from,to,page,deadline){
+async function fetchOrderPage(from,to,page,deadline,useTime=true){
   const url=new URL(`https://pos.pages.fm/api/v1/shops/${encodeURIComponent(SHOP_ID)}/orders`);
   url.searchParams.set('api_key',API_KEY);
   url.searchParams.set('from_date',from);
   url.searchParams.set('to_date',to);
+  // Pancake POS filters the order list by creation time with unix-second
+  // startDateTime/endDateTime (+ updateStatus); from_date/to_date are ignored,
+  // which made every read page back from the newest order.
+  if(useTime){
+    url.searchParams.set('updateStatus','inserted_at');
+    url.searchParams.set('startDateTime',String(Math.floor(Date.parse(from+'T00:00:00+07:00')/1000)));
+    url.searchParams.set('endDateTime',String(Math.floor(Date.parse(to+'T23:59:59+07:00')/1000)));
+  }
   url.searchParams.set('page_number',String(page));
   url.searchParams.set('page_size','500');
   [0,17,1,11,20,12,13,8,9,2,3,16,4,15,5,6,7].forEach(s=>url.searchParams.append('filter_status[]',String(s)));
@@ -455,8 +463,7 @@ function pageBounds(data){
   return {min:dates[0]||null,max:dates[dates.length-1]||null}
 }
 
-async function fetchOrders(from,to,deadline){
-  const rawMap=new Map();
+async function scanOrders(from,to,deadline,useTime){
   // Vietnam is UTC+7. Pancake's naive timestamps are UTC, so the first
   // seven hours of a Vietnam business day sit on the previous UTC date.
   // Read one extra API date at the beginning, then filter by createdDate.
@@ -469,13 +476,13 @@ async function fetchOrders(from,to,deadline){
   // range spans more than one page and the first pass left enough of the
   // time budget to repeat it safely. A single page has no boundary to slip
   // through, so short ranges (e.g. one day) finish after one round.
-  let passes=0;
+  let passes=0;const rawMap=new Map();
   for(let pass=1;pass<=2;pass++){
     const passStart=Date.now();
     let completed=false,lastPage=0;
     for(let start=1;start<=200;start+=4){
       const pages=[start,start+1,start+2,start+3];
-      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page,deadline)));
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page,deadline,useTime)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],result=results[i],bounds=pageBounds(result.data);
         result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
@@ -497,9 +504,18 @@ async function fetchOrders(from,to,deadline){
   // Re-read the newest page immediately before publishing the totals,
   // unless only one pass fit (that pass already read page 1 recently).
   if(passes===2&&deadline-Date.now()>FETCH_TIMEOUT_MS){
-    const latest=await fetchOrderPage(apiFrom,to,1,deadline);
+    const latest=await fetchOrderPage(apiFrom,to,1,deadline,useTime);
     latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
   }
+
+  return {rawMap,passes};
+}
+
+async function fetchOrders(from,to,deadline){
+  const first=await scanOrders(from,to,deadline,true);
+  // Safety net: if the time filter ever returns nothing, read the old way.
+  const scan=first.rawMap.size||deadline-Date.now()<FETCH_TIMEOUT_MS?first:(console.warn('[pancake] time-filtered read returned no orders; retrying without it'),await scanOrders(from,to,deadline,false));
+  const rawMap=scan.rawMap,passes=scan.passes;
 
   const raws=[...rawMap.values()];
   const normalized=raws.map(safeNormalize);
