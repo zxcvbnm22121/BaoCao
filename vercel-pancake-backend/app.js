@@ -268,7 +268,7 @@ function verifySnapshot(p){
   if(Object.keys(expected).length!==Object.keys(actual).length)throw new Error('Dữ liệu Pancake không khớp số ngày báo cáo');
   for(const [day,ref] of Object.entries(expected)){
     const d=actual[day];
-    if(!d||d.orders!==ref.orders||['cod','prepaid','gross'].some(k=>Math.abs(d[k]-ref[k])>.01))
+    if(!d||d.orders!==ref.orders||['net','cod','prepaid','gross'].some(k=>Math.abs(d[k]-ref[k])>.01))
       throw new Error('Dữ liệu đồng bộ chưa khớp tại ngày '+day);
   }
 }
@@ -303,8 +303,19 @@ function filteredIgnoringDate(month){
 function sum(rows,fn){return rows.reduce((a,x)=>a+(Number(fn(x))||0),0)}
 function orderRevenue(o){
   // Single source of truth for Pancake headline revenue:
-  // Tổng tiền sau CK = COD + Trả trước.
-  return (Number(o?.codAmount)||0)+(Number(o?.prepaidAmount)||0)
+  // use Pancake's normalized after-discount total. Preserve a valid zero.
+  const primary=o?.netAmount;
+  if(primary!==undefined&&primary!==null&&primary!==''){
+    const n=Number(primary);
+    if(Number.isFinite(n))return n
+  }
+  const legacy=o?.totalAmount;
+  if(legacy!==undefined&&legacy!==null&&legacy!==''){
+    const n=Number(legacy);
+    if(Number.isFinite(n))return n
+  }
+  const payment=(Number(o?.codAmount)||0)+(Number(o?.prepaidAmount)||0);
+  return payment||(Number(o?.grossAmount)||0)
 }
 function successful(o){
   if(o?.status==='THANH_CONG')return orderRevenue(o);
