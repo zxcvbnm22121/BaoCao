@@ -100,7 +100,7 @@ async function fetchLiveOpen(password){
   return callPancakeBackend(password,'open',58000)
 }
 async function fetchLiveDelta(password){
-  return callPancakeBackend(password,'delta',30000)
+  return callPancakeBackend(password,'delta',55000)
 }
 async function fetchProductRangeChunk(password,from,to){
   return callPancakeBackend(password,'products',58000,{from,to})
@@ -163,6 +163,7 @@ function mergeLiveDelta(p){
     from:mergedFrom,
     to:mergedTo,
     count:mergedOrders.length,
+    skippedOrders:Math.max(Number(previousMeta.skippedOrders)||0,Number(p.meta.skippedOrders)||0),
     dayReconciliation:mergedRecon
   };
 
@@ -197,6 +198,8 @@ function updateDataFreshness(){
   const messages=[];
   const error=reportCoverageError();
   if(error)messages.push('⚠ '+esc(error));
+  const skipped=Number(meta.skippedOrders)||0;
+  if(skipped)messages.push(`⚠ <b>${numFmt(skipped)} đơn</b> Pancake thiếu ngày tạo hoặc có số tiền âm nên chưa được tính.`);
   const direct=meta.transport==='VERCEL_DIRECT';
   const staleAfter=direct?2:6;
   if(ageMinutes>=staleAfter){
@@ -286,22 +289,31 @@ function populateFilters(){
   fill('productChannel',sourceOrders.map(x=>x.channel));
   fill('staff',sourceOrders.map(x=>x.salesStaff))
 }
+function isCskhSourceOrder(o){
+  return Boolean(o?.excludedCskhSource)||/^\s*cskh\b/i.test(String(o?.sourceName||''))
+}
 function isDefaultExcluded(o){
-  const cskh=/^\s*cskh\b/i.test(String(o?.sourceName||''));
-  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||o.excludedCskhSource||cskh||o.excludedStatus)
+  return Boolean(o.excludedFromDefaultReport||o.excludedExchangeSource||isCskhSourceOrder(o)||o.excludedStatus)
+}
+// "Tất cả" hides cancelled orders plus CSKH / Đơn đổi sources. Picking a
+// specific status (including Huỷ) shows that status, but CSKH and Đơn đổi
+// stay hidden so every status view is a subset of the same order base.
+function matchesStatusFilter(o,status){
+  if(status==='Tất cả')return !isDefaultExcluded(o);
+  return o.status===status&&!isExchangeSourceOrder(o)&&!isCskhSourceOrder(o)
 }
 function filteredRows(opts={}){
   const from=opts.from||$('from').value,to=opts.to||$('to').value,ch=$('channel').value,staff=$('staff').value,status=$('status').value;
   return sourceOrders.filter(o=>{
     const d=orderDate(o);
-    const defaultRule=status==='Tất cả'?!isDefaultExcluded(o):(!o.excludedExchangeSource&&o.status===status);
+    const defaultRule=matchesStatusFilter(o,status);
     return (!from||d>=from)&&(!to||d<=to)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&defaultRule
   })
 }
 function filteredIgnoringDate(month){
   const ch=$('channel').value,staff=$('staff').value,status=$('status').value;
   return sourceOrders.filter(o=>{
-    const defaultRule=status==='Tất cả'?!isDefaultExcluded(o):(!o.excludedExchangeSource&&o.status===status);
+    const defaultRule=matchesStatusFilter(o,status);
     return orderDate(o).startsWith(month)&&(ch==='Tất cả'||o.channel===ch)&&(staff==='Tất cả'||o.salesStaff===staff)&&defaultRule
   })
 }
@@ -490,9 +502,11 @@ function bindDrilldowns(){
   })
 }
 function renderLiveAlerts(rows){
-  const alerts=[],days=selectedCalendarDays(),k=overview(rows),goal=periodTarget(days),time=reportTimeProgress(days);
+  const alerts=[],days=selectedCalendarDays(),time=reportTimeProgress(days),selectedChannel=$('channel').value;
+  const goal=targetAvailableForChannel(selectedChannel)?periodTarget(days):0;
+  const k=overview(scopeRowsForTarget(rows,selectedChannel));
   const completion=goal?k.createdRevenue/goal:0,gapPts=(completion-time)*100;
-  if(gapPts<-10)alerts.push({level:'bad',title:'Doanh số đang chậm tiến độ',text:`Chậm ${Math.abs(gapPts).toFixed(1).replace('.',',')} điểm % so với tiến độ thời gian.`});
+  if(goal>0&&gapPts<-10)alerts.push({level:'bad',title:'Doanh số đang chậm tiến độ',text:`Chậm ${Math.abs(gapPts).toFixed(1).replace('.',',')} điểm % so với tiến độ thời gian.`});
 
   const ads=rows.filter(o=>o.channel==='Facebook Ads'),adsData=channelDataValue('Facebook Ads');
   if(adsData>0&&ads.length/adsData<.10)alerts.push({level:'bad',title:'CR Ads dưới 10%',text:`${numFmt(ads.length)} đơn / ${numFmt(adsData)} data = ${pct(ads.length/adsData)}.`});
@@ -501,7 +515,8 @@ function renderLiveAlerts(rows){
   const liveRevenue=sum(rows.filter(o=>o.channel==='Livestream'),orderRevenue);
   if(todayOnly&&liveRevenue<=0)alerts.push({level:'warn',title:'Livestream chưa có doanh số',text:'Chưa ghi nhận doanh số Live trong dữ liệu hôm nay.'});
 
-  if(k.returnRate>.20)alerts.push({level:'bad',title:'Tỷ lệ hoàn trên 20%',text:`Hiện tại ${pct(k.returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn.`});
+  const returnRate=overview(rows).returnRate;
+  if(returnRate>.20)alerts.push({level:'bad',title:'Tỷ lệ hoàn trên 20%',text:`Hiện tại ${pct(returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn.`});
 
   const age=(Date.now()-Date.parse(meta.lastUpdated||''))/60000;
   const stale=meta.transport==='VERCEL_DIRECT'?2:6;
@@ -630,7 +645,7 @@ function renderAll(){
     card('Tổng Data',data?numFmt(data):'Chưa nhập',data?`CR chốt ${pct(k.orders/data)}`:'Nhập tại màn Theo kênh'),
     card('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Chưa có data'),
     card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình',false,'all','','Đơn tạo trong kỳ'),
-    card('Đơn đã loại',numFmt(excludedCurrent),'Huỷ/Xoá + các nguồn Đơn đổi',false,'excluded','','Đơn đã loại')
+    card('Đơn đã loại',numFmt(excludedCurrent),'Huỷ/Xoá + nguồn Đơn đổi, CSKH',false,'excluded','','Đơn đã loại')
   ].join('');
   $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Ngày tạo đơn (giờ VN) · trạng thái tại lần đồng bộ`;
   renderTrend(rows);
@@ -662,7 +677,7 @@ function renderTrend(rows){
   const g=group(rows,o=>single?orderHour(o):orderDate(o));
   const labels=single?Array.from({length:15},(_,i)=>String(i+8).padStart(2,'0')+'h'):Object.keys(g).sort();
   const data=labels.map(l=>{const rr=g[l]||[],o=overview(rr);return{label:l,created:o.createdRevenue,success:o.successfulRevenue}});
-  drawLineChart($('trendChart'),data,[{key:'created',class:'lineRed',point:'pointRed'},{key:'success',class:'lineDark',point:'pointDark'}],single?null:effectiveDailyTarget($('from').value.slice(0,7)))
+  drawLineChart($('trendChart'),data,[{key:'created',class:'lineRed',point:'pointRed'},{key:'success',class:'lineDark',point:'pointDark'}],single||!targetAvailableForChannel()?null:effectiveDailyTarget($('from').value.slice(0,7)))
 }
 function drawLineChart(el,data,series,target=null){
   const {svg,W,H,P,pw,ph}=chartBase(el);if(!data.length){addSvg(svg,'text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axisText'},'Không có dữ liệu');return}
@@ -827,7 +842,8 @@ async function loadProductRange(force=false){
     renderProducts();
     return
   }
-  if(!force&&productRangeCache.has(key)){
+  const today=vnDate();
+  if(!force&&range.to<today&&productRangeCache.has(key)){
     productRangeOrders=productRangeCache.get(key);
     productRangeLoadedKey=key;
     fillProductChannelFromRows(productRangeOrders);
@@ -850,7 +866,7 @@ async function loadProductRange(force=false){
       const batch=chunks.slice(i,i+3);
       const payloads=await Promise.all(batch.map(async chunk=>{
         const chunkKey=chunk.from+'|'+chunk.to;
-        if(productRangeCache.has('chunk:'+chunkKey))return {orders:productRangeCache.get('chunk:'+chunkKey)};
+        if(chunk.to<today&&productRangeCache.has('chunk:'+chunkKey))return {orders:productRangeCache.get('chunk:'+chunkKey)};
         const payload=await fetchProductRangeChunk(pwd,chunk.from,chunk.to);
         if(!payload||!Array.isArray(payload.orders))throw new Error('Dữ liệu sản phẩm Pancake không hợp lệ');
         productRangeCache.set('chunk:'+chunkKey,payload.orders);

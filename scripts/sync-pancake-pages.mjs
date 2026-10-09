@@ -330,8 +330,24 @@ function keepInRange(order,from,to){
   const d=normalizedDateKey(order);
   return d>=from&&d<=to
 }
+// One malformed Pancake order (missing timestamp, negative amount) must not
+// block the whole snapshot: skip it, log it and report the count in meta.
+const normalizedCache=new WeakMap();
+function safeNormalize(raw){
+  if(normalizedCache.has(raw))return normalizedCache.get(raw);
+  let order=null;
+  try{
+    order=normalize(raw);
+    if(!Number.isFinite(order.netAmount)||order.netAmount<0)throw new Error('Invalid Pancake amount');
+  }catch{
+    order=null;
+  }
+  normalizedCache.set(raw,order);
+  return order;
+}
+let skippedOrders=0;
 function pageDateBounds(data){
-  const dates=data.map(normalize).map(normalizedDateKey).filter(Boolean).sort();
+  const dates=data.map(safeNormalize).filter(Boolean).map(normalizedDateKey).filter(Boolean).sort();
   return {min:dates[0]||null,max:dates[dates.length-1]||null}
 }
 function rawOrderKey(raw,index=0){
@@ -378,9 +394,12 @@ async function fetchOrders(from,to){
   const latest=await fetchOrderPage(apiFrom,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
-  const normalized=[...rawMap.values()].map(normalize);
-  const inRange=normalized.filter(x=>keepInRange(x,from,to));
-  if(inRange.some(x=>!Number.isFinite(x.netAmount)||x.netAmount<0))throw new Error('Pancake returned an invalid net amount; refusing to publish an inaccurate daily total');
+  const raws=[...rawMap.values()];
+  const normalized=raws.map(safeNormalize);
+  const skippedIds=raws.filter((raw,i)=>!normalized[i]).map(raw=>str(get(raw,'display_id|id|order_id|code'),'?'));
+  skippedOrders=skippedIds.length;
+  if(skippedOrders)console.warn(`Skipped ${skippedOrders} malformed Pancake order(s):`,skippedIds.slice(0,20).join(', '));
+  const inRange=normalized.filter(x=>x&&keepInRange(x,from,to));
   if(!inRange.length&&from<dateKey())throw new Error('Pancake returned zero historical orders for the requested period; refusing to publish empty totals');
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
   return inRange
@@ -492,7 +511,7 @@ const moneyMismatchDays=Object.entries(dayReconciliation)
   .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
 if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
 console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
-const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
+const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,skippedOrders,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   apiKey:API_KEY,
