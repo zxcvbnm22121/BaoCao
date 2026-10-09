@@ -320,8 +320,16 @@ function orderRevenue(o){
 }
 function successful(o){
   if(o?.status==='THANH_CONG')return orderRevenue(o);
-  if(o?.isPartialReturn)return (Number(o?.codAmount)||0)||(Number(o?.successfulAmount)||0);
+  // Partial return: backend puts the kept-items part of the order here.
   return Number(o?.successfulAmount)||0
+}
+// Money that went back: whole order for a full return, only the returned
+// items for a partial return (the kept part counts as successful revenue).
+function returnedRevenue(o){
+  if(o?.status!=='HOAN')return 0;
+  const explicit=Number(o?.returnedAmount);
+  if(o?.returnedAmount!=null&&Number.isFinite(explicit))return explicit;
+  return o?.isPartialReturn?Math.max(0,orderRevenue(o)-successful(o)):orderRevenue(o)
 }
 function overview(rows){
   const net=sum(rows,orderRevenue),gross=sum(rows,x=>x.grossAmount??x.totalAmount),success=sum(rows,successful),returns=rows.filter(x=>x.status==='HOAN');
@@ -332,7 +340,7 @@ function overview(rows){
     successfulOrders:rows.filter(x=>successful(x)>0||x.status==='THANH_CONG').length,
     pendingRevenue:sum(rows,x=>x.status==='TREO'?orderRevenue(x):0),
     shippingRevenue:sum(rows,x=>x.status==='DANG_GIAO'?orderRevenue(x):0),
-    returnRevenue:sum(rows,x=>x.status==='HOAN'?orderRevenue(x):0),
+    returnRevenue:sum(rows,returnedRevenue),
     cancelledRevenue:sum(rows,x=>x.status==='HUY'?orderRevenue(x):0),
     returnRate:rows.length?returns.length/rows.length:0,
     aov:rows.length?net/rows.length:0
@@ -554,7 +562,7 @@ function renderFunnel(rows){
 }
 function renderReturnReasons(rows){
   const returns=rows.filter(o=>o.status==='HOAN'),g=group(returns,returnReasonLabel);
-  const list=Object.entries(g).map(([reason,r])=>({reason,rows:r,count:r.length,value:sum(r,orderRevenue)})).sort((a,b)=>b.count-a.count||b.value-a.value);
+  const list=Object.entries(g).map(([reason,r])=>({reason,rows:r,count:r.length,value:sum(r,returnedRevenue)})).sort((a,b)=>b.count-a.count||b.value-a.value);
   const missing=returns.filter(o=>returnReasonLabel(o)==='Chưa ghi lý do').length;
   $('returnReasonSummary').textContent=`${numFmt(returns.length)} đơn hoàn${missing?' · '+missing+' chưa có lý do':''}`;
   $('returnReasonList').innerHTML=list.length?list.map(x=>`<div class="returnReasonRow clickable" data-drill-type="returnReason" data-drill-value="${esc(x.reason)}" data-drill-title="Hoàn · ${esc(x.reason)}">

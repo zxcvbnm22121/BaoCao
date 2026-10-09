@@ -115,7 +115,11 @@ function productImage(rawItem){
 }
 function productLine(rawItem){
   if(!rawItem||typeof rawItem!=='object')return null;
-  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
+  // Pancake keeps several per-item return counters (requested, returning,
+  // returned). A 0 in one must not hide a positive value in another.
+  const returnedValues=['returned_quantity','return_quantity','returned_count','returning_quantity','quantity_returned','returned_qty','return_qty']
+    .map(k=>rawItem[k]).filter(v=>v!==undefined&&v!==null&&v!=='');
+  const returnedRaw=returnedValues.length?Math.max(...returnedValues.map(num)):undefined;
   const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
   if(!quantity)return null;
 
@@ -167,6 +171,14 @@ function productLine(rawItem){
   const name=str(nameCandidates.find(v=>str(v,'').trim())||'','').trim()||productCode||'Chưa rõ sản phẩm';
   const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
   const imageUrl=productImage(rawItem);
+  // Value of one unit after its line discount, used to split partial returns.
+  const retailPrice=num(get(rawItem,'variation_info.retail_price|variation.retail_price|retail_price|price'));
+  const lineDiscountRaw=get(rawItem,'total_discount');
+  const eachDiscount=num(get(rawItem,'discount_each_product'));
+  const lineDiscount=lineDiscountRaw!==undefined
+    ? num(lineDiscountRaw)
+    : rawItem.is_discount_percent?retailPrice*quantity*eachDiscount/100:eachDiscount*quantity;
+  const unitPrice=rawItem.is_bonus_product||!quantity?0:Math.max(0,retailPrice*quantity-lineDiscount)/quantity;
 
   return{
     sku,
@@ -177,7 +189,8 @@ function productLine(rawItem){
     productId,
     variationId,
     quantity,
-    returnedQuantity
+    returnedQuantity,
+    unitPrice
   }
 }
 function productAliases(item){
@@ -248,9 +261,22 @@ function normalize(raw){
   const products=extractProducts(raw,status,partial);
   const partialReturnProductDetailMissing=partial&&products.length>0&&!products.some(x=>Number(x.returnedQuantity)>0);
   const explicitSuccess=num(get(raw,'successful_amount|received_amount|collected_amount|paid_amount'));
-  let successfulAmount=0;
+  // Partial return: the customer kept some items and sent the rest back.
+  // Returned value = returned units x their after-discount unit price;
+  // successful revenue = the rest of the order total (kept items + shipping).
+  // Without per-item return detail fall back to Pancake's paid/COD amount.
+  let successfulAmount=0,returnedAmount=0;
   if(status==='THANH_CONG')successfulAmount=explicitSuccess||netAmount;
-  else if(partial)successfulAmount=codAmount||explicitSuccess||0;
+  else if(partial){
+    const returnedGoods=products.reduce((a,x)=>a+(Number(x.unitPrice)||0)*(Number(x.returnedQuantity)||0),0);
+    if(returnedGoods>0){
+      returnedAmount=Math.min(netAmount,Math.round(returnedGoods));
+      successfulAmount=netAmount-returnedAmount;
+    }else{
+      successfulAmount=Math.min(netAmount,explicitSuccess||codAmount||0);
+      returnedAmount=netAmount-successfulAmount;
+    }
+  }else if(status==='HOAN')returnedAmount=netAmount;
 
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
@@ -280,6 +306,7 @@ function normalize(raw){
     prepaidAmount,
     totalAmount:netAmount,
     successfulAmount,
+    returnedAmount,
     isPartialReturn:partial,
     excludedStatus,
     excludedExchangeSource,
