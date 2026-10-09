@@ -50,12 +50,14 @@ function mapStatus(code,name=''){
   return'TREO'
 }
 function mapChannel(raw,source='',rawOrder={}){
-  const liveFlag=get(rawOrder,'is_live|is_livestream|is_live_shopping|livestream_id|live_id|live_video_id');
   const marketplace=get(rawOrder,'marketplace_id|partner|system_id');
   const utm=get(rawOrder,'p_utm_source|p_utm_medium|p_utm_campaign|ads_source');
   const page=get(rawOrder,'page.name|page.username');
   const v=`${str(raw)} ${str(source)} ${str(marketplace)} ${str(utm)} ${str(page)}`.toLowerCase();
-  if(liveFlag===true||liveFlag===1||liveFlag==='1'||/live|livestream/.test(v))return'Livestream';
+  // A Live order is one whose Pancake order source is Live/Livestream.
+  // Page names, UTM tags and live-flag fields do not decide it.
+  const orderSource=str(get(rawOrder,'order_sources_name|order_source_name|source_name'));
+  if(/(?:^|[^a-z0-9])live/i.test(orderSource))return'Livestream';
   if(/shopee/.test(v))return'Shopee';
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';
@@ -113,7 +115,11 @@ function productImage(rawItem){
 }
 function productLine(rawItem){
   if(!rawItem||typeof rawItem!=='object')return null;
-  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
+  // Pancake keeps several per-item return counters (requested, returning,
+  // returned). A 0 in one must not hide a positive value in another.
+  const returnedValues=['returned_quantity','return_quantity','returned_count','returning_quantity','quantity_returned','returned_qty','return_qty']
+    .map(k=>rawItem[k]).filter(v=>v!==undefined&&v!==null&&v!=='');
+  const returnedRaw=returnedValues.length?Math.max(...returnedValues.map(num)):undefined;
   const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
   if(!quantity)return null;
 
@@ -165,6 +171,14 @@ function productLine(rawItem){
   const name=str(nameCandidates.find(v=>str(v,'').trim())||'','').trim()||productCode||'Chưa rõ sản phẩm';
   const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
   const imageUrl=productImage(rawItem);
+  // Value of one unit after its line discount, used to split partial returns.
+  const retailPrice=num(get(rawItem,'variation_info.retail_price|variation.retail_price|retail_price|price'));
+  const lineDiscountRaw=get(rawItem,'total_discount');
+  const eachDiscount=num(get(rawItem,'discount_each_product'));
+  const lineDiscount=lineDiscountRaw!==undefined
+    ? num(lineDiscountRaw)
+    : rawItem.is_discount_percent?retailPrice*quantity*eachDiscount/100:eachDiscount*quantity;
+  const unitPrice=rawItem.is_bonus_product||!quantity?0:Math.max(0,retailPrice*quantity-lineDiscount)/quantity;
 
   return{
     sku,
@@ -175,7 +189,8 @@ function productLine(rawItem){
     productId,
     variationId,
     quantity,
-    returnedQuantity
+    returnedQuantity,
+    unitPrice
   }
 }
 function productAliases(item){
@@ -246,9 +261,22 @@ function normalize(raw){
   const products=extractProducts(raw,status,partial);
   const partialReturnProductDetailMissing=partial&&products.length>0&&!products.some(x=>Number(x.returnedQuantity)>0);
   const explicitSuccess=num(get(raw,'successful_amount|received_amount|collected_amount|paid_amount'));
-  let successfulAmount=0;
+  // Partial return: the customer kept some items and sent the rest back.
+  // Returned value = returned units x their after-discount unit price;
+  // successful revenue = the rest of the order total (kept items + shipping).
+  // Without per-item return detail fall back to Pancake's paid/COD amount.
+  let successfulAmount=0,returnedAmount=0;
   if(status==='THANH_CONG')successfulAmount=explicitSuccess||netAmount;
-  else if(partial)successfulAmount=codAmount||explicitSuccess||0;
+  else if(partial){
+    const returnedGoods=products.reduce((a,x)=>a+(Number(x.unitPrice)||0)*(Number(x.returnedQuantity)||0),0);
+    if(returnedGoods>0){
+      returnedAmount=Math.min(netAmount,Math.round(returnedGoods));
+      successfulAmount=netAmount-returnedAmount;
+    }else{
+      successfulAmount=Math.min(netAmount,explicitSuccess||codAmount||0);
+      returnedAmount=netAmount-successfulAmount;
+    }
+  }else if(status==='HOAN')returnedAmount=netAmount;
 
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
@@ -278,6 +306,7 @@ function normalize(raw){
     prepaidAmount,
     totalAmount:netAmount,
     successfulAmount,
+    returnedAmount,
     isPartialReturn:partial,
     excludedStatus,
     excludedExchangeSource,
@@ -330,8 +359,24 @@ function keepInRange(order,from,to){
   const d=normalizedDateKey(order);
   return d>=from&&d<=to
 }
+// One malformed Pancake order (missing timestamp, negative amount) must not
+// block the whole snapshot: skip it, log it and report the count in meta.
+const normalizedCache=new WeakMap();
+function safeNormalize(raw){
+  if(normalizedCache.has(raw))return normalizedCache.get(raw);
+  let order=null;
+  try{
+    order=normalize(raw);
+    if(!Number.isFinite(order.netAmount)||order.netAmount<0)throw new Error('Invalid Pancake amount');
+  }catch{
+    order=null;
+  }
+  normalizedCache.set(raw,order);
+  return order;
+}
+let skippedOrders=0;
 function pageDateBounds(data){
-  const dates=data.map(normalize).map(normalizedDateKey).filter(Boolean).sort();
+  const dates=data.map(safeNormalize).filter(Boolean).map(normalizedDateKey).filter(Boolean).sort();
   return {min:dates[0]||null,max:dates[dates.length-1]||null}
 }
 function rawOrderKey(raw,index=0){
@@ -378,9 +423,12 @@ async function fetchOrders(from,to){
   const latest=await fetchOrderPage(apiFrom,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
-  const normalized=[...rawMap.values()].map(normalize);
-  const inRange=normalized.filter(x=>keepInRange(x,from,to));
-  if(inRange.some(x=>!Number.isFinite(x.netAmount)||x.netAmount<0))throw new Error('Pancake returned an invalid net amount; refusing to publish an inaccurate daily total');
+  const raws=[...rawMap.values()];
+  const normalized=raws.map(safeNormalize);
+  const skippedIds=raws.filter((raw,i)=>!normalized[i]).map(raw=>str(get(raw,'display_id|id|order_id|code'),'?'));
+  skippedOrders=skippedIds.length;
+  if(skippedOrders)console.warn(`Skipped ${skippedOrders} malformed Pancake order(s):`,skippedIds.slice(0,20).join(', '));
+  const inRange=normalized.filter(x=>x&&keepInRange(x,from,to));
   if(!inRange.length&&from<dateKey())throw new Error('Pancake returned zero historical orders for the requested period; refusing to publish empty totals');
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
   return inRange
@@ -492,7 +540,7 @@ const moneyMismatchDays=Object.entries(dayReconciliation)
   .map(([date,d])=>({date,net:d.net,codPlusPrepaid:d.cod+d.prepaid}));
 if(moneyMismatchDays.length)console.log('PANCAKE_MONEY_FIELDS_DIFFER:',JSON.stringify(moneyMismatchDays));
 console.log('DAILY_RECONCILIATION:',JSON.stringify({from,to:today,byDate:dayReconciliation,month:{orders:reportCount,net:reportNet}}));
-const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
+const payload={meta:{source:'PANCAKE',lastUpdated:new Date().toISOString(),from,to:today,count:orders.length,skippedOrders,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},monthlyTarget:MONTHLY_TARGET,channelTargets:CHANNEL_TARGETS,orders};
 await fs.writeFile(OUT,JSON.stringify(encryptJson(payload,PASSWORD)));
 await fs.writeFile(KEY_OUT,JSON.stringify(encryptJson({
   apiKey:API_KEY,

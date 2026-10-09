@@ -125,12 +125,14 @@ function mapStatus(code,name=''){
 }
 
 function mapChannel(raw,source='',rawOrder={}){
-  const liveFlag=get(rawOrder,'is_live|is_livestream|is_live_shopping|livestream_id|live_id|live_video_id');
   const marketplace=get(rawOrder,'marketplace_id|partner|system_id');
   const utm=get(rawOrder,'p_utm_source|p_utm_medium|p_utm_campaign|ads_source');
   const page=get(rawOrder,'page.name|page.username');
   const v=`${str(raw)} ${str(source)} ${str(marketplace)} ${str(utm)} ${str(page)}`.toLowerCase();
-  if(liveFlag===true||liveFlag===1||liveFlag==='1'||/live|livestream/.test(v))return'Livestream';
+  // A Live order is one whose Pancake order source is Live/Livestream.
+  // Page names, UTM tags and live-flag fields do not decide it.
+  const orderSource=str(get(rawOrder,'order_sources_name|order_source_name|source_name'));
+  if(/(?:^|[^a-z0-9])live/i.test(orderSource))return'Livestream';
   if(/shopee/.test(v))return'Shopee';
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';
@@ -189,7 +191,11 @@ function productImage(rawItem){
 }
 function productLine(rawItem){
   if(!rawItem||typeof rawItem!=='object')return null;
-  const returnedRaw=get(rawItem,'returned_quantity|return_quantity|quantity_returned|returned_qty|return_qty');
+  // Pancake keeps several per-item return counters (requested, returning,
+  // returned). A 0 in one must not hide a positive value in another.
+  const returnedValues=['returned_quantity','return_quantity','returned_count','returning_quantity','quantity_returned','returned_qty','return_qty']
+    .map(k=>rawItem[k]).filter(v=>v!==undefined&&v!==null&&v!=='');
+  const returnedRaw=returnedValues.length?Math.max(...returnedValues.map(num)):undefined;
   const quantity=Math.max(0,num(get(rawItem,'quantity|qty|count|total_quantity|variation.quantity|variation_info.quantity')),num(returnedRaw));
   if(!quantity)return null;
 
@@ -241,6 +247,14 @@ function productLine(rawItem){
   const name=str(nameCandidates.find(v=>str(v,'').trim())||'','').trim()||productCode||'Chưa rõ sản phẩm';
   const returnedQuantity=returnedRaw===undefined?0:Math.max(0,num(returnedRaw));
   const imageUrl=productImage(rawItem);
+  // Value of one unit after its line discount, used to split partial returns.
+  const retailPrice=num(get(rawItem,'variation_info.retail_price|variation.retail_price|retail_price|price'));
+  const lineDiscountRaw=get(rawItem,'total_discount');
+  const eachDiscount=num(get(rawItem,'discount_each_product'));
+  const lineDiscount=lineDiscountRaw!==undefined
+    ? num(lineDiscountRaw)
+    : rawItem.is_discount_percent?retailPrice*quantity*eachDiscount/100:eachDiscount*quantity;
+  const unitPrice=rawItem.is_bonus_product||!quantity?0:Math.max(0,retailPrice*quantity-lineDiscount)/quantity;
 
   return{
     sku,
@@ -251,7 +265,8 @@ function productLine(rawItem){
     productId,
     variationId,
     quantity,
-    returnedQuantity
+    returnedQuantity,
+    unitPrice
   }
 }
 function productAliases(item){
@@ -315,9 +330,22 @@ function normalize(raw){
   const products=extractProducts(raw,status,partial);
   const partialReturnProductDetailMissing=partial&&products.length>0&&!products.some(x=>Number(x.returnedQuantity)>0);
   const explicitSuccess=num(get(raw,'successful_amount|received_amount|collected_amount|paid_amount'));
-  let successfulAmount=0;
+  // Partial return: the customer kept some items and sent the rest back.
+  // Returned value = returned units x their after-discount unit price;
+  // successful revenue = the rest of the order total (kept items + shipping).
+  // Without per-item return detail fall back to Pancake's paid/COD amount.
+  let successfulAmount=0,returnedAmount=0;
   if(status==='THANH_CONG')successfulAmount=explicitSuccess||netAmount;
-  else if(partial)successfulAmount=codAmount||explicitSuccess||0;
+  else if(partial){
+    const returnedGoods=products.reduce((a,x)=>a+(Number(x.unitPrice)||0)*(Number(x.returnedQuantity)||0),0);
+    if(returnedGoods>0){
+      returnedAmount=Math.min(netAmount,Math.round(returnedGoods));
+      successfulAmount=netAmount-returnedAmount;
+    }else{
+      successfulAmount=Math.min(netAmount,explicitSuccess||codAmount||0);
+      returnedAmount=netAmount-successfulAmount;
+    }
+  }else if(status==='HOAN')returnedAmount=netAmount;
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
   const excludedCskhSource=/^\s*cskh\b/i.test(sourceName);
@@ -332,7 +360,7 @@ function normalize(raw){
     returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
     products,partialReturnProductDetailMissing,
     grossAmount,netAmount,discountAmount,codAmount,prepaidAmount,
-    totalAmount:netAmount,successfulAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,excludedCskhSource,
+    totalAmount:netAmount,successfulAmount,returnedAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,excludedCskhSource,
     excludedFromDefaultReport:excludedStatus||excludedExchangeSource||excludedCskhSource
   }
 }
@@ -548,20 +576,20 @@ export default async function handler(req,res){
 
     await discoverShopId(deadline);
 
-    if(action==='products'){
+    if(action==='products'||action==='range'){
       const from=String(req.body?.from||'').trim();
       const to=String(req.body?.to||'').trim();
       const valid=/^\d{4}-\d{2}-\d{2}$/;
       if(!valid.test(from)||!valid.test(to)||from>to){
-        return res.status(400).json({error:'Khoảng ngày sản phẩm không hợp lệ'})
+        return res.status(400).json({error:'Khoảng ngày không hợp lệ'})
       }
-      const cacheKey='products|'+from+'|'+to;
+      const cacheKey='range|'+from+'|'+to;
       const now=Date.now();
       const hit=responseCache.get(cacheKey);
       if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
       const result=await fetchOrders(from,to,deadline);
       const payload=buildPayload(result,from,to);
-      payload.meta.productRange=true;
+      if(action==='products')payload.meta.productRange=true;
       responseCache.set(cacheKey,{at:now,payload});
       return res.status(200).json(payload)
     }
