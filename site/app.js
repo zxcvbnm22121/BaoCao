@@ -642,11 +642,11 @@ function drawGroupedBars(el,data,moneyMode=false){
   for(let i=0;i<=4;i++){const y=P.t+ph*i/4;addSvg(svg,'line',{x1:P.l,y1:y,x2:W-P.r,y2:y,class:'gridLine'});addSvg(svg,'text',{x:P.l-6,y:y+3,'text-anchor':'end',class:'axisText'},moneyMode?compact(max*(1-i/4)).replace('đ',''):Math.round(max*(1-i/4)))}
   data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,y=v=>P.t+ph-(Number(v)||0)/max*ph;[['a','barRed',-bw*.55],['b','barDark',bw*.55]].forEach(([key,cls,off])=>{const yy=y(d[key]),rect=addSvg(svg,'rect',{x:cx+off-bw/2,y:yy,width:bw,height:P.t+ph-yy,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${moneyMode?money(d[key]):d[key]}`)});addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).length>12?String(d.label).slice(0,11)+'…':d.label)})
 }
-function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegative=false}={}){
+function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegative=false,positiveIsBad=false}={}){
   const {svg,W,H,P,pw,ph}=chartBase(el);if(!data.length){addSvg(svg,'text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axisText'},'Không có dữ liệu');return}
   let min=positiveNegative?Math.min(0,...data.map(x=>Number(x.value)||0)):0,max=Math.max(1,...data.map(x=>Number(x.value)||0));if(min===max)max=min+1;const range=max-min,bw=Math.max(5,Math.min(34,pw/(data.length*1.7))),slot=pw/data.length,y=v=>P.t+ph-(v-min)/range*ph,zero=y(0);
   if(positiveNegative)addSvg(svg,'line',{x1:P.l,y1:zero,x2:W-P.r,y2:zero,stroke:'#cfc8c1','stroke-width':1});
-  data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,val=Number(d.value)||0,yy=y(val),top=Math.min(yy,zero),h=Math.max(1,Math.abs(zero-yy)),cls=positiveNegative?(val>=0?'barGreen':'barRed'):'barRed';const rect=addSvg(svg,'rect',{x:cx-bw/2,y:top,width:bw,height:h,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${percentMode?(val.toFixed(1)+'%'):moneyMode?money(val):numFmt(val)}`);if(data.length<=15||i%Math.ceil(data.length/10)===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).slice(-5))})
+  data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,val=Number(d.value)||0,yy=y(val),top=Math.min(yy,zero),h=Math.max(1,Math.abs(zero-yy)),cls=positiveNegative?(val>=0?(positiveIsBad?'barRed':'barGreen'):(positiveIsBad?'barGreen':'barRed')):'barRed';const rect=addSvg(svg,'rect',{x:cx-bw/2,y:top,width:bw,height:h,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${percentMode?(val.toFixed(1)+'%'):moneyMode?money(val):numFmt(val)}`);if(data.length<=15||i%Math.ceil(data.length/10)===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).slice(-5))})
 }
 function renderTarget(){
   const days=selectedCalendarDays(),selectedChannel=$('channel').value,allRows=filteredRows();
@@ -804,10 +804,16 @@ function renderProducts(){
   </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
 }
 function renderChannels(rows){
-  const stats=channelStats(rows),total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
+  const selectedChannel=$('channel').value,allStats=channelStats(rows);
+  const stats=selectedChannel==='Tất cả'?allStats:allStats.filter(x=>x.name===selectedChannel);
+  const total=Math.max(1,overview(rows).createdRevenue),sumData=stats.reduce((a,x)=>a+x.data,0);
   $('channelRows').innerHTML=stats.map(x=>{const cr=x.data?x.orders/x.data:null;return `<tr class="clickable" data-drill-type="channel" data-drill-value="${esc(x.name)}" data-drill-title="Kênh · ${esc(x.name)}"><td data-label="Kênh">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Data"><input class="dataInput" data-channel="${esc(x.name)}" type="number" min="0" step="1" value="${x.data||''}" placeholder="Nhập data"></td><td data-label="CR chốt" class="${cr!=null&&cr<.1?'bad':''}">${pct(cr)}</td><td data-label="Tỷ trọng">${pct(x.createdRevenue/total)}</td><td data-label="AOV">${compact(x.aov)}</td><td data-label="Hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td></tr>`}).join('')||'<tr><td colspan="9">Không có dữ liệu</td></tr>';
-  const fbAds=stats.find(x=>x.name==='Facebook Ads')?.createdRevenue||0,live=stats.find(x=>x.name==='Livestream')?.createdRevenue||0;
-  $('channelDataSummary').textContent=`FB tổng: ${compact(fbAds+live)} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR tổng: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
+  if(selectedChannel==='Tất cả'){
+    const fbAds=allStats.find(x=>x.name==='Facebook Ads')?.createdRevenue||0,live=allStats.find(x=>x.name==='Livestream')?.createdRevenue||0;
+    $('channelDataSummary').textContent=`FB tổng: ${compact(fbAds+live)} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR tổng: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
+  }else{
+    $('channelDataSummary').textContent=`${selectedChannel} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
+  }
   drawGroupedBars($('channelCompareChart'),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
   drawSingleBars($('channelCrChart'),stats.map(x=>({label:x.name,value:x.data?x.orders/x.data*100:0})),{percentMode:true});
   document.querySelectorAll('.dataInput').forEach(inp=>{
@@ -823,14 +829,26 @@ function renderSales(rows){
   drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
 }
 function renderMonthly(){
-  const days=selectedCalendarDays(),rows=filteredRows(),g=group(rows,o=>orderDate(o)),daily=[],cumulative=[];
+  const selectedChannel=$('channel').value;
+  if(!targetAvailableForChannel(selectedChannel)){
+    const days=selectedCalendarDays(),rows=filteredRows(),g=group(rows,o=>orderDate(o));
+    let createdSum=0;
+    const daily=days.map(key=>{const o=overview(g[key]||[]);createdSum+=o.createdRevenue;return{label:key,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders,actual:createdSum}});
+    $('monthlyKpis').innerHTML=[mini('Target khoảng lọc','Chưa cấu hình'),mini('Đã đạt',money(createdSum)),mini('% hoàn thành','—'),mini('Tiến độ thời gian',pct(reportTimeProgress(days))),mini('Dự báo cuối kỳ','—')].join('');
+    drawLineChart($('cumulativeChart'),daily,[{key:'actual',class:'lineRed',point:'pointRed'}],null);
+    drawSingleBars($('dailyGapChart'),[],{moneyMode:true,positiveNegative:true});
+    $('dailyRows').innerHTML=daily.slice().reverse().map(d=>`<tr><td data-label="Ngày">${d.label.slice(8,10)}/${d.label.slice(5,7)}</td><td data-label="Tạo đơn">${money(d.created)}</td><td data-label="Thành công">${money(d.success)}</td><td data-label="Target ngày">—</td><td data-label="Gap">—</td><td data-label="% đạt">—</td><td data-label="Số đơn">${d.orders}</td></tr>`).join('');
+    document.querySelector('#view-monthly .sectionHead p').textContent=`Kênh ${selectedChannel} chưa được cấu hình target`;
+    return
+  }
+  const days=selectedCalendarDays(),rows=scopeRowsForTarget(filteredRows(),selectedChannel),g=group(rows,o=>orderDate(o)),daily=[],cumulative=[];
   const periodGoal=periodTarget(days),time=reportTimeProgress(days);
   let createdSum=0,targetSum=0;
   for(const key of days){
     const rr=g[key]||[],o=overview(rr),target=effectiveDailyTarget(key.slice(0,7));
     createdSum+=o.createdRevenue;
     targetSum+=target;
-    daily.push({label:key,value:o.createdRevenue-target,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders,target});
+    daily.push({label:key,value:target-o.createdRevenue,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders,target});
     cumulative.push({label:key,actual:createdSum,target:targetSum});
   }
   const completion=periodGoal?createdSum/periodGoal:0,gapPts=(completion-time)*100,forecast=time>0?createdSum/time:0;
@@ -840,13 +858,13 @@ function renderMonthly(){
     mini('Dự báo cuối kỳ',time>0?compact(forecast):'—')
   ].join('');
   drawLineChart($('cumulativeChart'),cumulative,[{key:'actual',class:'lineRed',point:'pointRed'},{key:'target',class:'lineTarget',point:'pointDark'}],null);
-  drawSingleBars($('dailyGapChart'),daily,{moneyMode:true,positiveNegative:true});
+  drawSingleBars($('dailyGapChart'),daily,{moneyMode:true,positiveNegative:true,positiveIsBad:true});
   $('dailyRows').innerHTML=daily.slice().reverse().map(d=>`<tr>
     <td data-label="Ngày">${d.label.slice(8,10)}/${d.label.slice(5,7)}</td>
     <td data-label="Tạo đơn">${money(d.created)}</td>
     <td data-label="Thành công">${money(d.success)}</td>
     <td data-label="Target ngày">${money(d.target)}</td>
-    <td data-label="Gap" class="${d.value>=0?'good':'bad'}">${d.value>=0?'+':''}${money(d.value)}</td>
+    <td data-label="Gap" class="${d.value>0?'bad':'good'}">${d.value>0?'GAP '+money(d.value):d.value<0?'Vượt '+money(Math.abs(d.value)):'Đạt'}</td>
     <td data-label="% đạt">${pct(d.target?d.created/d.target:0)}</td>
     <td data-label="Số đơn">${d.orders}</td>
   </tr>`).join('');
