@@ -446,17 +446,20 @@ async function fetchOrders(from,to,deadline){
 
   // Pancake pages can shift while orders are inserted or edited.
   // A second batched pass closes page-boundary gaps, but only when the
-  // first pass left enough of the time budget to repeat it safely.
+  // range spans more than one page and the first pass left enough of the
+  // time budget to repeat it safely. A single page has no boundary to slip
+  // through, so short ranges (e.g. one day) finish after one round.
   let passes=0;
   for(let pass=1;pass<=2;pass++){
     const passStart=Date.now();
-    let completed=false;
+    let completed=false,lastPage=0;
     for(let start=1;start<=200;start+=4){
       const pages=[start,start+1,start+2,start+3];
       const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page,deadline)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],result=results[i],bounds=pageBounds(result.data);
         result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
+        lastPage=page;
         if(!result.data.length || (bounds.max&&bounds.max<from) || (result.totalPages&&page>=result.totalPages)){
           completed=true;
           break;
@@ -466,6 +469,7 @@ async function fetchOrders(from,to,deadline){
     }
     if(!completed)throw new Error('Pancake pagination limit reached');
     passes=pass;
+    if(lastPage===1)break;
     const passMs=Date.now()-passStart;
     if(deadline-Date.now()<passMs*1.5+5000)break;
   }
