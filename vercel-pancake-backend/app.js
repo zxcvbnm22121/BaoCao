@@ -9,6 +9,8 @@ const statusLabels={TREO:'Treo',DANG_GIAO:'Đang giao',THANH_CONG:'Thành công'
 const statusColors={TREO:'#b57a21',DANG_GIAO:'#386ba7',THANH_CONG:'#28734c',HOAN:'#a7192e',HUY:'#77716b'};
 const b64bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},payloadMonthlyTarget=2300000000,currentView='overview',productPeriod='day';
+let productRangeOrders=[],productRangeLoadedKey='',productRangeLoadingKey='',productRangeError='',productRangeRequestId=0;
+const productRangeCache=new Map();
 
 const SETTINGS_KEY='sevenam_kpi_settings_v3';
 const DATA_KEY='sevenam_channel_data_v3';
@@ -74,7 +76,7 @@ async function fetchLiveStatic(password){
   if(!r.ok)throw new Error('Chưa có bản dữ liệu LIVE dự phòng');
   return decryptEnvelope(await r.json(),password)
 }
-async function callPancakeBackend(password,action='live',timeoutMs=55000){
+async function callPancakeBackend(password,action='live',timeoutMs=55000,extra={}){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
@@ -83,7 +85,7 @@ async function callPancakeBackend(password,action='live',timeoutMs=55000){
       mode:'cors',
       cache:'no-store',
       headers:{'Content-Type':'application/json','X-Dashboard-Password':password},
-      body:JSON.stringify({action}),
+      body:JSON.stringify({action,...extra}),
       signal:controller.signal
     });
     const body=await r.json().catch(()=>({}));
@@ -99,6 +101,9 @@ async function fetchLiveOpen(password){
 }
 async function fetchLiveDelta(password){
   return callPancakeBackend(password,'delta',30000)
+}
+async function fetchProductRangeChunk(password,from,to){
+  return callPancakeBackend(password,'products',58000,{from,to})
 }
 async function fetchLive(password,{directOnly=false}={}){
   try{return await fetchLiveDirect(password)}
@@ -770,17 +775,108 @@ function productThumb(url,code){
   return `<div class="productThumb"><img loading="lazy" referrerpolicy="no-referrer" src="${esc(src)}" alt="${esc(code||'Sản phẩm')}" onerror="this.parentElement.classList.add('imageError')"><span>7A</span></div>`
 }
 function productDateRange(){
-  const anchor=($('productAnchor')?.value||$('to').value||vnDate());
-  if(productPeriod==='week')return{from:shiftIsoDay(anchor,-6),to:anchor,label:'7 ngày'};
-  if(productPeriod==='month')return{from:anchor.slice(0,7)+'-01',to:anchor,label:'Tháng'};
-  return{from:anchor,to:anchor,label:'Ngày'}
+  const today=vnDate();
+  let from=$('productFrom')?.value||today;
+  let to=$('productTo')?.value||from;
+  if(from>to)[from,to]=[to,from];
+  return{from,to,label:productPeriod==='custom'?'Tùy chọn':productPeriod==='week'?'7 ngày':productPeriod==='month'?'Tháng':'Ngày'}
+}
+function productRangeKey(range=productDateRange()){return range.from+'|'+range.to}
+function productRangeInsideMain(range=productDateRange()){
+  return meta.source==='PANCAKE'&&Boolean(meta.from)&&Boolean(meta.to)&&range.from>=meta.from&&range.to<=meta.to
+}
+function productBaseRows(range=productDateRange()){
+  if(productRangeLoadedKey===productRangeKey(range))return productRangeOrders;
+  return sourceOrders
 }
 function productSourceRows(){
-  const r=productDateRange(),ch=$('productChannel')?.value||'Tất cả';
-  return sourceOrders.filter(o=>{
+  const r=productDateRange(),ch=$('productChannel')?.value||'Tất cả',base=productBaseRows(r);
+  return base.filter(o=>{
     const d=orderDate(o);
     return d>=r.from&&d<=r.to&&!isDefaultExcluded(o)&&(ch==='Tất cả'||o.channel===ch)
   })
+}
+function productMonthChunks(from,to){
+  const chunks=[];
+  let cursor=from;
+  while(cursor<=to){
+    const d=new Date(cursor+'T12:00:00Z');
+    const y=d.getUTCFullYear(),m=d.getUTCMonth();
+    const monthEnd=new Date(Date.UTC(y,m+1,0,12)).toISOString().slice(0,10);
+    const end=monthEnd<to?monthEnd:to;
+    chunks.push({from:cursor,to:end});
+    cursor=shiftIsoDay(end,1)
+  }
+  return chunks
+}
+function fillProductChannelFromRows(rows){
+  const el=$('productChannel');if(!el)return;
+  const old=el.value;
+  const vals=['Tất cả',...Array.from(new Set(rows.map(x=>x.channel).filter(Boolean))).sort()];
+  el.innerHTML=vals.map(x=>`<option>${esc(x)}</option>`).join('');
+  el.value=vals.includes(old)?old:'Tất cả'
+}
+async function loadProductRange(force=false){
+  const range=productDateRange(),key=productRangeKey(range);
+  productRangeError='';
+  if(!force&&productRangeInsideMain(range)){
+    productRangeLoadedKey='';
+    productRangeOrders=[];
+    fillProductChannelFromRows(sourceOrders.filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to}));
+    renderProducts();
+    return
+  }
+  if(!force&&productRangeCache.has(key)){
+    productRangeOrders=productRangeCache.get(key);
+    productRangeLoadedKey=key;
+    fillProductChannelFromRows(productRangeOrders);
+    renderProducts();
+    return
+  }
+  const pwd=sessionGet('sevenam_dashboard_password');
+  if(!pwd){
+    productRangeError='Cần mở dữ liệu LIVE để tải khoảng thời gian này.';
+    renderProducts();
+    return
+  }
+  const requestId=++productRangeRequestId;
+  productRangeLoadingKey=key;
+  renderProducts();
+  try{
+    const chunks=productMonthChunks(range.from,range.to);
+    const orders=[];
+    for(let i=0;i<chunks.length;i+=3){
+      const batch=chunks.slice(i,i+3);
+      const payloads=await Promise.all(batch.map(async chunk=>{
+        const chunkKey=chunk.from+'|'+chunk.to;
+        if(productRangeCache.has('chunk:'+chunkKey))return {orders:productRangeCache.get('chunk:'+chunkKey)};
+        const payload=await fetchProductRangeChunk(pwd,chunk.from,chunk.to);
+        if(!payload||!Array.isArray(payload.orders))throw new Error('Dữ liệu sản phẩm Pancake không hợp lệ');
+        productRangeCache.set('chunk:'+chunkKey,payload.orders);
+        return payload
+      }));
+      for(const payload of payloads)orders.push(...payload.orders)
+    }
+    if(requestId!==productRangeRequestId)return;
+    const unique=new Map();
+    for(const o of orders){
+      const k=String(o.orderCode||'')+'|'+String(o.createdAt||'');
+      unique.set(k,o)
+    }
+    productRangeOrders=[...unique.values()].filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to});
+    productRangeCache.set(key,productRangeOrders);
+    productRangeLoadedKey=key;
+    fillProductChannelFromRows(productRangeOrders);
+  }catch(e){
+    if(requestId!==productRangeRequestId)return;
+    productRangeError=e?.message||'Không tải được dữ liệu sản phẩm cho khoảng đã chọn.';
+    console.warn('Product range load failed:',e)
+  }finally{
+    if(requestId===productRangeRequestId){
+      productRangeLoadingKey='';
+      renderProducts()
+    }
+  }
 }
 function aggregateProducts(rows){
   const map=new Map();
