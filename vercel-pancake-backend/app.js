@@ -13,9 +13,30 @@ let sourceOrders=[],meta={source:'DEMO',lastUpdated:new Date().toISOString()},pa
 const SETTINGS_KEY='sevenam_kpi_settings_v3';
 const DATA_KEY='sevenam_channel_data_v3';
 const QUICK_DATA_KEY='sevenam_quick_total_data_v1';
-let settings=JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}');
-let channelData=JSON.parse(localStorage.getItem(DATA_KEY)||'{}');
-let quickTotalDataStore=JSON.parse(localStorage.getItem(QUICK_DATA_KEY)||'{}');
+
+function readJsonStorage(key){
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw)return {};
+    const parsed=JSON.parse(raw);
+    return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}
+  }catch(e){
+    console.warn('Bỏ qua dữ liệu trình duyệt lỗi:',key,e);
+    try{localStorage.removeItem(key)}catch{}
+    return {}
+  }
+}
+function writeJsonStorage(key,value){
+  try{localStorage.setItem(key,JSON.stringify(value));return true}
+  catch(e){console.warn('Không lưu được dữ liệu trình duyệt:',key,e);return false}
+}
+function sessionGet(key){try{return sessionStorage.getItem(key)}catch{return null}}
+function sessionSet(key,value){try{sessionStorage.setItem(key,value);return true}catch{return false}}
+function sessionRemove(key){try{sessionStorage.removeItem(key)}catch{}}
+
+let settings=readJsonStorage(SETTINGS_KEY);
+let channelData=readJsonStorage(DATA_KEY);
+let quickTotalDataStore=readJsonStorage(QUICK_DATA_KEY);
 
 function seed32(str){let h=2166136261;for(const c of str){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
 function randFactory(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -180,9 +201,9 @@ function updateDataFreshness(){
   note.style.display=messages.length?'block':'none';
   note.innerHTML=messages.join(' ');
 }
-function saveSettings(){localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings))}
-function saveChannelData(){localStorage.setItem(DATA_KEY,JSON.stringify(channelData))}
-function saveQuickTotalData(){localStorage.setItem(QUICK_DATA_KEY,JSON.stringify(quickTotalDataStore))}
+function saveSettings(){writeJsonStorage(SETTINGS_KEY,settings)}
+function saveChannelData(){writeJsonStorage(DATA_KEY,channelData)}
+function saveQuickTotalData(){writeJsonStorage(QUICK_DATA_KEY,quickTotalDataStore)}
 function currentDateRangeKey(){return `${$('from').value}|${$('to').value}`}
 function quickTotalDataValue(){return Number(quickTotalDataStore[currentDateRangeKey()])||0}
 function dateRange(kind){
@@ -1108,13 +1129,13 @@ function openSettings(){
 }
 function showError(msg){$('error').textContent=msg;$('error').style.display='block';setTimeout(()=>$('error').style.display='none',7000)}
 async function tryAutoLive(){
-  const saved=sessionStorage.getItem('sevenam_dashboard_password');if(!saved)return false;
+  const saved=sessionGet('sevenam_dashboard_password');if(!saved)return false;
   try{
     applyPayload(await openLiveFast(saved));
     setTimeout(refreshLiveWhenVisible,50);
     return true
   }catch{
-    sessionStorage.removeItem('sevenam_dashboard_password');
+    sessionRemove('sevenam_dashboard_password');
     return false
   }
 }
@@ -1136,7 +1157,7 @@ async function init(){
 let liveRefreshInFlight=false;
 async function refreshLiveWhenVisible(){
   if(liveRefreshInFlight||meta.source!=='PANCAKE')return;
-  const pwd=sessionStorage.getItem('sevenam_dashboard_password');
+  const pwd=sessionGet('sevenam_dashboard_password');
   if(!pwd)return;
   liveRefreshInFlight=true;
   try{
@@ -1203,7 +1224,7 @@ $('unlockForm').onsubmit=async e=>{
   try{
     $('app').classList.add('loading');
     const p=await openLiveFast(pwd);
-    sessionStorage.setItem('sevenam_dashboard_password',pwd);
+    sessionSet('sevenam_dashboard_password',pwd);
     applyPayload(p);
     $('unlockDialog').close();
     setTimeout(refreshLiveWhenVisible,80);
@@ -1216,7 +1237,7 @@ $('unlockForm').onsubmit=async e=>{
   }
 };
 $('reloadBtn').onclick=async()=>{
-  const pwd=sessionStorage.getItem('sevenam_dashboard_password');
+  const pwd=sessionGet('sevenam_dashboard_password');
   if(meta.source==='PANCAKE'&&pwd){
     try{
       $('app').classList.add('loading');
