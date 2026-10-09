@@ -573,6 +573,12 @@ function renderAll(){
   }
   updateDataFreshness();
   const coverageError=reportCoverageError();
+  if(coverageError&&currentView==='products'){
+    renderProducts();
+    $('updatedAt').textContent='Cập nhật dữ liệu: '+new Date(meta.lastUpdated||Date.now()).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'});
+    $('pageSub').textContent='Sản phẩm dùng bộ lọc ngày/kênh riêng';
+    return
+  }
   if(coverageError){
     $('kpis').innerHTML=card('CHƯA CÓ ĐỦ DỮ LIỆU','Không thể đối soát',esc(coverageError),true);
     $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
@@ -582,6 +588,14 @@ function renderAll(){
     return;
   }
   const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
+  const selectedChannel=$('channel').value,selectedStaff=$('staff').value;
+  const excludedCurrent=sourceOrders.filter(o=>{
+    const d=orderDate(o);
+    return d>=$('from').value&&d<=$('to').value&&
+      (selectedChannel==='Tất cả'||o.channel===selectedChannel)&&
+      (selectedStaff==='Tất cả'||o.salesStaff===selectedStaff)&&
+      isDefaultExcluded(o)
+  }).length;
   $('kpis').innerHTML=[
     card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true,'all','','Tất cả đơn trong kỳ'),
     card('COD',money(k.codRevenue),'Tiền thu hộ',false,'all','','Đơn tạo trong kỳ'),
@@ -594,7 +608,7 @@ function renderAll(){
     card('Tổng Data',data?numFmt(data):'Chưa nhập',data?`CR chốt ${pct(k.orders/data)}`:'Nhập tại màn Theo kênh'),
     card('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Chưa có data'),
     card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình',false,'all','','Đơn tạo trong kỳ'),
-    card('Đơn đã loại',numFmt(sourceOrders.filter(o=>orderDate(o)>=$('from').value&&orderDate(o)<=$('to').value&&isDefaultExcluded(o)).length),'Huỷ/Xoá + các nguồn Đơn đổi',false,'excluded','','Đơn đã loại')
+    card('Đơn đã loại',numFmt(excludedCurrent),'Huỷ/Xoá + các nguồn Đơn đổi',false,'excluded','','Đơn đã loại')
   ].join('');
   $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Ngày tạo đơn (giờ VN) · trạng thái tại lần đồng bộ`;
   renderTrend(rows);
@@ -897,7 +911,17 @@ function renderProductBreakdowns(rows){
 function renderProducts(){
   const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
   if(!kpis||!tbody||!summary||!note)return;
-  const range=productDateRange(),rows=productSourceRows(),agg=aggregateProducts(rows),list=agg.products;
+  const range=productDateRange(),ch=$('productChannel')?.value||'Tất cả';
+  summary.textContent=`${range.from} → ${range.to} · ${ch}`;
+  const outsideCoverage=meta.source==='PANCAKE'&&((meta.from&&range.from<meta.from)||(meta.to&&range.to>meta.to));
+  if(outsideCoverage){
+    kpis.innerHTML=[mini('Sản phẩm','—'),mini('SL bán','—'),mini('SL hoàn','—'),mini('SL bán thực','—'),mini('Tỷ lệ hoàn','—')].join('');
+    note.textContent=`Dữ liệu Pancake hiện có từ ${meta.from||'?'} đến ${meta.to||'?'}. Khoảng sản phẩm đang chọn ${range.from} → ${range.to} nằm ngoài phạm vi đã đồng bộ.`;
+    note.style.display='block';
+    tbody.innerHTML='<tr><td colspan="9">Chưa có dữ liệu đã đồng bộ cho khoảng này.</td></tr>';
+    return
+  }
+  const rows=productSourceRows(),agg=aggregateProducts(rows),list=agg.products;
   const sold=sum(list,x=>x.soldQty),returned=sum(list,x=>x.returnedQty),net=sold-returned,rate=sold?returned/sold:0;
   kpis.innerHTML=[
     mini('Sản phẩm',numFmt(list.length)),
@@ -906,8 +930,6 @@ function renderProducts(){
     mini('SL bán thực',numFmt(net)),
     mini('Tỷ lệ hoàn',pct(rate),rate>.20?'bad':'')
   ].join('');
-  const ch=$('productChannel')?.value||'Tất cả';
-  summary.textContent=`${range.from} → ${range.to} · ${ch}`;
   const messages=[];
   if(!agg.ordersWithItems&&rows.length)messages.push('Dữ liệu đơn trong kỳ chưa có line-item sản phẩm từ Pancake.');
   else if(agg.ordersMissingItems)messages.push(`${numFmt(agg.ordersMissingItems)} đơn chưa có chi tiết sản phẩm.`);
