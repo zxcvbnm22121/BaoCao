@@ -100,8 +100,10 @@ function parsePancakeDate(value){
     dt=new Date(raw.length===10?n*1000:n);
   }else{
     let iso=raw;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(iso))iso+='T00:00:00+07:00';
-    else if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso))iso=iso.replace(' ','T')+'+07:00';
+    // Pancake POS returns naive order timestamps in UTC.
+    // Convert them as UTC, then derive Vietnam business dates via dateKey().
+    if(/^\d{4}-\d{2}-\d{2}$/.test(iso))iso+='T00:00:00Z';
+    else if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(iso))iso=iso.replace(' ','T')+'Z';
     dt=new Date(iso);
   }
   if(!Number.isFinite(dt.getTime()))throw new Error('Invalid Pancake creation timestamp');
@@ -382,6 +384,12 @@ function pageBounds(data){
 
 async function fetchOrders(from,to){
   const rawMap=new Map();
+  // Vietnam is UTC+7. Pancake's naive timestamps are UTC, so the first
+  // seven hours of a Vietnam business day sit on the previous UTC date.
+  // Read one extra API date at the beginning, then filter by createdDate.
+  const apiFromDate=new Date(from+'T00:00:00Z');
+  apiFromDate.setUTCDate(apiFromDate.getUTCDate()-1);
+  const apiFrom=apiFromDate.toISOString().slice(0,10);
 
   // Pancake pages can shift while orders are inserted or edited.
   // Two complete batched passes close page-boundary gaps without giving up
@@ -390,7 +398,7 @@ async function fetchOrders(from,to){
     let completed=false;
     for(let start=1;start<=200;start+=4){
       const pages=[start,start+1,start+2,start+3];
-      const results=await Promise.all(pages.map(page=>fetchOrderPage(from,to,page)));
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],result=results[i],bounds=pageBounds(result.data);
         result.data.forEach((raw,j)=>rawMap.set(rawOrderKey(raw,j),raw));
@@ -405,7 +413,7 @@ async function fetchOrders(from,to){
   }
 
   // Re-read the newest page immediately before publishing the totals.
-  const latest=await fetchOrderPage(from,to,1);
+  const latest=await fetchOrderPage(apiFrom,to,1);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
 
   const orders=[...rawMap.values()].map(normalize).filter(o=>o.createdDate>=from&&o.createdDate<=to);
