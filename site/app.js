@@ -327,6 +327,36 @@ function overview(rows){
   }
 }
 function group(rows,key){const m={};for(const r of rows)(m[key(r)]??=[]).push(r);return m}
+function pageLabel(o){
+  const name=String(o?.pageName||'').trim();
+  const username=String(o?.pageUsername||'').trim();
+  const id=String(o?.pageId||'').trim();
+  if(name)return name;
+  if(username)return username.replace(/^@/,'');
+  if(id)return 'Page '+id;
+  return 'Chưa xác định Page'
+}
+function pageGroupKey(o){
+  const id=String(o?.pageId||'').trim();
+  if(id)return 'id:'+id;
+  return 'name:'+pageLabel(o).toLowerCase()
+}
+function isPageRelevantOrder(o){
+  return Boolean(String(o?.pageName||o?.pageUsername||o?.pageId||'').trim())
+    || o?.channel==='Facebook Ads'
+    || o?.channel==='Livestream'
+}
+function isLiveSourceOrder(o){
+  const source=String(o?.sourceName||'').trim();
+  return o?.channel==='Livestream'||/\blive(?:stream)?\b/i.test(source)
+}
+function isExchangeSourceOrder(o){
+  const source=String(o?.sourceName||'').trim();
+  return Boolean(o?.excludedExchangeSource)||/^\s*(đơn|don)\s+đổi\b/i.test(source)
+}
+function isPageRevenueOrder(o){
+  return isPageRelevantOrder(o)&&!isExchangeSourceOrder(o)&&!isLiveSourceOrder(o)
+}
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 const KPI_CHANNELS=[
@@ -388,14 +418,21 @@ function currentFilterLabel(){
 }
 function drillRows(type,value){
   if(type==='excluded'){
-    const from=$('from').value,to=$('to').value;
-    return sourceOrders.filter(o=>{const d=orderDate(o);return d>=from&&d<=to&&isDefaultExcluded(o)})
+    const from=$('from').value,to=$('to').value,ch=$('channel').value,staff=$('staff').value;
+    return sourceOrders.filter(o=>{
+      const d=orderDate(o);
+      return d>=from&&d<=to&&
+        (ch==='Tất cả'||o.channel===ch)&&
+        (staff==='Tất cả'||o.salesStaff===staff)&&
+        isDefaultExcluded(o)
+    })
   }
   let rows=filteredRows();
   if(type==='status')rows=rows.filter(o=>o.status===value);
   else if(type==='statusCodes'){const codes=String(value).split(',').map(Number);rows=rows.filter(o=>codes.includes(Number(o.statusCode)))}
   else if(type==='successful')rows=rows.filter(o=>successful(o)>0||o.status==='THANH_CONG');
   else if(type==='channel')rows=rows.filter(o=>o.channel===value);
+  else if(type==='page')rows=rows.filter(o=>isPageRevenueOrder(o)&&pageGroupKey(o)===value);
   else if(type==='staff')rows=rows.filter(o=>(o.salesStaff||'Chưa gán')===value);
   else if(type==='returnReason')rows=rows.filter(o=>o.status==='HOAN'&&returnReasonLabel(o)===value);
   return rows
@@ -421,10 +458,11 @@ function openOrderDrill(type,value,title){
     <td data-label="Ngày giờ">${esc(formatOrderTime(o))}</td>
     <td data-label="Sale">${esc(o.salesStaff||'Chưa gán')}</td>
     <td data-label="Kênh">${esc(o.channel||'Khác')}</td>
+    <td data-label="Page">${esc(pageLabel(o))}</td>
     <td data-label="Trạng thái">${esc(statusLabels[o.status]||o.status||'—')}</td>
     <td data-label="Sau CK">${money(orderRevenue(o))}</td>
     <td data-label="Lý do hoàn">${o.status==='HOAN'?esc(returnReasonLabel(o)):'—'}</td>
-  </tr>`).join('')||'<tr><td colspan="7">Không có đơn phù hợp bộ lọc.</td></tr>';
+  </tr>`).join('')||'<tr><td colspan="8">Không có đơn phù hợp bộ lọc.</td></tr>';
   $('orderDrillDialog').showModal()
 }
 function bindDrilldowns(){
@@ -585,6 +623,7 @@ function renderAll(){
   renderTarget();
   renderOperationalPanels(rows);
   renderChannels(rows);
+  renderPages(rows);
   renderProducts();
   renderSales(rows);
   renderSaleLeaderboard(rows);
@@ -705,16 +744,15 @@ function shiftIsoDay(day,offset){
 function normalizeSevenCode(raw){
   const value=String(raw||'').trim().toUpperCase();
   if(!value)return'';
-  const compact=value.replace(/\\s+/g,'');
-  let m=compact.match(/^([A-Z]\\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])$/);
+  const compact=value.replace(/\s+/g,'');
+  let m=compact.match(/^([A-Z]\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])$/);
   if(m)return m[1];
-  if(/^[A-Z]\\d{6}[A-Z]{1,3}$/.test(compact)||/^[A-Z]\\d{6}$/.test(compact))return compact;
-  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])?(?=$|[^A-Z0-9])/);
+  if(/^[A-Z]\d{6}[A-Z]{1,3}$/.test(compact)||/^[A-Z]\d{6}$/.test(compact))return compact;
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6}[A-Z]{1,3})(?:1[1-5]|[1-5])?(?=$|[^A-Z0-9])/);
   if(m)return m[1];
-  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\\d{6})(?=$|[^A-Z0-9])/);
+  m=value.match(/(?:^|[^A-Z0-9])([A-Z]\d{6})(?=$|[^A-Z0-9])/);
   return m?m[1]:''
 }
-
 function productThumb(url,code){
   const src=String(url||'').trim();
   if(!src)return '<div class="productThumb empty"><span>7A</span></div>';
@@ -785,6 +823,97 @@ function aggregateProducts(rows){
   })).sort((a,b)=>b.soldQty-a.soldQty||b.netQty-a.netQty||b.orders-a.orders||a.code.localeCompare(b.code,'vi'));
   return{products,ordersWithItems,ordersMissingItems,partialUnknown,totalLines}
 }
+
+function productGroupCard(title,subtitle,agg){
+  const list=(agg?.products||[]).slice(0,5);
+  const sold=sum(list,x=>x.soldQty);
+  const allSold=sum(agg?.products||[],x=>x.soldQty);
+  return `<article class="productGroupCard">
+    <div class="productGroupCardHead">
+      <div><h4>${esc(title)}</h4><p>${esc(subtitle||'')}</p></div>
+      <span>${numFmt(allSold)} SP</span>
+    </div>
+    <div class="productGroupList">
+      ${list.map((p,i)=>`<div class="productGroupRow">
+        <div class="productGroupRank">#${i+1}</div>
+        ${productThumb(p.imageUrl,p.code)}
+        <div class="productGroupInfo">
+          <strong>${esc(p.code||'Chưa có mã')}</strong>
+          <span>${esc(p.name||'—')}</span>
+        </div>
+        <div class="productGroupMetrics">
+          <b>${numFmt(p.soldQty)}</b>
+          <small>Bán</small>
+        </div>
+        <div class="productGroupMetrics">
+          <b>${numFmt(p.netQty)}</b>
+          <small>Thực</small>
+        </div>
+        <div class="productGroupMetrics ${p.returnRate>.20?'bad':''}">
+          <b>${pct(p.returnRate)}</b>
+          <small>Hoàn</small>
+        </div>
+      </div>`).join('')||'<div class="productGroupEmpty">Không có dữ liệu sản phẩm</div>'}
+    </div>
+  </article>`
+}
+
+function renderProductBreakdowns(rows){
+  const channelHost=$('channelProductGroups');
+  const pageHost=$('pageProductGroups');
+  const pageNote=$('pageProductNote');
+  if(!channelHost||!pageHost||!pageNote)return;
+
+  const channelGroups=Object.entries(group(rows,o=>o.channel||'Khác'))
+    .map(([name,r])=>{
+      const agg=aggregateProducts(r);
+      return {name,rows:r,agg,sold:sum(agg.products,x=>x.soldQty)}
+    })
+    .filter(x=>x.sold>0)
+    .sort((a,b)=>b.sold-a.sold||a.name.localeCompare(b.name,'vi'));
+
+  channelHost.innerHTML=channelGroups.map(x=>productGroupCard(
+    x.name,
+    `${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    x.agg
+  )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo kênh trong kỳ lọc.</div>';
+
+  const relevant=rows.filter(isPageRevenueOrder);
+  const pageMap=new Map();
+  for(const o of relevant){
+    const key=pageGroupKey(o);
+    let x=pageMap.get(key);
+    if(!x){
+      x={key,name:pageLabel(o),pageId:String(o.pageId||'').trim(),rows:[]};
+      pageMap.set(key,x)
+    }
+    x.rows.push(o)
+  }
+
+  const pageGroups=[...pageMap.values()]
+    .map(x=>{
+      const agg=aggregateProducts(x.rows);
+      return {...x,agg,sold:sum(agg.products,p=>p.soldQty)}
+    })
+    .filter(x=>x.sold>0)
+    .sort((a,b)=>b.sold-a.sold||a.name.localeCompare(b.name,'vi'));
+
+  pageHost.innerHTML=pageGroups.map(x=>productGroupCard(
+    x.name,
+    `${x.pageId?'ID '+x.pageId+' · ':''}${numFmt(x.rows.length)} đơn · ${numFmt(x.agg.products.length)} mã`,
+    x.agg
+  )).join('')||'<div class="productBreakdownEmpty">Không có dữ liệu sản phẩm theo Page trong kỳ lọc.</div>';
+
+  const unidentified=pageGroups.find(x=>x.name==='Chưa xác định Page');
+  const liveExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isLiveSourceOrder(o)).length;
+  const exchangeExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isExchangeSourceOrder(o)).length;
+  const pageMessages=[];
+  if(unidentified)pageMessages.push(`Có ${numFmt(unidentified.rows.length)} đơn chưa xác định Page; sản phẩm đang gom riêng vào “Chưa xác định Page”.`);
+  if(liveExcluded)pageMessages.push(`Đã loại ${numFmt(liveExcluded)} đơn Live/Livestream.`);
+  if(exchangeExcluded)pageMessages.push(`Đã loại ${numFmt(exchangeExcluded)} đơn đổi.`);
+  pageNote.style.display=pageMessages.length?'block':'none';
+  pageNote.textContent=pageMessages.join(' ');
+}
 function renderProducts(){
   const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
   if(!kpis||!tbody||!summary||!note)return;
@@ -810,6 +939,8 @@ function renderProducts(){
   const messages=[];
   if(!agg.ordersWithItems&&rows.length)messages.push('Dữ liệu đơn trong kỳ chưa có line-item sản phẩm từ Pancake.');
   else if(agg.ordersMissingItems)messages.push(`${numFmt(agg.ordersMissingItems)} đơn chưa có chi tiết sản phẩm.`);
+  const missingCodeLines=list.filter(p=>!p.code).reduce((n,p)=>n+p.soldQty,0);
+  if(missingCodeLines)messages.push(`${numFmt(missingCodeLines)} sản phẩm chưa có mã cha từ Pancake — kiểm tra schema product_display_id.`);
   if(agg.partialUnknown)messages.push(`${numFmt(agg.partialUnknown)} đơn hoàn một phần chưa có SKU hoàn chi tiết — không tự gán hoàn cho toàn bộ sản phẩm.`);
   note.textContent=messages.join(' ');
   note.style.display=messages.length?'block':'none';
@@ -823,7 +954,75 @@ function renderProducts(){
     <td data-label="SL bán thực">${numFmt(p.netQty)}</td>
     <td data-label="Tỷ lệ hoàn" class="${p.returnRate>.20?'bad':p.returnRate>.10?'warnText':''}">${pct(p.returnRate)}</td>
     <td data-label="Số đơn">${numFmt(p.orders)}</td>
-  </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>'
+  </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>';
+  renderProductBreakdowns(rows)
+}
+function renderPages(rows){
+  const relevant=rows.filter(isPageRevenueOrder);
+  const liveExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isLiveSourceOrder(o)).length;
+  const exchangeExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isExchangeSourceOrder(o)).length;
+  const grouped=new Map();
+  for(const o of relevant){
+    const key=pageGroupKey(o);
+    let item=grouped.get(key);
+    if(!item){
+      item={key,name:pageLabel(o),pageId:String(o.pageId||'').trim(),rows:[]};
+      grouped.set(key,item)
+    }
+    item.rows.push(o)
+  }
+
+  const stats=[...grouped.values()].map(x=>({...x,...overview(x.rows)}))
+    .sort((a,b)=>b.createdRevenue-a.createdRevenue||b.orders-a.orders||a.name.localeCompare(b.name,'vi'));
+
+  const identified=stats.filter(x=>x.name!=='Chưa xác định Page');
+  const unidentifiedRows=relevant.filter(o=>pageLabel(o)==='Chưa xác định Page');
+  const baseRows=relevant;
+  const totals=overview(baseRows);
+  const total=totals.createdRevenue;
+  const top=identified[0]||stats[0]||null;
+
+  $('pageKpis').innerHTML=[
+    mini('Số Page',numFmt(identified.length)),
+    mini('Doanh thu Page',money(total)),
+    mini('Thành công',money(totals.successfulRevenue)),
+    mini('Top Page',top?esc(top.name):'—'),
+    mini('Đơn chưa rõ Page',numFmt(unidentifiedRows.length))
+  ].join('');
+
+  $('pageSummary').textContent=`${numFmt(identified.length)} Page · ${money(total)}`;
+
+  const note=$('pageDataNote'),notes=[];
+  if(unidentifiedRows.length){
+    notes.push(`${numFmt(unidentifiedRows.length)} đơn chưa xác định được Page; đang gom riêng vào “Chưa xác định Page”.`)
+  }
+  if(liveExcluded)notes.push(`Đã loại ${numFmt(liveExcluded)} đơn nguồn Live/Livestream khỏi doanh thu Page.`);
+  if(exchangeExcluded)notes.push(`Đã loại ${numFmt(exchangeExcluded)} đơn đổi khỏi doanh thu Page.`);
+  if(!relevant.length){
+    notes.push('Không có đơn Page hợp lệ sau khi loại Đơn đổi và nguồn Live/Livestream.')
+  }
+  note.style.display=notes.length?'block':'none';
+  note.textContent=notes.join(' ');
+
+  const chartStats=identified.slice(0,12);
+  drawGroupedBars($('pageRevenueChart'),chartStats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
+  drawSingleBars($('pageShareChart'),chartStats.map(x=>({label:x.name,value:total?x.createdRevenue/total*100:0})),{percentMode:true});
+
+  $('pageRows').innerHTML=stats.map((x,i)=>`<tr class="clickable" data-drill-type="page" data-drill-value="${esc(x.key)}" data-drill-title="Page · ${esc(x.name)}">
+    <td data-label="#">${i+1}</td>
+    <td data-label="Page"><strong>${esc(x.name)}</strong></td>
+    <td data-label="Page ID">${esc(x.pageId||'—')}</td>
+    <td data-label="Tạo đơn">${money(x.createdRevenue)}</td>
+    <td data-label="Thành công">${money(x.successfulRevenue)}</td>
+    <td data-label="Số đơn">${numFmt(x.orders)}</td>
+    <td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td>
+    <td data-label="Treo">${compact(x.pendingRevenue)}</td>
+    <td data-label="Đang giao">${compact(x.shippingRevenue)}</td>
+    <td data-label="Hoàn">${compact(x.returnRevenue)}</td>
+    <td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td>
+    <td data-label="AOV">${compact(x.aov)}</td>
+    <td data-label="Tỷ trọng">${pct(total?x.createdRevenue/total:0)}</td>
+  </tr>`).join('')||'<tr><td colspan="13">Không có dữ liệu Page trong khoảng lọc.</td></tr>'
 }
 function renderChannels(rows){
   const selectedChannel=$('channel').value,allStats=channelStats(rows);
@@ -977,7 +1176,7 @@ function switchView(view){
   currentView=view;document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.mobileNavBtn').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
-  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
+  const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',pages:'Doanh thu theo Page',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
   $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
 }
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
