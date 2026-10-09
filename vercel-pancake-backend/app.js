@@ -605,19 +605,13 @@ function renderAll(){
     return;
   }
   const rows=filteredRows();
-  renderHero(rows);
-  renderChannelCards(rows);
-  renderKpiTiles(rows);
+  for(const [name,fn] of [['hero',()=>renderHero(rows)],['channelCards',()=>renderChannelCards(rows)],['kpis',()=>renderKpiTiles(rows)]]){
+    try{fn()}catch(e){console.error('Render '+name+' failed:',e)}
+  }
   $('periodStat').textContent=`${shortLabel($('from').value)} → ${shortLabel($('to').value)} · ${numFmt(rows.length)} đơn · ${currentFilterLabel()}`;
-  renderTrend(rows);
-  renderStatus(rows);
-  renderOperationalPanels(rows);
-  renderChannels(rows);
-  renderPages(rows);
-  renderProducts();
-  renderSales(rows);
-  renderSaleLeaderboard(rows);
-  renderMonthly();
+  for(const [name,fn] of [['trend',()=>renderTrend(rows)],['status',()=>renderStatus(rows)],['ops',()=>renderOperationalPanels(rows)],['channels',()=>renderChannels(rows)],['pages',()=>renderPages(rows)],['products',renderProducts],['sales',()=>renderSales(rows)],['leaderboard',()=>renderSaleLeaderboard(rows)],['monthly',renderMonthly]]){
+    try{fn()}catch(e){console.error('Render '+name+' failed:',e)}
+  }
   bindDrilldowns();
   $('updatedAt').textContent='Cập nhật dữ liệu: '+new Date(meta.lastUpdated||Date.now()).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'});
   $('pageSub').textContent=`Pancake POS · doanh số sau chiết khấu · ngày tạo đơn theo giờ Việt Nam`;
@@ -986,7 +980,7 @@ function productDateRange(){
   let from=$('productFrom')?.value||today;
   let to=$('productTo')?.value||from;
   if(from>to)[from,to]=[to,from];
-  return{from,to,label:productPeriod==='custom'?'Tùy chọn':productPeriod==='week'?'7 ngày':productPeriod==='month'?'Tháng':'Ngày'}
+  return{from,to,label:productPeriod==='custom'?'Tùy chọn':productPeriod==='week'?'7 ngày':productPeriod==='month'?'Tháng':productPeriod==='yesterday'?'Hôm qua':'Hôm nay'}
 }
 function productRangeKey(range=productDateRange()){return range.from+'|'+range.to}
 function productRangeInsideMain(range=productDateRange()){
@@ -1245,7 +1239,13 @@ function renderProducts(){
     mini('Tỷ lệ hoàn',pct(rate),rate>.20?'bad':'')
   ].join('');
   const messages=[];
-  if(!agg.ordersWithItems&&rows.length)messages.push('Dữ liệu đơn trong kỳ chưa có line-item sản phẩm từ Pancake.');
+  if(!rows.length){
+    const loaded=productBaseRows(range).filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to}).length;
+    messages.push(range.from===range.to&&range.to===vnDate()&&!loaded
+      ?'Hôm nay chưa có đơn nào trên Pancake. Bấm “Hôm qua” hoặc “7 ngày” để xem sản phẩm.'
+      :`Không có đơn Ads/Live/Zalo hợp lệ trong ${shortLabel(range.from)} → ${shortLabel(range.to)}${ch!=='Tất cả'?' · kênh '+ch:''} (đã tải ${numFmt(loaded)} đơn, đơn huỷ / đơn đổi / CSKH không tính).`)
+  }
+  if(!agg.ordersWithItems&&rows.length)messages.push(`${numFmt(rows.length)} đơn trong kỳ nhưng Pancake không trả chi tiết sản phẩm.`);
   else if(agg.ordersMissingItems)messages.push(`${numFmt(agg.ordersMissingItems)} đơn chưa có chi tiết sản phẩm.`);
   const missingCodeLines=list.filter(p=>!p.code).reduce((n,p)=>n+p.soldQty,0);
   if(missingCodeLines)messages.push(`${numFmt(missingCodeLines)} sản phẩm chưa có mã cha từ Pancake — kiểm tra schema product_display_id.`);
@@ -1530,6 +1530,7 @@ async function init(){
     const active=document.querySelector('[data-range].active')?.dataset.range;
     if(active==='today'&&$('from').value!==vnDate())dateRange('today');
     if(active==='yesterday'&&$('to').value!==vnDate(new Date(Date.now()-86400000)))dateRange('yesterday');
+    if(productPeriod==='day'&&$('productTo')?.value&&$('productTo').value!==vnDate()){$('productFrom').value=$('productTo').value=vnDate();loadProductRange()}
     updateDataFreshness();
     await refreshLiveWhenVisible();
   },30000)
@@ -1569,9 +1570,11 @@ window.addEventListener('focus',refreshLiveWhenVisible);
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
 document.querySelectorAll('[data-product-period]').forEach(b=>b.onclick=()=>{
   productPeriod=b.dataset.productPeriod||'day';
-  const anchor=$('productTo')?.value||vnDate();
+  const anchor=vnDate();
   if(productPeriod==='day'){
     $('productFrom').value=anchor;$('productTo').value=anchor
+  }else if(productPeriod==='yesterday'){
+    $('productFrom').value=shiftIsoDay(anchor,-1);$('productTo').value=shiftIsoDay(anchor,-1)
   }else if(productPeriod==='week'){
     $('productFrom').value=shiftIsoDay(anchor,-6);$('productTo').value=anchor
   }else if(productPeriod==='month'){
