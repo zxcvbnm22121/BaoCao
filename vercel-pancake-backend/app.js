@@ -52,7 +52,7 @@ function mockData(days=40){
     for(let i=0;i<count;i++){
       const h=Math.floor(8+r()*Math.max(1,maxHour-7)),m=Math.floor(r()*60),base=pick(r,[699000,799000,899000,999000,1199000,1399000,1599000,1999000,2499000]),qty=r()<.16?2:1,discount=r()<.31?(r()<.55?.3:.5):0,total=Math.round(base*qty*(1-discount));
       const st=pick(r,['THANH_CONG','THANH_CONG','THANH_CONG','THANH_CONG','DANG_GIAO','TREO','HOAN','HUY']);
-      const ch=pick(r,['Facebook Ads','Facebook Ads','Facebook Ads','Livestream','Livestream','Shopee','Website','Zalo']);
+      const ch=pick(r,['Facebook Ads','Facebook Ads','Facebook Ads','Livestream','Livestream','Zalo']);
       const staff=ch==='Livestream'&&r()<.7?'Linh live':pick(r,['Hương','Diễm','Thu']);
       out.push({createdAt:`${key}T${pad(h)}:${pad(m)}:00+07:00`,createdDate:key,salesStaff:staff,channel:ch,sourceName:ch,status:st,grossAmount:Math.round(total/(1-discount||1)),netAmount:total,discountAmount:0,codAmount:total,prepaidAmount:0,totalAmount:total,successfulAmount:st==='THANH_CONG'?total:0,isPartialReturn:false,statusCode:null,statusName:'demo',excludedStatus:st==='HUY',excludedExchangeSource:false,excludedFromDefaultReport:st==='HUY'});
     }
@@ -148,8 +148,13 @@ async function openLiveFast(password){
 function applyPayload(p){
   if(!p||!Array.isArray(p.orders))throw new Error('Bản dữ liệu Pancake không hợp lệ');
   verifySnapshot(p);
-  sourceOrders=p.orders;
+  // Only Ads / Live / Zalo are tracked. Payloads built before the backend
+  // dropped other channels still carry them: verify the payload as sent,
+  // then keep the tracked orders and reconcile against those.
+  sourceOrders=p.orders.filter(o=>isKpiChannel(o.channel));
   meta=p.meta||meta;
+  if(sourceOrders.length!==p.orders.length&&meta.dayReconciliation)
+    meta={...meta,count:sourceOrders.length,dayReconciliation:dayReconciliationOf(sourceOrders)};
   payloadMonthlyTarget=Number(p.monthlyTarget)||2300000000;
   if(settings.targetMonth==null) settings.targetMonth=payloadMonthlyTarget;
   setMode(meta.source==='PANCAKE'?'LIVE':'DEMO');
@@ -246,11 +251,9 @@ function reportCoverageError(){
   }
   return ''
 }
-function verifySnapshot(p){
-  const expected=p?.meta?.dayReconciliation;
-  if(!expected)return;
+function dayReconciliationOf(orders){
   const actual={};
-  for(const o of p.orders||[]){
+  for(const o of orders||[]){
     if(isDefaultExcluded(o))continue;
     const date=orderDate(o);
     if(!actual[date])actual[date]={orders:0,net:0,cod:0,prepaid:0,gross:0};
@@ -260,6 +263,12 @@ function verifySnapshot(p){
     d.prepaid+=Number(o.prepaidAmount)||0;
     d.gross+=Number(o.grossAmount??o.totalAmount)||0;
   }
+  return actual
+}
+function verifySnapshot(p){
+  const expected=p?.meta?.dayReconciliation;
+  if(!expected)return;
+  const actual=dayReconciliationOf(p.orders);
   if(Object.keys(expected).length!==Object.keys(actual).length)throw new Error('Dữ liệu Pancake không khớp số ngày báo cáo');
   for(const [day,ref] of Object.entries(expected)){
     const d=actual[day];
@@ -386,8 +395,7 @@ function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new 
 const KPI_CHANNELS=[
   {key:'ads',channel:'Facebook Ads',label:'Ads'},
   {key:'live',channel:'Livestream',label:'Live'},
-  {key:'zalo',channel:'Zalo',label:'Zalo'},
-  {key:'website',channel:'Website',label:'Website'}
+  {key:'zalo',channel:'Zalo',label:'Zalo'}
 ];
 const KPI_CHANNEL_SET=new Set(KPI_CHANNELS.map(x=>x.channel));
 function isKpiChannel(channel){return KPI_CHANNEL_SET.has(channel)}
@@ -710,8 +718,7 @@ function renderStatus(rows){
 }
 function channelStats(rows){
   const grouped=group(rows,x=>x.channel||'Khác');
-  const canonical=['Facebook Ads','Livestream','Shopee','Website','Zalo','TikTok Shop','Lazada','Showroom/POS'];
-  const names=Array.from(new Set([...canonical,...Object.keys(grouped)]));
+  const names=KPI_CHANNELS.map(x=>x.channel);
   return names.map(name=>({name,...overview(grouped[name]||[]),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
 }
 function renderChannelChart(rows,id){
@@ -762,7 +769,7 @@ function renderTarget(){
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
     <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
     <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
-    ${hasChannelTargets()?'<div class="channelTargetBoard">'+breakdown+'</div>':'<div class="targetConfigNotice">Chưa cấu hình target theo kênh. Bấm “Chỉnh target” để nhập Ads, Live, Zalo và Website.</div>'}`;
+    ${hasChannelTargets()?'<div class="channelTargetBoard">'+breakdown+'</div>':'<div class="targetConfigNotice">Chưa cấu hình target theo kênh. Bấm “Chỉnh target” để nhập Ads, Live và Zalo.</div>'}`;
 }
 function shiftIsoDay(day,offset){
   const d=new Date(String(day||vnDate())+'T12:00:00Z');
@@ -851,7 +858,7 @@ async function loadProductRange(force=false){
   try{
     const payloads=await fetchRangeChunks(pwd,range.from,range.to);
     if(requestId!==productRangeRequestId)return;
-    productRangeOrders=payloads.flatMap(p=>p.orders).filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to});
+    productRangeOrders=payloads.flatMap(p=>p.orders).filter(o=>{const d=orderDate(o);return d>=range.from&&d<=range.to&&isKpiChannel(o.channel)});
     productRangeLoadedKey=key;
     fillProductChannelFromRows(productRangeOrders);
   }catch(e){
@@ -1298,7 +1305,7 @@ function switchView(view){
 
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
 function updateTargetTotalPreview(){
-  const ids=['targetAdsInput','targetLiveInput','targetZaloInput','targetWebsiteInput'];
+  const ids=['targetAdsInput','targetLiveInput','targetZaloInput'];
   const total=ids.reduce((n,id)=>n+Math.max(0,Number($(id)?.value)||0),0);
   if($('targetTotalInput'))$('targetTotalInput').value=money(total)
 }
@@ -1307,7 +1314,6 @@ function openSettings(){
   $('targetAdsInput').value=Math.round(Number(cfg.ads)||0);
   $('targetLiveInput').value=Math.round(Number(cfg.live)||0);
   $('targetZaloInput').value=Math.round(Number(cfg.zalo)||0);
-  $('targetWebsiteInput').value=Math.round(Number(cfg.website)||0);
   updateTargetTotalPreview();
   $('settingsDialog').showModal()
 }
@@ -1412,14 +1418,13 @@ $('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQ
 $('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickAdsDataFromInput();$('quickAdsData').blur()}};
 $('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
-['targetAdsInput','targetLiveInput','targetZaloInput','targetWebsiteInput'].forEach(id=>$(id).oninput=updateTargetTotalPreview);
+['targetAdsInput','targetLiveInput','targetZaloInput'].forEach(id=>$(id).oninput=updateTargetTotalPreview);
 $('settingsForm').onsubmit=e=>{
   e.preventDefault();
   settings.channelTargets={
     ads:Math.max(0,Number($('targetAdsInput').value)||0),
     live:Math.max(0,Number($('targetLiveInput').value)||0),
-    zalo:Math.max(0,Number($('targetZaloInput').value)||0),
-    website:Math.max(0,Number($('targetWebsiteInput').value)||0)
+    zalo:Math.max(0,Number($('targetZaloInput').value)||0)
   };
   settings.channelTargetsConfigured=true;
   delete settings.targetDay;
