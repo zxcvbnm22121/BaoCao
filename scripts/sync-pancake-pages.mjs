@@ -324,11 +324,19 @@ function normalize(raw){
 
 async function discoverShopId(){if(SHOP_ID)return SHOP_ID;const url=new URL('https://pos.pages.fm/api/v1/shops');url.searchParams.set('api_key',API_KEY);const r=await fetch(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error(`Pancake shops ${r.status}: ${(await r.text()).slice(0,180)}`);const body=await r.json();const shops=Array.isArray(body.shops)?body.shops:Array.isArray(body.data)?body.data:[];if(!shops.length)throw new Error('API Key hợp lệ nhưng không tìm thấy shop Pancake nào.');if(shops.length>1)console.log(`API Key trả về ${shops.length} shop; dùng shop đầu tiên: ${shops[0].id} - ${shops[0].name||''}`);SHOP_ID=String(shops[0].id);return SHOP_ID}
 
-async function fetchOrderPage(from,to,page){
+async function fetchOrderPage(from,to,page,useTime=true){
   const url=new URL(`https://pos.pages.fm/api/v1/shops/${encodeURIComponent(SHOP_ID)}/orders`);
   url.searchParams.set('api_key',API_KEY);
   url.searchParams.set('from_date',from);
   url.searchParams.set('to_date',to);
+  // Pancake POS filters the order list by creation time with unix-second
+  // startDateTime/endDateTime (+ updateStatus); from_date/to_date are ignored,
+  // which made every read page back from the newest order.
+  if(useTime){
+    url.searchParams.set('updateStatus','inserted_at');
+    url.searchParams.set('startDateTime',String(Math.floor(Date.parse(from+'T00:00:00+07:00')/1000)));
+    url.searchParams.set('endDateTime',String(Math.floor(Date.parse(to+'T23:59:59+07:00')/1000)));
+  }
   url.searchParams.set('page_number',String(page));
   url.searchParams.set('page_size','500');
   // Pancake's default order listing can omit some lifecycle statuses.
@@ -403,7 +411,7 @@ function rawOrderKey(raw,index=0){
   return str(get(raw,'id|display_id|order_id|code')) || `${str(get(raw,'inserted_at|created_at|creation_time'))}:${index}`
 }
 
-async function fetchOrders(from,to){
+async function scanOrders(from,to,useTime){
   const rawMap=new Map();
   const maxPages=200;
   const batchSize=4;
@@ -422,7 +430,7 @@ async function fetchOrders(from,to){
     let completed=false;
     for(let startPage=1;startPage<=maxPages;startPage+=batchSize){
       const pages=Array.from({length:batchSize},(_,i)=>startPage+i).filter(p=>p<=maxPages);
-      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page)));
+      const results=await Promise.all(pages.map(page=>fetchOrderPage(apiFrom,to,page,useTime)));
       for(let i=0;i<results.length;i++){
         const page=pages[i],res=results[i],data=res.data;
         const bounds=pageDateBounds(data);
@@ -440,8 +448,15 @@ async function fetchOrders(from,to){
   }
 
   // Capture the newest page immediately before publishing the snapshot.
-  const latest=await fetchOrderPage(apiFrom,to,1);
+  const latest=await fetchOrderPage(apiFrom,to,1,useTime);
   latest.data.forEach((raw,i)=>rawMap.set(rawOrderKey(raw,i),raw));
+
+  return rawMap;
+}
+
+async function fetchOrders(from,to){
+  let rawMap=await scanOrders(from,to,true);
+  if(!rawMap.size){console.warn('Time-filtered Pancake read returned no orders; retrying without it');rawMap=await scanOrders(from,to,false)}
 
   const raws=[...rawMap.values()];
   const normalized=raws.map(safeNormalize);
