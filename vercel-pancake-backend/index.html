@@ -6,9 +6,10 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#111111" />
+  <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=zalo-only-20261009-1" />
+  <link rel="stylesheet" href="./styles.css?v=redesign-20261009-1" />
 </head>
 <body>
   <aside class="sidebar">
@@ -30,7 +31,7 @@
       <button class="sideAction" id="settingsBtn">⚙ <span>Mục tiêu & KPI</span></button>
       <div class="sourceBox">
         <div class="sourceDot"></div>
-        <div><b id="sourceText">GITHUB PAGES</b><small id="sourceSub">Đang kiểm tra dữ liệu</small></div>
+        <div><b id="sourceText">CHƯA MỞ LIVE</b><small id="sourceSub">Đang kiểm tra dữ liệu</small></div>
       </div>
     </div>
   </aside>
@@ -40,12 +41,13 @@
       <div>
         <div class="eyebrow">SEVEN.AM · LIVE SALES</div>
         <h1 id="pageTitle">Tổng quan doanh thu</h1>
-        <p id="pageSub">Dữ liệu Pancake POS · cập nhật tự động qua GitHub Actions</p>
+        <p id="pageSub">Dữ liệu Pancake POS</p>
       </div>
       <div class="topActions">
         <span class="liveBadge demo" id="modePill">DEMO</span>
         <button class="squareBtn" id="unlockBtn" title="Mở dữ liệu LIVE">🔒</button>
         <button class="squareBtn" id="reloadBtn" title="Làm mới">↻</button>
+        <button class="squareBtn" id="themeBtn" title="Giao diện sáng / tối">◐</button>
       </div>
     </header>
 
@@ -85,62 +87,54 @@
 
     <section id="view-overview" class="view active">
       <div class="sectionHead">
-        <div><span class="sectionEyebrow">LIVE OVERVIEW</span><h2>Doanh thu & trạng thái</h2></div>
+        <div><span class="sectionEyebrow">Tổng quan</span><h2>Ads · Live · Zalo</h2></div>
         <div class="periodStat" id="periodStat">—</div>
       </div>
-      <section class="kpiGrid" id="kpis"></section>
 
-      <section class="opsGrid">
-        <article class="panel opsPanel">
-          <div class="panelHead"><div><h3>Cảnh báo real-time</h3><p>Chỉ hiển thị điểm cần chú ý theo khoảng đang chọn</p></div><span class="healthPill" id="alertHealth">—</span></div>
+      <section class="heroGrid">
+        <article class="panel heroPanel" id="heroPanel"></article>
+        <article class="panel insightPanel">
+          <div class="panelHead"><div><h3>Điểm cần chú ý</h3><p>Tự phân tích theo khoảng ngày và bộ lọc đang chọn</p></div><span class="healthPill" id="alertHealth">—</span></div>
           <div class="alertList" id="liveAlerts"></div>
         </article>
-        <article class="panel opsPanel">
-          <div class="panelHead"><div><h3>Đối soát dữ liệu</h3><p>Tổng kỳ = ngày = kênh = Sale = trạng thái</p></div><span class="healthPill" id="reconcileHealth">—</span></div>
-          <div class="reconcileBoard" id="reconcileBoard"></div>
-        </article>
-        <article class="panel opsPanel">
-          <div class="panelHead"><div><h3>Phễu vận hành</h3><p>Data → tạo đơn → trạng thái hiện tại</p></div></div>
-          <div class="funnelBoard" id="funnelBoard"></div>
-        </article>
       </section>
+
+      <section class="channelCards" id="channelCards"></section>
+
+      <section class="kpiGrid" id="kpis"></section>
 
       <section class="chartGrid bigFirst">
         <article class="panel">
           <div class="panelHead">
-            <div><h3>Xu hướng doanh thu</h3><p>Tạo đơn và thành công theo ngày</p></div>
-            <div class="legend"><i class="red"></i>Tạo đơn <i class="dark"></i>Thành công <i class="target"></i>Target/ngày</div>
+            <div><h3>Xu hướng doanh số theo kênh</h3><p id="trendSub">Doanh số sau chiết khấu</p></div>
+            <div class="legend" id="trendLegend"></div>
           </div>
           <div class="chart chartLarge" id="trendChart"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>Trạng thái phễu</h3><p>Phân bổ doanh số theo trạng thái</p></div></div>
+          <div class="panelHead"><div><h3>Trạng thái đơn</h3><p>Tỷ trọng doanh số theo trạng thái hiện tại · bấm để xem đơn</p></div></div>
           <div class="statusViz" id="statusViz"></div>
           <div class="statusDetailWrap">
-            <div class="statusDetailTitle"><span>CHI TIẾT TRẠNG THÁI</span><small>Số đơn · Tổng tiền sau chiết khấu</small></div>
+            <div class="statusDetailTitle"><span>CHI TIẾT TRẠNG THÁI PANCAKE</span><small>Số đơn · Doanh số</small></div>
             <div class="statusDetail" id="statusDetail"></div>
           </div>
         </article>
       </section>
 
-      <section class="chartGrid">
+      <section class="chartGrid even3">
         <article class="panel">
-          <div class="panelHead"><div><h3>Doanh thu theo kênh</h3><p>So sánh tạo đơn và thành công</p></div></div>
-          <div class="chart" id="channelChart"></div>
+          <div class="panelHead"><div><h3>Phễu vận hành</h3><p>Data → tạo đơn → trạng thái hiện tại</p></div></div>
+          <div class="funnelBoard" id="funnelBoard"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>Tiến độ mục tiêu</h3><p>Target theo kênh · GAP tự tính theo tiến độ thời gian</p></div><button class="miniBtn" id="openSettingsInline">Chỉnh target</button></div>
-          <div class="targetBoard" id="targetPanel"></div>
+          <div class="panelHead"><div><h3>Lý do hoàn</h3><p>Giá trị phần hàng hoàn · bấm để xem đơn</p></div><div class="summaryChip" id="returnReasonSummary">—</div></div>
+          <div class="returnReasonList" id="returnReasonList"></div>
+        </article>
+        <article class="panel">
+          <div class="panelHead"><div><h3>Đối soát dữ liệu</h3><p>Tổng = kênh = Sale = trạng thái = nguồn API</p></div><span class="healthPill" id="reconcileHealth">—</span></div>
+          <div class="reconcileBoard" id="reconcileBoard"></div>
         </article>
       </section>
-
-      <article class="panel tablePanel returnPanel">
-        <div class="panelHead">
-          <div><h3>Lý do hoàn đơn</h3><p>Lấy trực tiếp trường lý do hoàn từ Pancake · bấm một lý do để xem đơn</p></div>
-          <div class="summaryChip" id="returnReasonSummary">—</div>
-        </div>
-        <div class="returnReasonList" id="returnReasonList"></div>
-      </article>
     </section>
 
     <section id="view-channels" class="view">
@@ -149,11 +143,11 @@
       </div>
       <section class="chartGrid">
         <article class="panel">
-          <div class="panelHead"><div><h3>So sánh doanh số kênh</h3><p>Tạo đơn vs thành công</p></div></div>
+          <div class="panelHead"><div><h3>So sánh doanh số kênh</h3><p>Tạo đơn và thành công</p></div><div class="legend"><span><i class="rect ink"></i>Tạo đơn</span><span><i class="rect ink soft"></i>Thành công</span></div></div>
           <div class="chart chartTall" id="channelCompareChart"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>CR chốt theo kênh</h3><p>CR = Số đơn tạo / Data đã nhập</p></div></div>
+          <div class="panelHead"><div><h3>CR chốt theo kênh</h3><p>CR = số đơn tạo / Data đã nhập · dưới 10% tô đỏ trong bảng</p></div></div>
           <div class="chart chartTall" id="channelCrChart"></div>
         </article>
       </section>
@@ -187,7 +181,7 @@
       <section class="chartGrid bigFirst pageChartGrid">
         <article class="panel">
           <div class="panelHead">
-            <div><h3>Top Page theo doanh thu</h3><p>Tạo đơn vs doanh thu thành công</p></div>
+            <div><h3>Top Page theo doanh thu</h3><p>Tạo đơn và thành công</p></div><div class="legend"><span><i class="rect"></i>Tạo đơn</span><span><i class="rect soft"></i>Thành công</span></div>
           </div>
           <div class="chart chartLarge" id="pageRevenueChart"></div>
         </article>
@@ -288,11 +282,11 @@
       <section class="saleLeaderboard" id="saleLeaderboard"></section>
       <section class="chartGrid">
         <article class="panel">
-          <div class="panelHead"><div><h3>Doanh số theo Sale</h3><p>Xếp hạng theo tạo đơn</p></div></div>
+          <div class="panelHead"><div><h3>Doanh số theo Sale</h3><p>Xếp hạng theo tạo đơn</p></div><div class="legend"><span><i class="rect"></i>Tạo đơn</span><span><i class="rect soft"></i>Thành công</span></div></div>
           <div class="chart chartTall" id="staffChart"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>Tỷ lệ hoàn</h3><p>Cảnh báo nhân sự có tỷ lệ hoàn cao</p></div></div>
+          <div class="panelHead"><div><h3>Tỷ lệ hoàn theo Sale</h3><p>Trên 20% tô đỏ</p></div></div>
           <div class="chart chartTall" id="staffReturnChart"></div>
         </article>
       </section>
@@ -315,11 +309,11 @@
       <section class="miniKpiGrid" id="monthlyKpis"></section>
       <section class="chartGrid bigFirst">
         <article class="panel">
-          <div class="panelHead"><div><h3>Lũy kế tháng vs Target</h3><p>Đường thực tế so với nhịp target tuyến tính</p></div></div>
+          <div class="panelHead"><div><h3>Lũy kế vs Target</h3><p>Thực đạt so với nhịp target theo ngày</p></div><div class="legend"><span><i class="ink"></i>Thực đạt</span><span><i class="target"></i>Target lũy kế</span></div></div>
           <div class="chart chartLarge" id="cumulativeChart"></div>
         </article>
         <article class="panel">
-          <div class="panelHead"><div><h3>Gap theo ngày</h3><p>Dương = thiếu · Âm = vượt</p></div></div>
+          <div class="panelHead"><div><h3>Chênh lệch theo ngày</h3><p>So với target ngày</p></div><div class="legend"><span><i class="rect good"></i>Vượt</span><span><i class="rect bad"></i>Thiếu</span></div></div>
           <div class="chart chartLarge" id="dailyGapChart"></div>
         </article>
       </section>
@@ -381,11 +375,10 @@
         <label class="field"><span>Facebook Ads</span><input id="targetAdsInput" type="number" min="0" step="1000000" /></label>
         <label class="field"><span>Livestream</span><input id="targetLiveInput" type="number" min="0" step="1000000" /></label>
         <label class="field"><span>Zalo</span><input id="targetZaloInput" type="number" min="0" step="1000000" /></label>
-        <label class="field"><span>Website</span><input id="targetWebsiteInput" type="number" min="0" step="1000000" /></label>
         <label class="field targetTotalField"><span>Target tổng tháng</span><input id="targetTotalInput" type="text" readonly /></label>
       </div>
       <div class="settingsHint">
-        <b>Target tổng = Ads + Live + Zalo + Website.</b>
+        <b>Target tổng = Ads + Live + Zalo.</b>
         <span>GAP tự tính = Target phải đạt theo tiến độ − Doanh thu thực đạt.</span>
       </div>
       <div class="dialogActions"><button type="button" data-close-dialog="settingsDialog">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
@@ -426,6 +419,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=zalo-only-20261009-1"></script>
+  <script src="./app.js?v=redesign-20261009-1"></script>
 </body>
 </html>
