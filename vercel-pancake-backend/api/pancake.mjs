@@ -9,7 +9,7 @@ const KEY_ARTIFACT='https://zxcvbnm22121.github.io/BaoCao/data/pancake-key.enc';
 const LIVE_ARTIFACT='https://zxcvbnm22121.github.io/BaoCao/data/live.enc';
 const ALLOWED_ORIGIN=(process.env.ALLOWED_ORIGIN||'https://zxcvbnm22121.github.io').replace(/\/$/,'');
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
-const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
+const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo":50000000};
 
 const responseCache=new Map();
 const CACHE_MS=20000;
@@ -135,7 +135,7 @@ function mapChannel(raw,source='',rawOrder={}){
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';
   if(/webcake|website|web site|shopify|woocommerce/.test(v))return'Website';
-  if(/zalo|cskh|crm/.test(v))return'Zalo/CSKH';
+  if(/zalo/.test(v))return'Zalo';
   if(/facebook|messenger|meta|fb|page/.test(v))return'Facebook Ads';
   if(/pos|offline|showroom|tại quầy|tai quay|cửa hàng|cua hang/.test(v))return'Showroom/POS';
   return'Khác'
@@ -320,6 +320,7 @@ function normalize(raw){
   else if(partial)successfulAmount=codAmount||explicitSuccess||0;
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
+  const excludedCskhSource=/^\s*cskh\b/i.test(sourceName);
   return{
     orderCode:str(get(raw,'display_id|order_id|code|id'),'—'),
     createdAt:dt.toISOString(),
@@ -331,8 +332,8 @@ function normalize(raw){
     returnedReasonCode:str(get(raw,'returned_reason|return_reason|refund_reason'),'').trim(),
     products,partialReturnProductDetailMissing,
     grossAmount,netAmount,discountAmount,codAmount,prepaidAmount,
-    totalAmount:netAmount,successfulAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,
-    excludedFromDefaultReport:excludedStatus||excludedExchangeSource
+    totalAmount:netAmount,successfulAmount,isPartialReturn:partial,excludedStatus,excludedExchangeSource,excludedCskhSource,
+    excludedFromDefaultReport:excludedStatus||excludedExchangeSource||excludedCskhSource
   }
 }
 
