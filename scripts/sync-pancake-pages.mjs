@@ -374,6 +374,18 @@ async function fetchOrders(from,to){
   if(inRange.some(x=>!Number.isFinite(x.netAmount)||x.netAmount<0))throw new Error('Pancake returned an invalid net amount; refusing to publish an inaccurate daily total');
   if(!inRange.length&&from<dateKey())throw new Error('Pancake returned zero historical orders for the requested period; refusing to publish empty totals');
   console.log(`Pancake bounded scan: ${rawMap.size} unique raw orders; ${inRange.length} orders in ${from} → ${to}.`);
+  const rawTimestampSamples=[...rawMap.values()].slice(0,8).map(raw=>{
+    const rawTs=get(raw,'inserted_at|created_at|creation_time');
+    let parsed='';
+    try{parsed=parsePancakeDate(rawTs).toISOString()}catch(e){parsed='INVALID'}
+    return {raw:String(rawTs??''),parsed}
+  });
+  const newestRaw=[...rawMap.values()]
+    .map(raw=>String(get(raw,'inserted_at|created_at|creation_time')??''))
+    .filter(Boolean)
+    .sort()
+    .slice(-8);
+  console.log('PANCAKE_TIMESTAMP_AUDIT:',JSON.stringify({samples:rawTimestampSamples,newestRaw}));
   return inRange
 }
 function encryptJson(payload,password){const salt=crypto.randomBytes(16),iv=crypto.randomBytes(12),key=crypto.pbkdf2Sync(password,salt,210000,32,'sha256'),cipher=crypto.createCipheriv('aes-256-gcm',key,iv);const plain=Buffer.from(JSON.stringify(payload)),ciphertext=Buffer.concat([cipher.update(plain),cipher.final()]),tag=cipher.getAuthTag(),combined=Buffer.concat([ciphertext,tag]);return{v:1,kdf:'PBKDF2-SHA256',iterations:210000,cipher:'AES-256-GCM',salt:salt.toString('base64'),iv:iv.toString('base64'),data:combined.toString('base64')}}
