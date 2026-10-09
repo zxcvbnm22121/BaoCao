@@ -219,7 +219,6 @@ function dateRange(kind){
   else if(kind==='7d')from=vnDate(new Date(now.getTime()-6*86400000));
   else if(kind==='month')from=today.slice(0,7)+'-01';
   $('from').value=from;$('to').value=to;
-  if($('productAnchor'))$('productAnchor').value=to;
   document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range===kind));
   renderAll()
 }
@@ -1024,16 +1023,35 @@ function renderProductBreakdowns(rows){
 function renderProducts(){
   const kpis=$('productKpis'),tbody=$('productRows'),summary=$('productRangeSummary'),note=$('productDataNote');
   if(!kpis||!tbody||!summary||!note)return;
-  const range=productDateRange(),ch=$('productChannel')?.value||'Tất cả';
+  const range=productDateRange(),key=productRangeKey(range),ch=$('productChannel')?.value||'Tất cả';
   summary.textContent=`${range.from} → ${range.to} · ${ch}`;
-  const outsideCoverage=meta.source==='PANCAKE'&&((meta.from&&range.from<meta.from)||(meta.to&&range.to>meta.to));
-  if(outsideCoverage){
-    kpis.innerHTML=[mini('Sản phẩm','—'),mini('SL bán','—'),mini('SL hoàn','—'),mini('SL bán thực','—'),mini('Tỷ lệ hoàn','—')].join('');
-    note.textContent=`Dữ liệu Pancake hiện có từ ${meta.from||'?'} đến ${meta.to||'?'}. Khoảng sản phẩm đang chọn ${range.from} → ${range.to} nằm ngoài phạm vi đã đồng bộ.`;
+
+  const needsRemote=!productRangeInsideMain(range)&&productRangeLoadedKey!==key;
+  if(productRangeLoadingKey===key){
+    kpis.innerHTML=[mini('Sản phẩm','…'),mini('SL bán','…'),mini('SL hoàn','…'),mini('SL bán thực','…'),mini('Tỷ lệ hoàn','…')].join('');
+    note.textContent=`Đang lấy dữ liệu Pancake cho ${range.from} → ${range.to}…`;
     note.style.display='block';
-    tbody.innerHTML='<tr><td colspan="9">Chưa có dữ liệu đã đồng bộ cho khoảng này.</td></tr>';
+    tbody.innerHTML='<tr><td colspan="9">Đang tải dữ liệu sản phẩm theo khoảng đã chọn…</td></tr>';
+    $('channelProductGroups').innerHTML='';
+    $('pageProductGroups').innerHTML='';
     return
   }
+  if(productRangeError&&needsRemote){
+    kpis.innerHTML=[mini('Sản phẩm','—'),mini('SL bán','—'),mini('SL hoàn','—'),mini('SL bán thực','—'),mini('Tỷ lệ hoàn','—')].join('');
+    note.textContent=productRangeError;
+    note.style.display='block';
+    tbody.innerHTML='<tr><td colspan="9">Không tải được khoảng dữ liệu này. Hãy thử lại.</td></tr>';
+    return
+  }
+  if(needsRemote){
+    kpis.innerHTML=[mini('Sản phẩm','…'),mini('SL bán','…'),mini('SL hoàn','…'),mini('SL bán thực','…'),mini('Tỷ lệ hoàn','…')].join('');
+    note.textContent=`Khoảng ${range.from} → ${range.to} chưa có sẵn. Hệ thống sẽ lấy trực tiếp từ Pancake.`;
+    note.style.display='block';
+    tbody.innerHTML='<tr><td colspan="9">Đang chuẩn bị dữ liệu sản phẩm…</td></tr>';
+    if(currentView==='products')queueMicrotask(()=>loadProductRange());
+    return
+  }
+
   const rows=productSourceRows(),agg=aggregateProducts(rows),list=agg.products;
   const sold=sum(list,x=>x.soldQty),returned=sum(list,x=>x.returnedQty),net=sold-returned,rate=sold?returned/sold:0;
   kpis.innerHTML=[
@@ -1064,6 +1082,7 @@ function renderProducts(){
   </tr>`).join('')||'<tr><td colspan="9">Không có dữ liệu sản phẩm trong kỳ lọc.</td></tr>';
   renderProductBreakdowns(rows)
 }
+
 function renderPages(rows){
   const relevant=rows.filter(isPageRevenueOrder);
   const liveExcluded=rows.filter(o=>isPageRelevantOrder(o)&&isLiveSourceOrder(o)).length;
@@ -1284,8 +1303,11 @@ function switchView(view){
   document.querySelectorAll('.navBtn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
   document.querySelectorAll('.mobileNavBtn').forEach(b=>b.classList.toggle('active',b.dataset.mobileView===view));
   const titles={overview:'Tổng quan doanh thu',channels:'Hiệu quả theo kênh',pages:'Doanh thu theo Page',products:'Sản phẩm bán chạy',sales:'Sale Online',monthly:'Tiến độ tháng'};
-  $('pageTitle').textContent=titles[view]||titles.overview;renderAll();window.scrollTo({top:0,behavior:'smooth'})
+  $('pageTitle').textContent=titles[view]||titles.overview;renderAll();
+  if(view==='products')loadProductRange();
+  window.scrollTo({top:0,behavior:'smooth'})
 }
+
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
 function updateTargetTotalPreview(){
   const ids=['targetAdsInput','targetLiveInput','targetZaloInput','targetWebsiteInput'];
@@ -1316,7 +1338,9 @@ async function tryAutoLive(){
 async function init(){
   sourceOrders=[];
   setMode('LOCKED');
-  if($('productAnchor'))$('productAnchor').value=vnDate();
+  const today=vnDate();
+  if($('productFrom'))$('productFrom').value=today;
+  if($('productTo'))$('productTo').value=today;
   dateRange('today');
   populateFilters();
   await tryAutoLive();
@@ -1329,6 +1353,7 @@ async function init(){
   },30000)
 }
 let liveRefreshInFlight=false;
+
 async function refreshLiveWhenVisible(){
   if(liveRefreshInFlight||meta.source!=='PANCAKE')return;
   const pwd=sessionGet('sevenam_dashboard_password');
@@ -1349,10 +1374,24 @@ window.addEventListener('focus',refreshLiveWhenVisible);
 document.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>{dateRange(b.dataset.range);if(window.innerWidth<=720)setMobileFilter(false)});
 document.querySelectorAll('[data-product-period]').forEach(b=>b.onclick=()=>{
   productPeriod=b.dataset.productPeriod||'day';
+  const anchor=$('productTo')?.value||vnDate();
+  if(productPeriod==='day'){
+    $('productFrom').value=anchor;$('productTo').value=anchor
+  }else if(productPeriod==='week'){
+    $('productFrom').value=shiftIsoDay(anchor,-6);$('productTo').value=anchor
+  }else if(productPeriod==='month'){
+    $('productFrom').value=anchor.slice(0,7)+'-01';$('productTo').value=anchor
+  }
   document.querySelectorAll('[data-product-period]').forEach(x=>x.classList.toggle('active',x===b));
-  renderProducts()
+  loadProductRange()
 });
-if($('productAnchor'))$('productAnchor').onchange=renderProducts;
+['productFrom','productTo'].forEach(id=>{
+  if($(id))$(id).onchange=()=>{
+    productPeriod='custom';
+    document.querySelectorAll('[data-product-period]').forEach(x=>x.classList.remove('active'));
+    loadProductRange()
+  }
+});
 if($('productChannel'))$('productChannel').onchange=renderProducts;
 ['from','to','channel','staff','status'].forEach(id=>$(id).onchange=()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));renderAll()});
 document.querySelectorAll('.navBtn').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
