@@ -526,6 +526,11 @@ function secureEqual(a,b){
   return diff===0;
 }
 
+function logServed(action,payload,startedAt,cached=false){
+  const m=payload?.meta||{};
+  console.log(`[pancake] ${action} ${m.from||'?'}→${m.to||'?'} orders=${m.count??payload?.orders?.length??0} passes=${m.fetchPasses??'-'} skipped=${m.skippedOrders??0} ${cached?'cache ':''}${Date.now()-startedAt}ms`);
+}
+
 function cors(req,res){
   const origin=req.headers.origin||'';
   if(origin===ALLOWED_ORIGIN||origin===ALLOWED_ORIGIN+'/BaoCao'){
@@ -545,7 +550,7 @@ export default async function handler(req,res){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
   const supplied=req.headers['x-dashboard-password']||req.body?.password||'';
   if(!supplied)return res.status(401).json({error:'Cần mật khẩu dashboard'});
-  const deadline=Date.now()+REQUEST_BUDGET_MS;
+  const startedAt=Date.now(),deadline=startedAt+REQUEST_BUDGET_MS;
 
   try{
     const creds=await loadCredentials(supplied);
@@ -558,7 +563,9 @@ export default async function handler(req,res){
       // unavailable or its encrypted snapshot is stale/incompatible, fall back
       // to a direct month-to-date Pancake read instead of failing login.
       try{
-        return res.status(200).json(await loadSnapshot(supplied));
+        const snapshot=await loadSnapshot(supplied);
+        logServed('open-snapshot',snapshot,startedAt);
+        return res.status(200).json(snapshot);
       }catch(snapshotError){
         console.warn('Snapshot open failed; falling back to Pancake direct:',snapshotError?.message||snapshotError);
         await discoverShopId(deadline);
@@ -566,10 +573,11 @@ export default async function handler(req,res){
         const cacheKey='open-direct|'+from+'|'+to;
         const now=Date.now();
         const hit=responseCache.get(cacheKey);
-        if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+        if(hit&&now-hit.at<CACHE_MS){logServed('open-direct',hit.payload,startedAt,true);return res.status(200).json(hit.payload)}
         const result=await fetchOrders(from,to,deadline);
         const payload=buildPayload(result,from,to);
         responseCache.set(cacheKey,{at:now,payload});
+        logServed('open-direct',payload,startedAt);
         return res.status(200).json(payload);
       }
     }
@@ -586,11 +594,12 @@ export default async function handler(req,res){
       const cacheKey='range|'+from+'|'+to;
       const now=Date.now();
       const hit=responseCache.get(cacheKey);
-      if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+      if(hit&&now-hit.at<CACHE_MS){logServed(action,hit.payload,startedAt,true);return res.status(200).json(hit.payload)}
       const result=await fetchOrders(from,to,deadline);
       const payload=buildPayload(result,from,to);
       if(action==='products')payload.meta.productRange=true;
       responseCache.set(cacheKey,{at:now,payload});
+      logServed(action,payload,startedAt);
       return res.status(200).json(payload)
     }
 
@@ -607,7 +616,7 @@ export default async function handler(req,res){
     const cacheKey=action+'|'+from+'|'+to;
     const now=Date.now();
     const hit=responseCache.get(cacheKey);
-    if(hit&&now-hit.at<CACHE_MS)return res.status(200).json(hit.payload);
+    if(hit&&now-hit.at<CACHE_MS){logServed(action,hit.payload,startedAt,true);return res.status(200).json(hit.payload)}
 
     const result=await fetchOrders(from,to,deadline);
     const payload=buildPayload(result,from,to);
@@ -616,10 +625,11 @@ export default async function handler(req,res){
       payload.meta.partialWindowDays=7;
     }
     responseCache.set(cacheKey,{at:now,payload});
+    logServed(action,payload,startedAt);
     return res.status(200).json(payload);
   }catch(e){
     if(e?.auth)return res.status(401).json({error:'Sai mật khẩu dashboard'});
-    console.error(e);
+    console.error(`[pancake] ${String(req.body?.action||'live')} failed after ${Date.now()-startedAt}ms:`,e);
     return res.status(502).json({error:'Không tải được Pancake lúc này'});
   }
 }
