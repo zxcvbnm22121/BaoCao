@@ -181,12 +181,16 @@ function updateDataFreshness(){
   const skipped=Number(meta.skippedOrders)||0;
   if(skipped)messages.push(`⚠ <b>${numFmt(skipped)} đơn</b> Pancake thiếu ngày tạo hoặc có số tiền âm nên chưa được tính.`);
   const direct=meta.transport==='VERCEL_DIRECT';
-  const staleAfter=direct?2:6;
-  if(ageMinutes>=staleAfter){
-    const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
-    messages.push(direct
-      ? `⚠ Backend trực tiếp chưa cập nhật trong <b>${ageMinutes} phút</b> (lần cuối ${esc(when)}). Hệ thống sẽ tự thử lại.`
-      : `⚠ Đang dùng bản GitHub dự phòng, cập nhật lần cuối lúc <b>${esc(when)}</b> (${Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian'}).`);
+  const when=Number.isFinite(updatedMs)?new Date(updatedMs).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'}):'không xác định';
+  const age=Number.isFinite(ageMinutes)?ageMinutes+' phút trước':'chưa rõ thời gian';
+  // Say why live data is missing, not just that a saved copy is shown.
+  const liveError=!error&&mainRangeError?` Lỗi khi lấy trực tiếp: <b>${esc(mainRangeError)}</b>. Hệ thống tự thử lại mỗi 30 giây.`:'';
+  if(direct){
+    if(ageMinutes>=2)messages.push(`⚠ Dữ liệu trực tiếp chưa cập nhật trong <b>${ageMinutes} phút</b> (lần cuối ${esc(when)}).${liveError||' Hệ thống sẽ tự thử lại.'}`);
+  }else if(mainRangeLoadingKey&&!liveError){
+    messages.push(`Đang lấy dữ liệu trực tiếp từ Pancake… Tạm hiển thị bản lưu GitHub lúc <b>${esc(when)}</b> (${age}).`);
+  }else if(liveError||ageMinutes>=6){
+    messages.push(`⚠ Đang hiển thị bản lưu GitHub lúc <b>${esc(when)}</b> (${age}), chưa phải dữ liệu trực tiếp.${liveError}`);
   }
   note.style.display=messages.length?'block':'none';
   note.innerHTML=messages.join(' ');
@@ -1344,12 +1348,12 @@ async function loadMainRange({force=false}={}){
   if(!pwd||!selectedCalendarDays().length)return;
   const from=$('from').value,to=$('to').value,requestId=++mainRangeRequestId;
   mainRangeLoadingKey=from+'|'+to;
-  mainRangeError='';
-  if(reportCoverageError())renderAll();
+  if(reportCoverageError())renderAll();else updateDataFreshness();
   try{
     const payloads=await fetchRangeChunks(pwd,from,to,{force});
     if(requestId!==mainRangeRequestId)return;
     mainRangeLoadingKey='';
+    mainRangeError='';
     applyPayload(combineRangePayloads(payloads,from,to));
   }catch(e){
     if(requestId!==mainRangeRequestId)return;
