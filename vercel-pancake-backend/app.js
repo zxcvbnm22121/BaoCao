@@ -400,7 +400,7 @@ const KPI_CHANNELS=[
 const KPI_CHANNEL_SET=new Set(KPI_CHANNELS.map(x=>x.channel));
 function isKpiChannel(channel){return KPI_CHANNEL_SET.has(channel)}
 function targetAvailableForChannel(channel=$('channel')?.value||'Tất cả'){
-  return !hasChannelTargets()||channel==='Tất cả'||isKpiChannel(channel)
+  return hasChannelTargets()&&(channel==='Tất cả'||isKpiChannel(channel))
 }
 function scopeRowsForTarget(rows,channel=$('channel')?.value||'Tất cả'){
   if(!hasChannelTargets()||channel!=='Tất cả')return rows;
@@ -433,7 +433,6 @@ function totalManualData(rows){
   const channels=Array.from(new Set(sourceOrders.map(x=>x.channel).filter(Boolean)));
   return channels.reduce((a,c)=>a+channelDataValue(c),0)
 }
-function gapClass(v){return v<-10?'red':v<=10?'orange':v<=20?'blue':'green'}
 function card(label,value,sub,primary=false,drillType='',drillValue='',drillTitle=''){
   const attrs=drillType?` data-drill-type="${esc(drillType)}" data-drill-value="${esc(drillValue)}" data-drill-title="${esc(drillTitle||label)}"`:'';
   return `<div class="card${primary?' primary':''}${drillType?' clickable':''}"${attrs}><span class="cardLabel">${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`
@@ -505,32 +504,6 @@ function bindDrilldowns(){
     }
   })
 }
-function renderLiveAlerts(rows){
-  const alerts=[],days=selectedCalendarDays(),time=reportTimeProgress(days),selectedChannel=$('channel').value;
-  const goal=targetAvailableForChannel(selectedChannel)?periodTarget(days):0;
-  const k=overview(scopeRowsForTarget(rows,selectedChannel));
-  const completion=goal?k.createdRevenue/goal:0,gapPts=(completion-time)*100;
-  if(goal>0&&gapPts<-10)alerts.push({level:'bad',title:'Doanh số đang chậm tiến độ',text:`Chậm ${Math.abs(gapPts).toFixed(1).replace('.',',')} điểm % so với tiến độ thời gian.`});
-
-  const ads=rows.filter(o=>o.channel==='Facebook Ads'),adsData=channelDataValue('Facebook Ads');
-  if(adsData>0&&ads.length/adsData<.10)alerts.push({level:'bad',title:'CR Ads dưới 10%',text:`${numFmt(ads.length)} đơn / ${numFmt(adsData)} data = ${pct(ads.length/adsData)}.`});
-
-  const todayOnly=$('from').value===vnDate()&&$('to').value===vnDate();
-  const liveRevenue=sum(rows.filter(o=>o.channel==='Livestream'),orderRevenue);
-  if(todayOnly&&liveRevenue<=0)alerts.push({level:'warn',title:'Livestream chưa có doanh số',text:'Chưa ghi nhận doanh số Live trong dữ liệu hôm nay.'});
-
-  const returnRate=overview(rows).returnRate;
-  if(returnRate>.20)alerts.push({level:'bad',title:'Tỷ lệ hoàn trên 20%',text:`Hiện tại ${pct(returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn.`});
-
-  const age=(Date.now()-Date.parse(meta.lastUpdated||''))/60000;
-  const stale=meta.transport==='VERCEL_DIRECT'?2:6;
-  if(Number.isFinite(age)&&age>=stale)alerts.push({level:'warn',title:'Dữ liệu chưa đủ mới',text:`Lần cập nhật gần nhất ${Math.floor(age)} phút trước.`});
-
-  if(!alerts.length)alerts.push({level:'good',title:'Chưa có cảnh báo theo ngưỡng',text:'Tiến độ, CR Ads, Live, hoàn và độ mới dữ liệu chưa chạm ngưỡng cảnh báo.'});
-  $('alertHealth').textContent=alerts.some(a=>a.level==='bad')?'CẦN XỬ LÝ':alerts.some(a=>a.level==='warn')?'THEO DÕI':'ỔN';
-  $('alertHealth').className='healthPill '+(alerts.some(a=>a.level==='bad')?'bad':alerts.some(a=>a.level==='warn')?'warn':'good');
-  $('liveAlerts').innerHTML=alerts.map(a=>`<div class="alertItem ${a.level}"><i></i><div><b>${esc(a.title)}</b><span>${esc(a.text)}</span></div></div>`).join('')
-}
 function renderReconciliation(rows){
   const k=overview(rows),checks=[];
   const total=k.createdRevenue,eps=.01;
@@ -581,7 +554,7 @@ function renderReturnReasons(rows){
     <strong>${esc(x.reason)}</strong>
     <span>${numFmt(x.count)} đơn</span>
     <span class="returnReasonPct">${pct(returns.length?x.count/returns.length:0)}</span>
-    <span class="moneyCell">${money(x.value)}</span>
+    <span class="moneyCell">${compact(x.value)}</span>
   </div>`).join(''):'<div class="returnReasonEmpty">Không có đơn hoàn trong khoảng đang chọn.</div>'
 }
 function renderOperationalPanels(rows){
@@ -603,10 +576,11 @@ function renderSaleLeaderboard(rows){
 
 function renderAll(){
   if(meta.source!=='PANCAKE'){
-    $('kpis').innerHTML=card('DOANH SỐ PANCAKE','Chưa mở LIVE','Nhập mật khẩu qua nút 🔒 để xem tổng tiền thực tế',true);
+    $('heroPanel').innerHTML='<div class="heroLabel">Doanh số Ads + Live + Zalo</div><div class="heroValue">—</div><div class="heroSub">Bấm 🔒 và nhập mật khẩu để mở dữ liệu Pancake LIVE.</div>';
+    $('kpis').innerHTML='';
     $('periodStat').textContent=`${$('from').value} → ${$('to').value} · Chưa có dữ liệu LIVE`;
-    ['channelChart','trendChart','statusChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','monthlyChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
-    ['targetPanel','channelRows','staffRows','dailyRows','statusBreakdown','statusDetail','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['trendChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart','pageRevenueChart','pageShareChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['channelCards','channelRows','staffRows','dailyRows','statusViz','statusDetail','trendLegend','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Chưa mở Pancake LIVE';
     $('pageSub').textContent='Chưa có dữ liệu Pancake đã xác thực';
     updateDataFreshness();
@@ -622,41 +596,21 @@ function renderAll(){
   }
   if(coverageError){
     const loading=mainRangeLoadingKey===$('from').value+'|'+$('to').value;
-    $('kpis').innerHTML=card(loading?'ĐANG TẢI TỪ PANCAKE':'CHƯA CÓ ĐỦ DỮ LIỆU',loading?'Đang tải…':'Không thể đối soát',esc(coverageError),true);
+    $('heroPanel').innerHTML=`<div class="heroLabel">${loading?'Đang tải từ Pancake POS':'Chưa có đủ dữ liệu'}</div><div class="heroValue">${loading?'Đang tải…':'—'}</div><div class="heroSub">${esc(coverageError)}</div>`;
+    $('kpis').innerHTML='';
     $('periodStat').textContent=$('from').value+' → '+$('to').value+' · Khoảng lọc chưa hợp lệ';
-    ['targetPanel','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
-    ['trendChart','channelChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['channelCards','channelRows','staffRows','dailyRows','statusViz','statusDetail','monthlyKpis','trendLegend','channelDataSummary','liveAlerts','reconcileBoard','funnelBoard','returnReasonList','saleLeaderboard','productKpis','productRows','productRangeSummary','productDataNote'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
+    ['trendChart','staffChart','staffReturnChart','channelCompareChart','channelCrChart','cumulativeChart','dailyGapChart','pageRevenueChart','pageShareChart'].forEach(id=>{const el=$(id);if(el)el.innerHTML=''});
     $('updatedAt').textContent='Khoảng lọc nằm ngoài dữ liệu đã đồng bộ';
     return;
   }
-  const rows=filteredRows(),k=overview(rows),data=totalManualData(rows);
-  const selectedChannel=$('channel').value,selectedStaff=$('staff').value;
-  const excludedCurrent=sourceOrders.filter(o=>{
-    const d=orderDate(o);
-    return d>=$('from').value&&d<=$('to').value&&
-      (selectedChannel==='Tất cả'||o.channel===selectedChannel)&&
-      (selectedStaff==='Tất cả'||o.salesStaff===selectedStaff)&&
-      isDefaultExcluded(o)
-  }).length;
-  $('kpis').innerHTML=[
-    card('Tổng tiền sau CK',money(k.createdRevenue),`${numFmt(k.orders)} đơn · tiền sau chiết khấu · đồng bộ ${new Date(meta.lastUpdated).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'})}`,true,'all','','Tất cả đơn trong kỳ'),
-    card('COD',money(k.codRevenue),'Tiền thu hộ',false,'all','','Đơn tạo trong kỳ'),
-    card('Trả trước',money(k.prepaidRevenue),'Khách đã thanh toán trước',false,'all','','Đơn tạo trong kỳ'),
-    card('Tổng chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`,false,'all','','Đơn tạo trong kỳ'),
-    card('Doanh thu thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn thành công`,false,'successful','','Đơn có doanh thu thành công'),
-    card('Đang giao',compact(k.shippingRevenue),'Đơn đang vận chuyển',false,'status','DANG_GIAO','Đơn đang giao'),
-    card('Treo',compact(k.pendingRevenue),'Mới / chờ hàng / xác nhận...',false,'status','TREO','Đơn treo'),
-    card('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`,false,'status','HOAN','Đơn hoàn'),
-    card('Tổng Data',data?numFmt(data):'Chưa nhập',data?`CR chốt ${pct(k.orders/data)}`:'Nhập tại màn Theo kênh'),
-    card('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Chưa có data'),
-    card('AOV',compact(k.aov),'Giá trị đơn sau CK trung bình',false,'all','','Đơn tạo trong kỳ'),
-    card('Đơn đã loại',numFmt(excludedCurrent),'Huỷ/Xoá + nguồn Đơn đổi, CSKH',false,'excluded','','Đơn đã loại')
-  ].join('');
-  $('periodStat').textContent=`${$('from').value} → ${$('to').value} · ${numFmt(rows.length)} đơn · Ngày tạo đơn (giờ VN) · trạng thái tại lần đồng bộ`;
+  const rows=filteredRows();
+  renderHero(rows);
+  renderChannelCards(rows);
+  renderKpiTiles(rows);
+  $('periodStat').textContent=`${shortLabel($('from').value)} → ${shortLabel($('to').value)} · ${numFmt(rows.length)} đơn · ${currentFilterLabel()}`;
   renderTrend(rows);
   renderStatus(rows);
-  renderChannelChart(rows,'channelChart');
-  renderTarget();
   renderOperationalPanels(rows);
   renderChannels(rows);
   renderPages(rows);
@@ -666,110 +620,344 @@ function renderAll(){
   renderMonthly();
   bindDrilldowns();
   $('updatedAt').textContent='Cập nhật dữ liệu: '+new Date(meta.lastUpdated||Date.now()).toLocaleString('vi-VN',{timeZone:'Asia/Bangkok'});
-  $('pageSub').textContent=`${meta.source==='PANCAKE'?'Pancake POS':'Demo'} · ${numFmt(rows.length)} đơn · Tổng tiền dùng số sau chiết khấu`;
+  $('pageSub').textContent=`Pancake POS · doanh số sau chiết khấu · ngày tạo đơn theo giờ Việt Nam`;
 }
-function chartBase(el){
-  const W=920,H=260,P={l:48,r:16,t:15,b:30};
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"></svg>`;
+// ---------- Chart kit ----------
+// Charts draw at the container's real pixel size (no stretched viewBox), so
+// text never distorts; renderAll re-runs on resize. Every chart has a hover
+// layer: a crosshair + one tooltip listing every series on line charts, and
+// a per-group tooltip on bars. Values stay reachable in the tables too.
+const CHANNEL_CLASS={'Facebook Ads':'ads','Livestream':'live','Zalo':'zalo'};
+function channelLabel(ch){return KPI_CHANNELS.find(x=>x.channel===ch)?.label||ch}
+const SVG_NS='http://www.w3.org/2000/svg';
+let chartTipEl=null;
+function chartTip(){
+  if(!chartTipEl){chartTipEl=document.createElement('div');chartTipEl.className='chartTip';document.body.appendChild(chartTipEl)}
+  return chartTipEl
+}
+function showTip(evt,title,rows){
+  const tip=chartTip();
+  tip.replaceChildren();
+  const head=document.createElement('div');head.className='tipTitle';head.textContent=title;tip.appendChild(head);
+  for(const r of rows){
+    const row=document.createElement('div');row.className='tipRow';
+    const key=document.createElement('i');key.className=(r.rect?'rect ':'')+(r.cls||'');
+    const name=document.createElement('span');name.textContent=r.label;
+    const val=document.createElement('b');val.textContent=r.value;
+    row.append(key,name,val);tip.appendChild(row)
+  }
+  tip.classList.add('show');
+  const pad=14,w=tip.offsetWidth||180,h=tip.offsetHeight||80,vw=window.innerWidth||1200,vh=window.innerHeight||800;
+  let x=evt.clientX+pad,y=evt.clientY+pad;
+  if(x+w>vw-8)x=evt.clientX-w-pad;
+  if(y+h>vh-8)y=evt.clientY-h-pad;
+  tip.style.left=Math.max(8,x)+'px';tip.style.top=Math.max(8,y)+'px'
+}
+function hideTip(){if(chartTipEl)chartTipEl.classList.remove('show')}
+function chartBase(el,{left=56}={}){
+  const W=Math.max(280,Math.round(el.clientWidth||920)),H=Math.max(180,Math.round(el.clientHeight||260));
+  const P={l:left,r:18,t:18,b:28};
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img"></svg>`;
   return {svg:el.firstElementChild,W,H,P,pw:W-P.l-P.r,ph:H-P.t-P.b}
 }
-function addSvg(svg,tag,attrs,text){
-  const n=document.createElementNS('http://www.w3.org/2000/svg',tag);
-  Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));if(text!=null)n.textContent=text;svg.appendChild(n);return n
+function addSvg(parent,tag,attrs,text){
+  const n=document.createElementNS(SVG_NS,tag);
+  Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));
+  if(text!=null)n.textContent=text;
+  parent.appendChild(n);return n
+}
+function chartEmpty(el,text='Không có dữ liệu trong khoảng đang chọn'){el.innerHTML=`<div class="chartEmpty">${esc(text)}</div>`}
+function niceScale(min,max,count=4){
+  if(!(max>min)){max=min+1}
+  const raw=(max-min)/count,mag=10**Math.floor(Math.log10(raw));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=raw)||raw;
+  const lo=Math.floor(min/step)*step,hi=Math.ceil(max/step)*step;
+  const ticks=[];for(let v=lo;v<=hi+step/2;v+=step)ticks.push(Math.round(v*1e6)/1e6);
+  return {lo,hi,ticks}
+}
+function axisMoney(v){
+  const a=Math.abs(v),s=v<0?'−':'';
+  if(a>=1e9)return s+(a/1e9).toFixed(a%1e9?1:0).replace('.',',')+' tỷ';
+  if(a>=1e6)return s+Math.round(a/1e6)+'tr';
+  if(a>=1e3)return s+Math.round(a/1e3)+'k';
+  return s+Math.round(a)
+}
+function shortLabel(label){return /^\d{4}-\d{2}-\d{2}$/.test(label)?label.slice(8,10)+'/'+label.slice(5,7):label}
+function drawYAxis(svg,{W,P,ph},scale,y,fmt){
+  for(const v of scale.ticks){
+    const yy=y(v);
+    addSvg(svg,'line',{x1:P.l,y1:yy,x2:W-P.r,y2:yy,class:v===0?'baseLine':'gridLine'});
+    addSvg(svg,'text',{x:P.l-8,y:yy+4,'text-anchor':'end',class:'axisText'},fmt(v))
+  }
+}
+function drawXLabels(svg,{H},labels,x,maxLabels){
+  const step=Math.max(1,Math.ceil(labels.length/maxLabels));
+  labels.forEach((l,i)=>{if(i%step===0||i===labels.length-1&&labels.length-1-i>=step/2)addSvg(svg,'text',{x:x(i),y:H-8,'text-anchor':'middle',class:'axisText'},l)})
+}
+// data: [{label, [series.key]: number}], series: [{key,label,cls,area}]
+function drawLineChart(el,data,series,{target=null,targetLabel='Target',fmt=money,axisFmt=axisMoney}={}){
+  if(!el)return;
+  const values=data.flatMap(d=>series.map(s=>Number(d[s.key])||0));
+  if(!data.length||!values.some(v=>v!==0)){chartEmpty(el);return}
+  const base=chartBase(el),{svg,W,H,P,pw,ph}=base;
+  const scale=niceScale(0,Math.max(...values,target||0));
+  const x=i=>P.l+(data.length===1?pw/2:i*pw/(data.length-1));
+  const y=v=>P.t+ph-((Number(v)||0)-scale.lo)/(scale.hi-scale.lo)*ph;
+  drawYAxis(svg,base,scale,y,axisFmt);
+  if(target!=null&&target>0){
+    addSvg(svg,'line',{x1:P.l,y1:y(target),x2:W-P.r,y2:y(target),class:'lineTarget'});
+    addSvg(svg,'text',{x:W-P.r,y:y(target)-6,'text-anchor':'end',class:'axisText'},targetLabel+' '+axisMoney(target))
+  }
+  const single=series.length===1;
+  for(const s of series){
+    const pts=data.map((d,i)=>[x(i),y(d[s.key])]);
+    const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    if(single||s.area)addSvg(svg,'path',{d:d+` L${pts[pts.length-1][0].toFixed(1)},${y(scale.lo).toFixed(1)} L${pts[0][0].toFixed(1)},${y(scale.lo).toFixed(1)} Z`,class:'area '+(s.cls||'')});
+    addSvg(svg,'path',{d,class:'ln '+(s.cls||'')});
+    const last=pts[pts.length-1];
+    addSvg(svg,'circle',{cx:last[0],cy:last[1],r:4,class:'dot '+(s.cls||'')})
+  }
+  drawXLabels(svg,base,data.map(d=>shortLabel(d.label)),x,Math.max(3,Math.floor(pw/70)));
+  // hover layer: crosshair snaps to the nearest x
+  const cross=addSvg(svg,'line',{x1:0,y1:P.t,x2:0,y2:P.t+ph,class:'crosshair',visibility:'hidden'});
+  const marks=series.map(s=>addSvg(svg,'circle',{r:4,class:'dot '+(s.cls||''),visibility:'hidden'}));
+  const hit=addSvg(svg,'rect',{x:P.l-8,y:P.t,width:pw+16,height:ph,fill:'transparent',tabindex:0});
+  const show=(evt,i)=>{
+    cross.setAttribute('x1',x(i));cross.setAttribute('x2',x(i));cross.setAttribute('visibility','visible');
+    series.forEach((s,j)=>{marks[j].setAttribute('cx',x(i));marks[j].setAttribute('cy',y(data[i][s.key]));marks[j].setAttribute('visibility','visible')});
+    const rows=series.map(s=>({label:s.label,value:fmt(Number(data[i][s.key])||0),cls:s.cls}));
+    if(series.length>1&&series.every(s=>s.cls!=='target'))rows.push({label:'Tổng',value:fmt(series.reduce((n,s)=>n+(Number(data[i][s.key])||0),0)),cls:'ink'});
+    if(target)rows.push({label:targetLabel,value:fmt(target),cls:'target'});
+    showTip(evt,data[i].label.length===10?shortLabel(data[i].label)+'/'+data[i].label.slice(0,4):data[i].label,rows)
+  };
+  const nearest=evt=>{
+    const r=svg.getBoundingClientRect?.();const px=r&&r.width?(evt.clientX-r.left)*W/r.width:0;
+    return Math.max(0,Math.min(data.length-1,Math.round(data.length===1?0:(px-P.l)/pw*(data.length-1))))
+  };
+  hit.addEventListener('pointermove',e=>show(e,nearest(e)));
+  hit.addEventListener('pointerleave',()=>{hideTip();cross.setAttribute('visibility','hidden');marks.forEach(m=>m.setAttribute('visibility','hidden'))});
+}
+// Bars with a 4px rounded data-end, square at the baseline (works below 0 too).
+function barPath(x,y0,y1,w){
+  const h=Math.abs(y1-y0),r=Math.min(4,h,w/2),up=y1<y0;
+  if(h<0.5)return `M${x},${y0}h${w}`;
+  return up
+    ?`M${x},${y0}V${y1+r}Q${x},${y1} ${x+r},${y1}H${x+w-r}Q${x+w},${y1} ${x+w},${y1+r}V${y0}Z`
+    :`M${x},${y0}V${y1-r}Q${x},${y1} ${x+r},${y1}H${x+w-r}Q${x+w},${y1} ${x+w},${y1-r}V${y0}Z`
+}
+// data: [{label, cls?, [series.key]: number}], series: [{key,label,cls,soft}]
+// cls 'item' takes the data item's own class (e.g. its channel color);
+// clsFn(d,s) lets a chart color one bar by meaning (e.g. bad return rate).
+function drawBars(el,data,series,{fmt=money,axisFmt=axisMoney,valueFmt=axisFmt,clsFn=null,labels=null}={}){
+  if(!el)return;
+  const values=data.flatMap(d=>series.map(s=>Number(d[s.key])||0));
+  if(!data.length||!values.some(v=>v!==0)){chartEmpty(el);return}
+  const base=chartBase(el),{svg,W,H,P,pw,ph}=base;
+  const scale=niceScale(Math.min(0,...values),Math.max(0,...values));
+  const y=v=>P.t+ph-((Number(v)||0)-scale.lo)/(scale.hi-scale.lo)*ph;
+  drawYAxis(svg,base,scale,y,axisFmt);
+  const band=pw/data.length,gap=2,bw=Math.max(4,Math.min(24,(band*.7-gap*(series.length-1))/series.length));
+  const groupW=bw*series.length+gap*(series.length-1);
+  const showValues=labels??(series.length===1&&data.length<=8);
+  const shortLabels=data.every(d=>String(d.label).length<=6),labelStep=Math.max(1,Math.ceil(data.length/Math.max(2,Math.floor(pw/46))));
+  data.forEach((d,i)=>{
+    const cx=P.l+band*i+band/2,x0=cx-groupW/2;
+    const g=addSvg(svg,'g',{});
+    series.forEach((s,j)=>{
+      const v=Number(d[s.key])||0,cls=clsFn?.(d,s)??(s.cls==='item'?(d.cls||''):(s.cls||''));
+      addSvg(g,'path',{d:barPath(x0+j*(bw+gap),y(0),y(v),bw),class:'bar '+cls+(s.soft?' soft':'')});
+      if(showValues&&v!==0)addSvg(svg,'text',{x:x0+j*(bw+gap)+bw/2,y:v>=0?y(v)-6:y(v)+14,'text-anchor':'middle',class:'barLabel'},valueFmt(v))
+    });
+    const text=String(d.label);
+    // short labels (dates) thin out instead of being cut; long names truncate
+    if(shortLabels){if(i%labelStep===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},text)}
+    else{const maxChars=Math.max(3,Math.floor(band/7));addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},text.length>maxChars?text.slice(0,maxChars-1)+'…':text)}
+    const hit=addSvg(svg,'rect',{x:P.l+band*i,y:P.t,width:band,height:ph,fill:'transparent',tabindex:0});
+    const rows=series.map(s=>({label:s.label,value:fmt(Number(d[s.key])||0),cls:(clsFn?.(d,s)??(s.cls==='item'?(d.cls||''):(s.cls||''))),rect:true}));
+    hit.addEventListener('pointermove',e=>{(g.querySelectorAll?.('.bar')||[]).forEach(b=>b.classList.add('hover'));showTip(e,text,rows)});
+    hit.addEventListener('pointerleave',()=>{(g.querySelectorAll?.('.bar')||[]).forEach(b=>b.classList.remove('hover'));hideTip()});
+  })
+}
+
+// ---------- Overview: hero, channel scorecards, insights ----------
+function remainingDayUnits(days){
+  const today=vnDate(),parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+  const fraction=(Number(parts.find(x=>x.type==='hour')?.value||0)*60+Number(parts.find(x=>x.type==='minute')?.value||0))/1440;
+  return days.reduce((n,d)=>n+(d>today?1:d===today?1-fraction:0),0)
+}
+// Pace of one scope against its target over the selected days.
+function paceOf(rows,channel){
+  const days=selectedCalendarDays(),time=reportTimeProgress(days),k=overview(rows);
+  const goal=targetAvailableForChannel(channel)?days.reduce((n,d)=>n+effectiveDailyTarget(d.slice(0,7),channel),0):0;
+  const expected=goal*time,remaining=remainingDayUnits(days);
+  return {
+    k,goal,time,expected,
+    completion:goal?k.createdRevenue/goal:0,
+    pacing:expected?k.createdRevenue/expected:null,
+    gap:expected-k.createdRevenue,
+    gapPts:goal?(k.createdRevenue/goal-time)*100:0,
+    forecast:time>0?k.createdRevenue/time:0,
+    needPerDay:remaining>0?Math.max(0,goal-k.createdRevenue)/remaining:0,
+    remaining
+  }
+}
+function paceLevel(p){return !p.goal?'neutral':p.gapPts>=0?'good':p.gapPts>=-10?'warn':'bad'}
+function paceText(p){return !p.goal?'Chưa có target':p.gapPts>=0?'Đúng tiến độ':p.gapPts>=-10?'Chậm nhẹ':'Chậm tiến độ'}
+function meterHtml(p,cls=''){
+  const fill=Math.min(100,Math.max(0,p.completion*100)),mark=Math.min(100,Math.max(0,p.time*100));
+  return `<div class="meter">
+    <div class="meterHead"><span>Đạt <b>${pct(p.completion)}</b> target</span><span>Thời gian ${pct(p.time)} · phải đạt <b>${compact(p.expected)}</b></span></div>
+    <div class="meterTrack" role="img" aria-label="Đạt ${pct(p.completion)} target, thời gian đã qua ${pct(p.time)}"><div class="meterFill ${cls}" style="width:${fill}%"></div><div class="meterMarker" style="left:calc(${mark}% - 1px)"></div></div>
+  </div>`
+}
+function renderHero(rows){
+  const el=$('heroPanel');if(!el)return;
+  const sel=$('channel').value,scoped=scopeRowsForTarget(rows,sel),p=paceOf(scoped,sel),k=p.k;
+  const label=sel==='Tất cả'?'Doanh số Ads + Live + Zalo':'Doanh số '+channelLabel(sel);
+  const successShare=k.createdRevenue?k.successfulRevenue/k.createdRevenue:0;
+  const head=`<div class="heroTop"><div>
+      <div class="heroLabel">${esc(label)}</div>
+      <div class="heroValue">${money(k.createdRevenue)}</div>
+      <div class="heroSub">${numFmt(k.orders)} đơn · AOV ${compact(k.aov)} · thành công ${compact(k.successfulRevenue)} (${pct(successShare)})</div>
+    </div><span class="paceBadge ${paceLevel(p)}">${paceText(p)}</span></div>`;
+  if(!p.goal){
+    el.innerHTML=head+`<div class="heroEmpty"><span>Nhập target tháng cho Ads, Live, Zalo để xem tiến độ, chênh lệch và dự báo.</span><button type="button" class="miniBtn" data-open-settings>Nhập target</button></div>`;
+  }else{
+    const ahead=p.gap<=0;
+    el.innerHTML=head+meterHtml(p)+
+      `<div class="meterLegend"><span><i></i>Đã đạt</span><span><i class="mark"></i>Thời gian đã qua của khoảng lọc</span></div>
+      <div class="heroStats">
+        <div><span>Target khoảng lọc</span><b>${compact(p.goal)}</b></div>
+        <div><span>${ahead?'Vượt mức phải đạt':'Thiếu so với mức phải đạt'}</span><b class="${ahead?'good':'bad'}">${compact(Math.abs(p.gap))}</b></div>
+        <div><span>Dự báo cuối kỳ</span><b>${p.time>0?compact(p.forecast):'—'}</b></div>
+        <div><span>Cần mỗi ngày còn lại</span><b class="${p.k.createdRevenue>=p.goal?'good':''}">${p.k.createdRevenue>=p.goal?'Đã đạt target':p.remaining>0?compact(p.needPerDay):'—'}</b></div>
+      </div>`;
+  }
+  (el.querySelectorAll?.('[data-open-settings]')||[]).forEach(b=>b.onclick=openSettings)
+}
+function renderChannelCards(rows){
+  const el=$('channelCards');if(!el)return;
+  const sel=$('channel').value,total=sum(rows,orderRevenue);
+  const list=KPI_CHANNELS.filter(c=>sel==='Tất cả'||c.channel===sel);
+  el.style.gridTemplateColumns=list.length===1?'1fr':'';
+  el.innerHTML=list.map(c=>{
+    const rr=rows.filter(o=>o.channel===c.channel),p=paceOf(rr,c.channel),k=p.k,data=channelDataValue(c.channel);
+    const share=total?k.createdRevenue/total:0;
+    return `<article class="panel chCard" data-drill-type="channel" data-drill-value="${esc(c.channel)}" data-drill-title="Kênh · ${esc(c.label)}">
+      <div class="chHead"><span class="chName"><i class="${c.key}"></i>${esc(c.label)}</span><span class="paceBadge ${paceLevel(p)}">${paceText(p)}</span></div>
+      <div class="chValue">${money(k.createdRevenue)}</div>
+      <div class="chSub">${numFmt(k.orders)} đơn · ${pct(share)} tổng 3 kênh</div>
+      ${p.goal?meterHtml(p,c.key):'<div class="chNoTarget">Chưa có target cho kênh này.</div>'}
+      <div class="chStats">
+        <div><span>Thành công</span><b>${compact(k.successfulRevenue)}</b></div>
+        <div><span>AOV</span><b>${compact(k.aov)}</b></div>
+        <div><span>Tỷ lệ hoàn</span><b class="${k.returnRate>.2?'bad':''}">${pct(k.returnRate)}</b></div>
+        <div><span>CR chốt</span><b class="${data&&k.orders/data<.1?'bad':''}">${data?pct(k.orders/data):'—'}</b></div>
+      </div>
+    </article>`
+  }).join('')
+}
+function renderLiveAlerts(rows){
+  const alerts=[],add=(level,title,text)=>alerts.push({level,title,text});
+  const sel=$('channel').value,overall=paceOf(scopeRowsForTarget(rows,sel),sel);
+  if(overall.goal){
+    if(overall.gapPts<-10)add('bad','Tổng doanh số chậm tiến độ',`Đạt ${pct(overall.completion)} target trong khi thời gian đã qua ${pct(overall.time)}. Thiếu ${compact(overall.gap)}${overall.remaining>0?`; cần ${compact(overall.needPerDay)}/ngày để về đích`:''}.`);
+    else if(overall.gapPts<0)add('warn','Hơi chậm so với tiến độ',`Thiếu ${compact(overall.gap)} so với mức phải đạt đến giờ (${compact(overall.expected)}).`);
+    else add('good','Đang đúng tiến độ',`Vượt ${compact(-overall.gap)} so với mức phải đạt đến giờ. Dự báo cuối kỳ ${compact(overall.forecast)}.`);
+  }
+  if(sel==='Tất cả'){
+    const per=KPI_CHANNELS.map(c=>({c,p:paceOf(rows.filter(o=>o.channel===c.channel),c.channel)}));
+    for(const {c,p} of per.filter(x=>x.p.goal&&x.p.pacing!=null&&x.p.expected>0).sort((a,b)=>a.p.pacing-b.p.pacing)){
+      if(p.pacing<.9)add(p.pacing<.75?'bad':'warn',`${c.label} thiếu ${compact(p.gap)}`,`Mới đạt ${pct(p.pacing)} mức phải đạt đến giờ của kênh${p.remaining>0?`; cần ${compact(p.needPerDay)}/ngày`:''}.`);
+    }
+    const best=per.filter(x=>x.p.goal&&x.p.pacing>=1.1).sort((a,b)=>b.p.pacing-a.p.pacing)[0];
+    if(best)add('good',`${best.c.label} vượt nhịp`,`Đạt ${pct(best.p.pacing)} mức phải đạt đến giờ, vượt ${compact(-best.p.gap)}.`);
+  }
+  const k=overview(rows);
+  if(k.returnRate>.2)add('bad','Tỷ lệ hoàn trên 20%',`${pct(k.returnRate)} · ${numFmt(rows.filter(o=>o.status==='HOAN').length)} đơn hoàn, giá trị hoàn ${compact(k.returnRevenue)}.`);
+  else for(const c of KPI_CHANNELS){
+    const r=overview(rows.filter(o=>o.channel===c.channel));
+    if(r.orders>=10&&r.returnRate>.2)add('warn',`Hoàn cao ở ${c.label}`,`${pct(r.returnRate)} đơn hoàn trong kênh.`)
+  }
+  if(k.createdRevenue&&k.pendingRevenue/k.createdRevenue>.25){
+    const n=rows.filter(o=>o.status==='TREO').length;
+    add('warn',`${numFmt(n)} đơn đang treo`,`Treo ${compact(k.pendingRevenue)} (${pct(k.pendingRevenue/k.createdRevenue)} doanh số). Nên ưu tiên xác nhận.`)
+  }
+  const adsData=channelDataValue('Facebook Ads'),adsOrders=rows.filter(o=>o.channel==='Facebook Ads').length;
+  if(adsData>0&&adsOrders/adsData<.10)add('bad','CR Ads dưới 10%',`${numFmt(adsOrders)} đơn / ${numFmt(adsData)} data = ${pct(adsOrders/adsData)}.`);
+  const todayOnly=$('from').value===vnDate()&&$('to').value===vnDate();
+  if(todayOnly&&(sel==='Tất cả'||sel==='Livestream')&&!rows.some(o=>o.channel==='Livestream'))add('warn','Live chưa có đơn hôm nay','Chưa ghi nhận đơn nguồn Live trong dữ liệu hôm nay.');
+  const age=(Date.now()-Date.parse(meta.lastUpdated||''))/60000;
+  if(Number.isFinite(age)&&age>=(meta.transport==='VERCEL_DIRECT'?2:6))add('warn','Dữ liệu chưa đủ mới',`Lần cập nhật gần nhất ${Math.floor(age)} phút trước.`);
+  const staff=Object.entries(group(rows,o=>o.salesStaff||'Chưa gán')).map(([name,r])=>({name,v:sum(r,orderRevenue)})).sort((a,b)=>b.v-a.v)[0];
+  if(staff&&staff.v>0&&staff.name!=='Chưa gán')add('info',`${staff.name} dẫn đầu Sale`,`${compact(staff.v)} · ${pct(k.createdRevenue?staff.v/k.createdRevenue:0)} doanh số khoảng lọc.`);
+  if(!alerts.length)add('info','Chưa có gì cần chú ý','Nhập target và Data kênh để dashboard so sánh tiến độ và CR.');
+  const rank={bad:0,warn:1,good:2,info:3};
+  alerts.sort((a,b)=>rank[a.level]-rank[b.level]);
+  const shown=alerts.slice(0,6),health=alerts.some(a=>a.level==='bad')?'bad':alerts.some(a=>a.level==='warn')?'warn':'good';
+  $('alertHealth').textContent=health==='bad'?'Cần xử lý':health==='warn'?'Theo dõi':'Ổn định';
+  $('alertHealth').className='healthPill '+health;
+  $('liveAlerts').innerHTML=shown.map(a=>`<div class="alertItem ${a.level}"><i aria-hidden="true"></i><div><b>${esc(a.title)}</b><span>${esc(a.text)}</span></div></div>`).join('')
+}
+function tile(label,value,sub,{dot='',drill=null}={}){
+  const attrs=drill?` data-drill-type="${esc(drill[0])}" data-drill-value="${esc(drill[1]||'')}" data-drill-title="${esc(drill[2]||label)}"`:'';
+  return `<div class="card${drill?' clickable':''}"${attrs}><span class="cardLabel">${dot?`<i class="${dot}"></i>`:''}${label}</span><strong class="cardValue">${value}</strong><span class="cardSub">${sub||''}</span></div>`
+}
+function renderKpiTiles(rows){
+  const k=overview(rows),data=totalManualData(rows),sel=$('channel').value,staff=$('staff').value;
+  const excluded=sourceOrders.filter(o=>{const d=orderDate(o);return d>=$('from').value&&d<=$('to').value&&(sel==='Tất cả'||o.channel===sel)&&(staff==='Tất cả'||o.salesStaff===staff)&&isDefaultExcluded(o)}).length;
+  const share=v=>k.createdRevenue?pct(v/k.createdRevenue)+' doanh số':'';
+  $('kpis').innerHTML=[
+    tile('Thành công',compact(k.successfulRevenue),`${numFmt(k.successfulOrders)} đơn · ${share(k.successfulRevenue)}`,{dot:'st-THANH_CONG',drill:['successful','','Đơn có doanh thu thành công']}),
+    tile('Đang giao',compact(k.shippingRevenue),share(k.shippingRevenue),{dot:'st-DANG_GIAO',drill:['status','DANG_GIAO','Đơn đang giao']}),
+    tile('Treo',compact(k.pendingRevenue),share(k.pendingRevenue),{dot:'st-TREO',drill:['status','TREO','Đơn treo']}),
+    tile('Hoàn',compact(k.returnRevenue),`Tỷ lệ hoàn ${pct(k.returnRate)}`,{dot:'st-HOAN',drill:['status','HOAN','Đơn hoàn']}),
+    tile('CR chốt',data?pct(k.orders/data):'—',data?`${numFmt(k.orders)} đơn / ${numFmt(data)} data`:'Nhập Data ở màn Theo kênh'),
+    tile('Đơn đã loại',numFmt(excluded),'Huỷ/Xoá, Đơn đổi, CSKH',{drill:['excluded','','Đơn đã loại']}),
+    tile('COD',compact(k.codRevenue),'Tiền thu hộ',{drill:['all','','Đơn tạo trong kỳ']}),
+    tile('Trả trước',compact(k.prepaidRevenue),'Khách đã thanh toán',{drill:['all','','Đơn tạo trong kỳ']}),
+    tile('Chiết khấu',compact(k.discountRevenue),`Trước CK ${compact(k.grossRevenue)}`),
+    tile('Data đã nhập',data?numFmt(data):'—','Theo khoảng ngày đang chọn'),
+    tile('AOV',compact(k.aov),'Giá trị đơn trung bình'),
+    tile('Số đơn',numFmt(k.orders),`${numFmt(k.successfulOrders)} đơn thành công`,{drill:['all','','Tất cả đơn trong kỳ']})
+  ].join('')
 }
 function renderTrend(rows){
-  const single=$('from').value===$('to').value;
-  const g=group(rows,o=>single?orderHour(o):orderDate(o));
-  const labels=single?Array.from({length:15},(_,i)=>String(i+8).padStart(2,'0')+'h'):Object.keys(g).sort();
-  const data=labels.map(l=>{const rr=g[l]||[],o=overview(rr);return{label:l,created:o.createdRevenue,success:o.successfulRevenue}});
-  drawLineChart($('trendChart'),data,[{key:'created',class:'lineRed',point:'pointRed'},{key:'success',class:'lineDark',point:'pointDark'}],single||!targetAvailableForChannel()?null:effectiveDailyTarget($('from').value.slice(0,7)))
-}
-function drawLineChart(el,data,series,target=null){
-  const {svg,W,H,P,pw,ph}=chartBase(el);if(!data.length){addSvg(svg,'text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axisText'},'Không có dữ liệu');return}
-  const vals=data.flatMap(d=>series.map(s=>Number(d[s.key])||0)).concat(target!=null?[target]:[0]),max=Math.max(1,...vals)*1.1;
-  for(let i=0;i<=4;i++){const y=P.t+ph*i/4;addSvg(svg,'line',{x1:P.l,y1:y,x2:W-P.r,y2:y,class:'gridLine'});addSvg(svg,'text',{x:P.l-6,y:y+3,'text-anchor':'end',class:'axisText'},compact(max*(1-i/4)).replace('đ',''))}
-  const x=i=>P.l+(data.length===1?pw/2:i*pw/(data.length-1)),y=v=>P.t+ph-(Number(v)||0)/max*ph;
-  if(target!=null){addSvg(svg,'line',{x1:P.l,y1:y(target),x2:W-P.r,y2:y(target),class:'lineTarget'});addSvg(svg,'text',{x:W-P.r-3,y:y(target)-5,'text-anchor':'end',class:'axisText'},'Target '+compact(target))}
-  for(const s of series){const d=data.map((p,i)=>(i?'L':'M')+x(i).toFixed(1)+','+y(p[s.key]).toFixed(1)).join(' ');addSvg(svg,'path',{d,class:s.class});data.forEach((p,i)=>{const c=addSvg(svg,'circle',{cx:x(i),cy:y(p[s.key]),r:2.7,class:s.point});addSvg(c,'title',{},`${p.label}: ${money(p[s.key])}`)})}
-  const step=Math.max(1,Math.ceil(data.length/7));data.forEach((p,i)=>{if(i%step===0||i===data.length-1)addSvg(svg,'text',{x:x(i),y:H-8,'text-anchor':'middle',class:'axisText'},p.label.length>5?p.label.slice(5):p.label)})
+  const single=$('from').value===$('to').value,sel=$('channel').value;
+  const chans=KPI_CHANNELS.filter(c=>sel==='Tất cả'||c.channel===sel);
+  let labels,keyOf;
+  if(single){
+    const hours=rows.map(o=>parseInt(orderHour(o),10)).filter(Number.isFinite);
+    const lo=Math.min(8,...hours),hi=Math.max(22,...hours);
+    labels=Array.from({length:hi-lo+1},(_,i)=>pad(lo+i)+'h');keyOf=orderHour;
+  }else{labels=selectedCalendarDays();keyOf=orderDate}
+  const g=group(rows,keyOf);
+  const data=labels.map(l=>{const rr=g[l]||[],d={label:l};for(const c of chans)d[c.key]=sum(rr.filter(o=>o.channel===c.channel),orderRevenue);return d});
+  const series=chans.map(c=>({key:c.key,label:c.label,cls:c.key}));
+  const target=!single&&chans.length===1&&targetAvailableForChannel(sel)?effectiveDailyTarget($('from').value.slice(0,7),sel):null;
+  $('trendSub').textContent=single?'Theo giờ trong ngày · doanh số sau chiết khấu':'Theo ngày · doanh số sau chiết khấu';
+  $('trendLegend').innerHTML=series.map(s=>`<span><i class="${s.cls}"></i>${esc(s.label)}</span>`).join('')+(target?'<span><i class="target"></i>Target/ngày</span>':'');
+  drawLineChart($('trendChart'),data,series,{target,targetLabel:'Target/ngày'})
 }
 function renderStatus(rows){
-  const g=group(rows,o=>o.status||'TREO'),total=Math.max(1,sum(rows,orderRevenue));
-  const order=['TREO','DANG_GIAO','THANH_CONG','HOAN','HUY'];
-  $('statusViz').innerHTML=order.map(s=>{
-    const rr=g[s]||[],v=sum(rr,orderRevenue),share=v/total*100;
-    return `<div class="statusItem clickable" data-drill-type="status" data-drill-value="${s}" data-drill-title="${statusLabels[s]}"><div class="statusTop"><span>${statusLabels[s]}</span><b>${compact(v)}</b></div><div class="statusTrack"><i style="width:${Math.min(100,share)}%;background:${statusColors[s]}"></i></div><div class="statusMeta">${numFmt(rr.length)} đơn · ${share.toFixed(1).replace('.',',')}%</div></div>`
-  }).join('');
-
+  const g=group(rows,o=>o.status||'TREO'),total=sum(rows,orderRevenue);
+  const order=['THANH_CONG','DANG_GIAO','TREO','HOAN','HUY'];
+  const items=order.map(s=>({s,rows:g[s]||[],v:sum(g[s]||[],orderRevenue)})).filter(x=>x.rows.length||x.s!=='HUY');
+  $('statusViz').innerHTML=`<div class="statusStack" role="img" aria-label="Tỷ trọng doanh số theo trạng thái">${items.filter(x=>x.v>0).map(x=>`<i class="st-${x.s}" style="flex:${x.v}" title="${esc(statusLabels[x.s])}: ${money(x.v)}"></i>`).join('')}</div>`+
+    items.map(x=>`<div class="statusItem clickable" data-drill-type="status" data-drill-value="${x.s}" data-drill-title="${statusLabels[x.s]}"><i class="st-${x.s}"></i><span class="statusName">${statusLabels[x.s]}</span><span class="statusMeta">${numFmt(x.rows.length)} đơn · ${pct(total?x.v/total:0)}</span><span class="statusMoney">${compact(x.v)}</span></div>`).join('');
   const detailed=[
-    {label:'Mới',codes:[0]},
-    {label:'Chờ hàng',codes:[11]},
-    {label:'Đã xác nhận',codes:[1]},
-    {label:'Chờ chuyển hàng',codes:[9]},
-    {label:'Đang giao',codes:[2]},
-    {label:'Thành công',codes:[3,16]},
-    {label:'Hoàn',codes:[4,5,15]}
+    {label:'Mới',codes:[0]},{label:'Chờ hàng',codes:[11]},{label:'Đã xác nhận',codes:[1]},{label:'Chờ chuyển hàng',codes:[9]},
+    {label:'Đang giao',codes:[2]},{label:'Thành công',codes:[3,16]},{label:'Hoàn',codes:[4,5]},{label:'Hoàn 1 phần',codes:[15]}
   ];
   $('statusDetail').innerHTML=detailed.map(item=>{
     const rr=rows.filter(o=>item.codes.includes(Number(o.statusCode)));
-    const amount=sum(rr,orderRevenue);
-    return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="statusCodes" data-drill-value="${item.codes.join(',')}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(amount)}</span></div>`
-  }).join('');
+    return `<div class="statusDetailRow ${rr.length?'clickable':'zero'}" ${rr.length?`data-drill-type="statusCodes" data-drill-value="${item.codes.join(',')}" data-drill-title="${item.label}"`:''}><span class="statusName">${item.label}</span><span class="statusCount">${numFmt(rr.length)} đơn</span><span class="statusMoney">${compact(sum(rr,orderRevenue))}</span></div>`
+  }).join('')
 }
 function channelStats(rows){
   const grouped=group(rows,x=>x.channel||'Khác');
   const names=KPI_CHANNELS.map(x=>x.channel);
   return names.map(name=>({name,...overview(grouped[name]||[]),data:channelDataValue(name)})).sort((a,b)=>b.createdRevenue-a.createdRevenue)
-}
-function renderChannelChart(rows,id){
-  const stats=channelStats(rows);drawGroupedBars($(id),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true)
-}
-function drawGroupedBars(el,data,moneyMode=false){
-  const {svg,W,H,P,pw,ph}=chartBase(el);if(!data.length){addSvg(svg,'text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axisText'},'Không có dữ liệu');return}
-  const max=Math.max(1,...data.flatMap(x=>[Number(x.a)||0,Number(x.b)||0]))*1.12,bw=Math.max(8,Math.min(38,pw/(data.length*3))),slot=pw/data.length;
-  for(let i=0;i<=4;i++){const y=P.t+ph*i/4;addSvg(svg,'line',{x1:P.l,y1:y,x2:W-P.r,y2:y,class:'gridLine'});addSvg(svg,'text',{x:P.l-6,y:y+3,'text-anchor':'end',class:'axisText'},moneyMode?compact(max*(1-i/4)).replace('đ',''):Math.round(max*(1-i/4)))}
-  data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,y=v=>P.t+ph-(Number(v)||0)/max*ph;[['a','barRed',-bw*.55],['b','barDark',bw*.55]].forEach(([key,cls,off])=>{const yy=y(d[key]),rect=addSvg(svg,'rect',{x:cx+off-bw/2,y:yy,width:bw,height:P.t+ph-yy,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${moneyMode?money(d[key]):d[key]}`)});addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).length>12?String(d.label).slice(0,11)+'…':d.label)})
-}
-function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegative=false,positiveIsBad=false}={}){
-  const {svg,W,H,P,pw,ph}=chartBase(el);if(!data.length){addSvg(svg,'text',{x:W/2,y:H/2,'text-anchor':'middle',class:'axisText'},'Không có dữ liệu');return}
-  let min=positiveNegative?Math.min(0,...data.map(x=>Number(x.value)||0)):0,max=Math.max(1,...data.map(x=>Number(x.value)||0));if(min===max)max=min+1;const range=max-min,bw=Math.max(5,Math.min(34,pw/(data.length*1.7))),slot=pw/data.length,y=v=>P.t+ph-(v-min)/range*ph,zero=y(0);
-  if(positiveNegative)addSvg(svg,'line',{x1:P.l,y1:zero,x2:W-P.r,y2:zero,stroke:'#cfc8c1','stroke-width':1});
-  data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,val=Number(d.value)||0,yy=y(val),top=Math.min(yy,zero),h=Math.max(1,Math.abs(zero-yy)),cls=positiveNegative?(val>=0?(positiveIsBad?'barRed':'barGreen'):(positiveIsBad?'barGreen':'barRed')):'barRed';const rect=addSvg(svg,'rect',{x:cx-bw/2,y:top,width:bw,height:h,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${percentMode?(val.toFixed(1)+'%'):moneyMode?money(val):numFmt(val)}`);if(data.length<=15||i%Math.ceil(data.length/10)===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).slice(-5))})
-}
-function renderTarget(){
-  const days=selectedCalendarDays(),selectedChannel=$('channel').value,allRows=filteredRows();
-  if(!targetAvailableForChannel(selectedChannel)){
-    const actual=overview(allRows).createdRevenue;
-    $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(actual)}</strong></div></div><div class="targetConfigNotice">Kênh <b>${esc(selectedChannel)}</b> chưa được cấu hình target. Dashboard không tự coi doanh thu của kênh này là “Vượt”.</div>`;
-    return
-  }
-  const rows=scopeRowsForTarget(allRows,selectedChannel),k=overview(rows),goal=periodTarget(days);
-  const time=reportTimeProgress(days),expected=goal*time,completion=goal?k.createdRevenue/goal:0;
-  const gapMoney=expected-k.createdRevenue,gapPoints=goal?(k.createdRevenue/goal-time)*100:0;
-  const dayTarget=days.length?goal/days.length:0,forecast=time>0?k.createdRevenue/time:0;
-  const breakdown=KPI_CHANNELS
-    .filter(x=>selectedChannel==='Tất cả'||x.channel===selectedChannel)
-    .map(x=>{
-      const rr=rows.filter(o=>o.channel===x.channel);
-      const actual=overview(rr).createdRevenue;
-      const channelGoal=days.reduce((n,date)=>n+effectiveDailyTarget(date.slice(0,7),x.channel),0);
-      const channelExpected=channelGoal*time;
-      const gap=channelExpected-actual;
-      const pacing=channelExpected?actual/channelExpected:null;
-      return `<div class="channelTargetRow">
-        <span class="channelTargetName">${esc(x.label)}</span>
-        <span><small>Thực đạt</small><b>${compact(actual)}</b></span>
-        <span><small>Phải đạt</small><b>${compact(channelExpected)}</b></span>
-        <span class="${gap>0?'bad':'good'}"><small>${gap>0?'GAP thiếu':'Vượt'}</small><b>${compact(Math.abs(gap))}</b></span>
-        <span><small>% tiến độ</small><b>${pct(pacing)}</b></span>
-      </div>`
-    }).join('');
-  const heroLabel=hasChannelTargets()&&selectedChannel==='Tất cả'?'DOANH SỐ 4 KÊNH KPI':'DOANH SỐ KHOẢNG LỌC';
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>${heroLabel}</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
-    <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
-    <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
-    <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
-    ${hasChannelTargets()?'<div class="channelTargetBoard">'+breakdown+'</div>':'<div class="targetConfigNotice">Chưa cấu hình target theo kênh. Bấm “Chỉnh target” để nhập Ads, Live và Zalo.</div>'}`;
 }
 function shiftIsoDay(day,offset){
   const d=new Date(String(day||vnDate())+'T12:00:00Z');
@@ -1126,8 +1314,8 @@ function renderPages(rows){
   note.textContent=notes.join(' ');
 
   const chartStats=identified.slice(0,12);
-  drawGroupedBars($('pageRevenueChart'),chartStats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
-  drawSingleBars($('pageShareChart'),chartStats.map(x=>({label:x.name,value:total?x.createdRevenue/total*100:0})),{percentMode:true});
+  drawBars($('pageRevenueChart'),chartStats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),[{key:'a',label:'Tạo đơn'},{key:'b',label:'Thành công',soft:true}]);
+  drawBars($('pageShareChart'),chartStats.map(x=>({label:x.name,value:total?x.createdRevenue/total*100:0})),[{key:'value',label:'Tỷ trọng'}],{fmt:v=>v.toFixed(1).replace('.',',')+'%',axisFmt:v=>Math.round(v)+'%',valueFmt:v=>v.toFixed(1).replace('.',',')+'%'});
 
   $('pageRows').innerHTML=stats.map((x,i)=>`<tr class="clickable" data-drill-type="page" data-drill-value="${esc(x.key)}" data-drill-title="Page · ${esc(x.name)}">
     <td data-label="#">${i+1}</td>
@@ -1156,8 +1344,8 @@ function renderChannels(rows){
   }else{
     $('channelDataSummary').textContent=`${selectedChannel} · Data: ${sumData?numFmt(sumData):'chưa nhập'} · CR: ${sumData?pct(overview(rows).orders/sumData):'—'}`;
   }
-  drawGroupedBars($('channelCompareChart'),stats.map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
-  drawSingleBars($('channelCrChart'),stats.map(x=>({label:x.name,value:x.data?x.orders/x.data*100:0})),{percentMode:true});
+  drawBars($('channelCompareChart'),stats.map(x=>({label:channelLabel(x.name),cls:CHANNEL_CLASS[x.name],a:x.createdRevenue,b:x.successfulRevenue})),[{key:'a',label:'Tạo đơn',cls:'item'},{key:'b',label:'Thành công',cls:'item',soft:true}]);
+  drawBars($('channelCrChart'),stats.map(x=>({label:channelLabel(x.name),cls:CHANNEL_CLASS[x.name],value:x.data?x.orders/x.data*100:0})),[{key:'value',label:'CR chốt',cls:'item'}],{fmt:v=>v.toFixed(1).replace('.',',')+'%',axisFmt:v=>Math.round(v)+'%',valueFmt:v=>v.toFixed(1).replace('.',',')+'%'});
   document.querySelectorAll('.dataInput').forEach(inp=>{
     const commit=()=>{const v=Math.max(0,Number(inp.value)||0);channelData[rangeKey(inp.dataset.channel)]=v;saveChannelData();renderAll()};
     inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit()}};
@@ -1167,8 +1355,8 @@ function renderChannels(rows){
 function renderSales(rows){
   const stats=Object.entries(group(rows,x=>x.salesStaff||'Chưa gán')).map(([name,r])=>({name,...overview(r)})).sort((a,b)=>b.createdRevenue-a.createdRevenue);
   $('staffRows').innerHTML=stats.map(x=>`<tr class="clickable" data-drill-type="staff" data-drill-value="${esc(x.name)}" data-drill-title="Sale · ${esc(x.name)}"><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Tạo đơn">${money(x.createdRevenue)}</td><td data-label="Thành công">${money(x.successfulRevenue)}</td><td data-label="Số đơn">${numFmt(x.orders)}</td><td data-label="Đơn TC">${numFmt(x.successfulOrders)}</td><td data-label="Treo">${compact(x.pendingRevenue)}</td><td data-label="Đang giao">${compact(x.shippingRevenue)}</td><td data-label="Hoàn">${compact(x.returnRevenue)}</td><td data-label="Tỷ lệ hoàn" class="${x.returnRate>.2?'bad':''}">${pct(x.returnRate)}</td><td data-label="AOV">${compact(x.aov)}</td></tr>`).join('')||'<tr><td colspan="10">Không có dữ liệu</td></tr>';
-  drawGroupedBars($('staffChart'),stats.slice(0,12).map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),true);
-  drawSingleBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),{percentMode:true})
+  drawBars($('staffChart'),stats.slice(0,12).map(x=>({label:x.name,a:x.createdRevenue,b:x.successfulRevenue})),[{key:'a',label:'Tạo đơn'},{key:'b',label:'Thành công',soft:true}]);
+  drawBars($('staffReturnChart'),stats.slice(0,12).map(x=>({label:x.name,value:x.returnRate*100})),[{key:'value',label:'Tỷ lệ hoàn'}],{fmt:v=>v.toFixed(1).replace('.',',')+'%',axisFmt:v=>Math.round(v)+'%',valueFmt:v=>v.toFixed(1).replace('.',',')+'%',clsFn:d=>d.value>20?'bad':''})
 }
 function renderMonthly(){
   const selectedChannel=$('channel').value;
@@ -1177,10 +1365,10 @@ function renderMonthly(){
     let createdSum=0;
     const daily=days.map(key=>{const o=overview(g[key]||[]);createdSum+=o.createdRevenue;return{label:key,created:o.createdRevenue,success:o.successfulRevenue,orders:o.orders,actual:createdSum}});
     $('monthlyKpis').innerHTML=[mini('Target khoảng lọc','Chưa cấu hình'),mini('Đã đạt',money(createdSum)),mini('% hoàn thành','—'),mini('Tiến độ thời gian',pct(reportTimeProgress(days))),mini('Dự báo cuối kỳ','—')].join('');
-    drawLineChart($('cumulativeChart'),daily,[{key:'actual',class:'lineRed',point:'pointRed'}],null);
-    drawSingleBars($('dailyGapChart'),[],{moneyMode:true,positiveNegative:true});
+    drawLineChart($('cumulativeChart'),daily,[{key:'actual',label:'Thực đạt lũy kế',cls:'ink'}]);
+    chartEmpty($('dailyGapChart'),'Cần nhập target theo kênh để tính chênh lệch');
     $('dailyRows').innerHTML=daily.slice().reverse().map(d=>`<tr><td data-label="Ngày">${d.label.slice(8,10)}/${d.label.slice(5,7)}</td><td data-label="Tạo đơn">${money(d.created)}</td><td data-label="Thành công">${money(d.success)}</td><td data-label="Target ngày">—</td><td data-label="Gap">—</td><td data-label="% đạt">—</td><td data-label="Số đơn">${d.orders}</td></tr>`).join('');
-    document.querySelector('#view-monthly .sectionHead p').textContent=`Kênh ${selectedChannel} chưa được cấu hình target`;
+    document.querySelector('#view-monthly .sectionHead p').textContent=hasChannelTargets()?`Kênh ${selectedChannel} chưa được cấu hình target`:'Chưa nhập target theo kênh · bấm “Nhập mục tiêu”';
     return
   }
   const days=selectedCalendarDays(),rows=scopeRowsForTarget(filteredRows(),selectedChannel),g=group(rows,o=>orderDate(o)),daily=[],cumulative=[];
@@ -1199,8 +1387,8 @@ function renderMonthly(){
     mini('% hoàn thành',pct(completion)),mini('Tiến độ thời gian',pct(time)),
     mini('Dự báo cuối kỳ',time>0?compact(forecast):'—')
   ].join('');
-  drawLineChart($('cumulativeChart'),cumulative,[{key:'actual',class:'lineRed',point:'pointRed'},{key:'target',class:'lineTarget',point:'pointDark'}],null);
-  drawSingleBars($('dailyGapChart'),daily,{moneyMode:true,positiveNegative:true,positiveIsBad:true});
+  drawLineChart($('cumulativeChart'),cumulative,[{key:'actual',label:'Thực đạt lũy kế',cls:'ink'},{key:'target',label:'Target lũy kế',cls:'target'}]);
+  drawBars($('dailyGapChart'),daily.map(d=>({label:shortLabel(d.label),diff:-d.value})),[{key:'diff',label:'Chênh lệch so với target ngày'}],{fmt:v=>(v>=0?'Vượt ':'Thiếu ')+money(Math.abs(v)),clsFn:d=>d.diff>=0?'good':'bad',labels:false});
   $('dailyRows').innerHTML=daily.slice().reverse().map(d=>`<tr>
     <td data-label="Ngày">${d.label.slice(8,10)}/${d.label.slice(5,7)}</td>
     <td data-label="Tạo đơn">${money(d.created)}</td>
@@ -1410,7 +1598,7 @@ $('mobileFilterBackdrop').onclick=()=>setMobileFilter(false);
 $('mobileQuickBtn').onclick=openQuickReport;
 document.querySelectorAll('[data-close-dialog]').forEach(b=>b.onclick=()=>$(b.dataset.closeDialog).close());
 document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d)d.close()}));
-$('settingsBtn').onclick=openSettings;$('openSettingsInline').onclick=openSettings;$('openSettingsMonthly').onclick=openSettings;
+['settingsBtn','openSettingsMonthly'].forEach(id=>{if($(id))$(id).onclick=openSettings});
 $('quickReportBarBtn').onclick=openQuickReport;
 $('quickTotalData').oninput=updateQuickTotalDataFromInput;
 $('quickAdsData').oninput=updateQuickAdsDataFromInput;
@@ -1465,4 +1653,19 @@ $('reloadBtn').onclick=async()=>{
     }finally{$('app').classList.remove('loading')}
   }else renderAll()
 };
+const THEME_KEY='sevenam_theme';
+function applyTheme(theme){
+  const root=document.documentElement;if(!root)return;
+  if(theme==='light'||theme==='dark')root.dataset.theme=theme;else delete root.dataset.theme;
+  const btn=$('themeBtn');if(btn)btn.title=theme==='dark'?'Giao diện tối (bấm để chuyển sáng)':theme==='light'?'Giao diện sáng (bấm để theo hệ thống)':'Theo hệ thống (bấm để chuyển tối)'
+}
+let currentTheme='';try{currentTheme=localStorage.getItem(THEME_KEY)||''}catch{}
+applyTheme(currentTheme);
+if($('themeBtn'))$('themeBtn').onclick=()=>{
+  currentTheme=currentTheme===''?'dark':currentTheme==='dark'?'light':'';
+  try{currentTheme?localStorage.setItem(THEME_KEY,currentTheme):localStorage.removeItem(THEME_KEY)}catch{}
+  applyTheme(currentTheme)
+};
+let resizeTimer=0;
+window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(meta.source==='PANCAKE')renderAll()},180)});
 init();
