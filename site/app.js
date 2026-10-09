@@ -335,6 +335,15 @@ const KPI_CHANNELS=[
   {key:'zalo',channel:'Zalo/CSKH',label:'Zalo'},
   {key:'website',channel:'Website',label:'Website'}
 ];
+const KPI_CHANNEL_SET=new Set(KPI_CHANNELS.map(x=>x.channel));
+function isKpiChannel(channel){return KPI_CHANNEL_SET.has(channel)}
+function targetAvailableForChannel(channel=$('channel')?.value||'Tất cả'){
+  return !hasChannelTargets()||channel==='Tất cả'||isKpiChannel(channel)
+}
+function scopeRowsForTarget(rows,channel=$('channel')?.value||'Tất cả'){
+  if(!hasChannelTargets()||channel!=='Tất cả')return rows;
+  return rows.filter(o=>isKpiChannel(o.channel))
+}
 function hasChannelTargets(){return Boolean(settings.channelTargetsConfigured)}
 function channelTargetMonth(channel){
   const cfg=settings.channelTargets||{};
@@ -357,7 +366,9 @@ function effectiveDailyTarget(month,channel=$('channel')?.value||'Tất cả'){
 function rangeKey(channel){return `${$('from').value}|${$('to').value}|${channel}`}
 function channelDataValue(channel){return Number(channelData[rangeKey(channel)])||0}
 function totalManualData(rows){
-  const channels=Array.from(new Set(rows.map(x=>x.channel)));
+  const selected=$('channel')?.value||'Tất cả';
+  if(selected!=='Tất cả')return channelDataValue(selected);
+  const channels=Array.from(new Set(sourceOrders.map(x=>x.channel).filter(Boolean)));
   return channels.reduce((a,c)=>a+channelDataValue(c),0)
 }
 function gapClass(v){return v<-10?'red':v<=10?'orange':v<=20?'blue':'green'}
@@ -638,11 +649,16 @@ function drawSingleBars(el,data,{moneyMode=false,percentMode=false,positiveNegat
   data.forEach((d,i)=>{const cx=P.l+slot*i+slot/2,val=Number(d.value)||0,yy=y(val),top=Math.min(yy,zero),h=Math.max(1,Math.abs(zero-yy)),cls=positiveNegative?(val>=0?'barGreen':'barRed'):'barRed';const rect=addSvg(svg,'rect',{x:cx-bw/2,y:top,width:bw,height:h,rx:3,class:cls});addSvg(rect,'title',{},`${d.label}: ${percentMode?(val.toFixed(1)+'%'):moneyMode?money(val):numFmt(val)}`);if(data.length<=15||i%Math.ceil(data.length/10)===0)addSvg(svg,'text',{x:cx,y:H-8,'text-anchor':'middle',class:'axisText'},String(d.label).slice(-5))})
 }
 function renderTarget(){
-  const days=selectedCalendarDays(),rows=filteredRows(),k=overview(rows),goal=periodTarget(days);
+  const days=selectedCalendarDays(),selectedChannel=$('channel').value,allRows=filteredRows();
+  if(!targetAvailableForChannel(selectedChannel)){
+    const actual=overview(allRows).createdRevenue;
+    $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(actual)}</strong></div></div><div class="targetConfigNotice">Kênh <b>${esc(selectedChannel)}</b> chưa được cấu hình target. Dashboard không tự coi doanh thu của kênh này là “Vượt”.</div>`;
+    return
+  }
+  const rows=scopeRowsForTarget(allRows,selectedChannel),k=overview(rows),goal=periodTarget(days);
   const time=reportTimeProgress(days),expected=goal*time,completion=goal?k.createdRevenue/goal:0;
   const gapMoney=expected-k.createdRevenue,gapPoints=goal?(k.createdRevenue/goal-time)*100:0;
   const dayTarget=days.length?goal/days.length:0,forecast=time>0?k.createdRevenue/time:0;
-  const selectedChannel=$('channel').value;
   const breakdown=KPI_CHANNELS
     .filter(x=>selectedChannel==='Tất cả'||x.channel===selectedChannel)
     .map(x=>{
@@ -660,7 +676,8 @@ function renderTarget(){
         <span><small>% tiến độ</small><b>${pct(pacing)}</b></span>
       </div>`
     }).join('');
-  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>DOANH SỐ KHOẢNG LỌC</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}">${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
+  const heroLabel=hasChannelTargets()&&selectedChannel==='Tất cả'?'DOANH SỐ 4 KÊNH KPI':'DOANH SỐ KHOẢNG LỌC';
+  $('targetPanel').innerHTML=`<div class="targetHero"><div><span>${heroLabel}</span><strong>${money(k.createdRevenue)}</strong></div><div class="gapBadge ${gapClass(gapPoints)}>${gapMoney>0?'GAP '+compact(gapMoney):'Vượt '+compact(Math.abs(gapMoney))}</div></div>
     <div class="progressRow"><div class="progressLabel"><span>Hoàn thành target khoảng lọc</span><b>${pct(completion)}</b></div><div class="track"><i style="width:${Math.min(100,Math.max(0,completion*100))}%"></i></div></div>
     <div class="progressRow"><div class="progressLabel"><span>Target phải đạt theo tiến độ</span><b>${money(expected)}</b></div><div class="track gray"><i style="width:${Math.min(100,Math.max(0,time*100))}%"></i></div></div>
     <div class="targetStats"><div><span>Target khoảng lọc</span><b>${compact(goal)}</b></div><div><span>Target/ngày TB</span><b>${compact(dayTarget)}</b></div><div><span>Dự báo hết kỳ</span><b>${time>0?compact(forecast):'—'}</b></div></div>
