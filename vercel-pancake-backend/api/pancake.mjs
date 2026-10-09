@@ -295,8 +295,13 @@ function normalize(raw){
   const prepaidRaw=get(raw,'prepaid|prepaid_amount');
   const codAmount=codRaw===undefined?0:num(codRaw);
   const prepaidAmount=prepaidRaw===undefined?0:num(prepaidRaw);
-  const hasPancakePaymentTotal=codRaw!==undefined||prepaidRaw!==undefined;
-  const netAmount=hasPancakePaymentTotal?(codAmount+prepaidAmount):(afterDiscountField!==null?afterDiscountField:grossAmount);
+  // Canonical Pancake revenue rule:
+  // use the order's after-discount total when Pancake provides it.
+  // A valid value can be 0, so test for null rather than truthiness.
+  // COD + prepaid is only a fallback when the after-discount field is absent.
+  const netAmount=afterDiscountField!==null
+    ? afterDiscountField
+    : ((codAmount+prepaidAmount)||grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
   const pageName=str(get(raw,'page.name|page_name|fanpage_name|facebook_page_name|page_info.name|conversation.page.name'),'').trim();
