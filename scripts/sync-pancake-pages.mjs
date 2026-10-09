@@ -224,11 +224,12 @@ function normalize(raw){
   const prepaidRaw=get(raw,'prepaid|prepaid_amount');
   const codAmount=codRaw===undefined?0:num(codRaw);
   const prepaidAmount=prepaidRaw===undefined?0:num(prepaidRaw);
-  const hasPancakePaymentTotal=codRaw!==undefined||prepaidRaw!==undefined;
-  // Pancake reconciliation rule agreed with the dashboard:
-  // "Tổng tiền sau CK" = COD + Trả trước. Only fall back when those
-  // Pancake amount fields are genuinely absent from the API payload.
-  const netAmount=hasPancakePaymentTotal?(codAmount+prepaidAmount):(afterDiscountField!==null?afterDiscountField:grossAmount);
+  // Canonical Pancake revenue rule:
+  // prefer Pancake's after-discount order total, including a valid zero.
+  // COD + prepaid is only a fallback when that field is absent.
+  const netAmount=afterDiscountField!==null
+    ? afterDiscountField
+    : ((codAmount+prepaidAmount)||grossAmount);
   const discountAmount=Math.max(0,grossAmount-netAmount);
 
   const sourceName=str(get(raw,'order_sources_name|order_source_name|source_name'));
