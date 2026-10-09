@@ -149,8 +149,7 @@ function productLine(rawItem){
   ];
 
   let productCode='';
-  const authoritativeProductCode=str(explicitCandidates[0]||explicitCandidates[1]||explicitCandidates[2]||'','').trim().toUpperCase();
-  if(authoritativeProductCode)productCode=authoritativeProductCode;
+  for(const v of explicitCandidates.slice(0,3)){productCode=sevenParentCode(v);if(productCode)break}
   if(!productCode){
     for(const v of explicitCandidates.slice(3)){productCode=sevenParentCode(v);if(productCode)break}
   }
