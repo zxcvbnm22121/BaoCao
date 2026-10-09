@@ -817,6 +817,7 @@ function fillProductChannelFromRows(rows){
 }
 async function loadProductRange(force=false){
   const range=productDateRange(),key=productRangeKey(range);
+  if(productRangeLoadingKey===key)return;
   productRangeError='';
   if(!force&&productRangeInsideMain(range)){
     productRangeLoadedKey='';
