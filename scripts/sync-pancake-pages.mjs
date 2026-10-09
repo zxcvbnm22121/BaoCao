@@ -5,7 +5,7 @@ const API_KEY=(process.env.PANCAKE_API_KEY||'').trim();
 let SHOP_ID=(process.env.PANCAKE_SHOP_ID||'').trim();
 const PASSWORD=process.env.DASHBOARD_PASSWORD||'';
 const MONTHLY_TARGET=Number(process.env.MONTHLY_TARGET||2300000000);
-const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo/CSKH":50000000};
+const CHANNEL_TARGETS={"Facebook Ads":1350000000,"Livestream":650000000,"Shopee":180000000,"Website":70000000,"Zalo":50000000};
 const OUT='site/data/live.enc';
 const KEY_OUT='site/data/pancake-key.enc';
 const STATUS='site/data/status.json';
@@ -60,7 +60,7 @@ function mapChannel(raw,source='',rawOrder={}){
   if(/tiktok/.test(v))return'TikTok Shop';
   if(/lazada/.test(v))return'Lazada';
   if(/webcake|website|web site|shopify|woocommerce/.test(v))return'Website';
-  if(/zalo|cskh|crm/.test(v))return'Zalo/CSKH';
+  if(/zalo/.test(v))return'Zalo';
   if(/facebook|messenger|meta|fb|page/.test(v))return'Facebook Ads';
   if(/pos|offline|showroom|tại quầy|tai quay|cửa hàng|cua hang/.test(v))return'Showroom/POS';
   return'Khác'
@@ -252,6 +252,7 @@ function normalize(raw){
 
   const excludedStatus=[6,7].includes(statusCode);
   const excludedExchangeSource=/^\s*(đơn|don)\s+đổi\b/i.test(sourceName);
+  const excludedCskhSource=/^\s*cskh\b/i.test(sourceName);
 
   return{
     orderCode:str(get(raw,'display_id|order_id|code|id'),'—'),
@@ -280,7 +281,8 @@ function normalize(raw){
     isPartialReturn:partial,
     excludedStatus,
     excludedExchangeSource,
-    excludedFromDefaultReport:excludedStatus||excludedExchangeSource
+    excludedCskhSource,
+    excludedFromDefaultReport:excludedStatus||excludedExchangeSource||excludedCskhSource
   }
 }
 
