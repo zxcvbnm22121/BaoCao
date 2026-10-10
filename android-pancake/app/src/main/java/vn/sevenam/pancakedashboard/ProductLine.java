@@ -2,6 +2,7 @@ package vn.sevenam.pancakedashboard;
 
 import org.json.JSONObject;
 
+/** One product line inside a Pancake order. */
 final class ProductLine {
     String sku = "";
     String productCode = "";
@@ -15,39 +16,17 @@ final class ProductLine {
 
     static ProductLine fromJson(JSONObject o) {
         ProductLine x = new ProductLine();
-        x.sku = o.optString("sku", "");
-        x.productCode = o.optString("productCode", "");
-        x.displayCode = o.optString("displayCode", "");
-        x.name = o.optString("name", "");
-        x.imageUrl = o.optString("imageUrl", "");
-        x.productId = o.optString("productId", "");
-        x.variationId = o.optString("variationId", "");
-        x.quantity = Math.max(0, o.optDouble("quantity", 0));
-        x.returnedQuantity = Math.max(0, o.optDouble("returnedQuantity", 0));
+        x.sku = o.optString("sku", "").trim();
+        x.productCode = o.optString("productCode", "").trim();
+        x.displayCode = o.optString("displayCode", "").trim();
+        x.name = o.optString("name", "").trim();
+        x.imageUrl = o.optString("imageUrl", "").trim();
+        x.productId = o.optString("productId", "").trim();
+        x.variationId = o.optString("variationId", "").trim();
+        Double qty = Order.num(o, "quantity");
+        Double ret = Order.num(o, "returnedQuantity");
+        x.quantity = Math.max(0, qty == null ? 0 : qty);
+        x.returnedQuantity = Math.max(0, ret == null ? 0 : ret);
         return x;
-    }
-
-    String canonicalCode() {
-        String[] candidates = {displayCode, productCode, sku, name};
-        for (String candidate : candidates) {
-            String code = normalizeSevenCode(candidate);
-            if (!code.isEmpty()) return code;
-        }
-        return "";
-    }
-
-    private static String normalizeSevenCode(String raw) {
-        if (raw == null) return "";
-        String s = raw.trim().toUpperCase().replaceAll("\\s+", "");
-        if (s.matches("^[A-Z]\\d{6}[A-Z][1-5]$")) return s.substring(0, s.length() - 1);
-        if (s.matches("^[A-Z]\\d{6}[A-Z]$") || s.matches("^[A-Z]\\d{6}$")) return s;
-
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("([A-Z]\\d{6}[A-Z])[1-5]?")
-                .matcher(s);
-        if (m.find()) return m.group(1);
-
-        m = java.util.regex.Pattern.compile("([A-Z]\\d{6})").matcher(s);
-        return m.find() ? m.group(1) : "";
     }
 }

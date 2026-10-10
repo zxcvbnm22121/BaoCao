@@ -1,11 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Material 3 inspired light theme, seed colour = Seven.AM red -->
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorPrimary">#A7192E</item>
+        <item name="android:colorPrimaryDark">#F7F2EF</item>
+        <item name="android:colorAccent">#A7192E</item>
+        <item name="android:colorControlActivated">#A7192E</item>
+        <item name="android:textColorPrimary">#201A18</item>
+        <item name="android:textColorSecondary">#6D625C</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#141414</item>
-        <item name="android:navigationBarColor">#141414</item>
-        <item name="android:windowBackground">#F5F2EE</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F7F2EF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:datePickerDialogTheme">@style/DatePickerTheme</item>
     </style>
+
+    <style name="DatePickerTheme" parent="android:style/Theme.Material.Light.Dialog">
+        <item name="android:colorAccent">#A7192E</item>
+        <item name="android:colorPrimary">#A7192E</item>
+    </style>
+
+    <color name="app_bg">#F7F2EF</color>
 </resources>
