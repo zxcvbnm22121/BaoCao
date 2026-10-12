@@ -689,6 +689,41 @@ final class Metrics {
         return checks;
     }
 
+    /** POS order list ("Tất cả", CSKH + Đơn đổi excluded) bridged to the dashboard revenue. */
+    static final class PosBridge {
+        double posNet, cancelledNet, untrackedNet, expectedNet, net;
+        long posOrders, cancelledOrders, untrackedOrders, expectedOrders, orders;
+        boolean ok;
+    }
+
+    /** posBridge() on the web: null without dimension filters, live data, and full day coverage. */
+    static PosBridge posBridge(List<Order> rows, Filters f, Map<String, double[]> pos, String source,
+                               String metaFrom, String metaTo) {
+        if (f.hasDimensionFilter() || pos == null || !"PANCAKE".equals(source)) return null;
+        List<String> dates = days(f.from, f.to);
+        if (dates.isEmpty()) return null;
+        if ((!metaFrom.isEmpty() && dates.get(0).compareTo(metaFrom) < 0)
+                || (!metaTo.isEmpty() && dates.get(dates.size() - 1).compareTo(metaTo) > 0)) return null;
+        PosBridge b = new PosBridge();
+        for (String d : dates) {
+            double[] r = pos.get(d);
+            if (r == null) continue;
+            b.posOrders += Math.round(r[DashboardData.P_POS_ORDERS]);
+            b.posNet += r[DashboardData.P_POS_NET];
+            b.cancelledOrders += Math.round(r[DashboardData.P_CANCELLED_ORDERS]);
+            b.cancelledNet += r[DashboardData.P_CANCELLED_NET];
+            b.untrackedOrders += Math.round(r[DashboardData.P_UNTRACKED_ORDERS]);
+            b.untrackedNet += r[DashboardData.P_UNTRACKED_NET];
+        }
+        Overview k = overview(rows);
+        b.expectedNet = b.posNet - b.cancelledNet - b.untrackedNet;
+        b.expectedOrders = b.posOrders - b.cancelledOrders - b.untrackedOrders;
+        b.net = k.created;
+        b.orders = k.orders;
+        b.ok = Math.abs(b.expectedNet - k.created) < .01 && b.expectedOrders == k.orders;
+        return b;
+    }
+
     static Map<String, double[]> dayReconciliationOf(List<Order> orders) {
         Map<String, double[]> actual = new LinkedHashMap<>();
         for (Order o : orders) {

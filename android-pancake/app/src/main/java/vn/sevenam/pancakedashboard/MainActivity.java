@@ -70,6 +70,8 @@ public class MainActivity extends Activity {
     String metaTo = "";
     String lastUpdated = "";
     final Map<String, double[]> dayRecon = new LinkedHashMap<>();
+    /** Per-day POS bridge from meta.posReconciliation; null until live data with POS figures is loaded. */
+    Map<String, double[]> posRecon = null;
     String password;
     String rangeLoadingKey = "";
     String rangeError = "";
@@ -516,6 +518,7 @@ public class MainActivity extends Activity {
         if (!d.dayReconciliation.isEmpty()) {
             dayRecon.putAll(orders.size() == d.orders.size() ? d.dayReconciliation : Metrics.dayReconciliationOf(orders));
         }
+        posRecon = d.posReconciliation;
         store.payloadMonthly = d.monthlyTarget;
         // Keep a filter value only if it still exists in the data (populateFilters on the web).
         if (!Metrics.ALL.equals(filters.channel) && !Metrics.distinctSorted(orders, o -> o.channel).contains(filters.channel)) {

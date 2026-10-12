@@ -187,6 +187,22 @@ final class Screens {
         double successShare = k.created > 0 ? k.success / k.created : 0;
         texts.addView(Ui.text(h, Ui.num(k.orders) + " đơn · AOV " + Ui.compact(k.aov) + " · thành công "
                 + Ui.compact(k.success) + " (" + Ui.pct(successShare) + ")", 12.5f, Ui.ON_VARIANT, false));
+        Metrics.PosBridge bridge = Metrics.posBridge(rows, h.filters, h.posRecon, h.source, h.metaFrom, h.metaTo);
+        if (bridge != null) {
+            StringBuilder sb = new StringBuilder("Đối chiếu POS ").append(Ui.money(bridge.posNet))
+                    .append(" (").append(Ui.num(bridge.posOrders)).append(" đơn)");
+            if (bridge.cancelledOrders > 0) {
+                sb.append(" − huỷ ").append(Ui.money(bridge.cancelledNet)).append(" (").append(Ui.num(bridge.cancelledOrders)).append(")");
+            }
+            if (bridge.untrackedOrders > 0) {
+                sb.append(" − ngoài Ads/Live/Zalo ").append(Ui.money(bridge.untrackedNet)).append(" (").append(Ui.num(bridge.untrackedOrders)).append(")");
+            }
+            sb.append(" = ").append(Ui.money(bridge.expectedNet))
+                    .append(bridge.ok ? " ✓ khớp" : " ✕ lệch " + Ui.money(bridge.net - bridge.expectedNet));
+            TextView recon = Ui.text(h, sb.toString(), 12, bridge.ok ? Ui.ON_VARIANT : Ui.BAD, false);
+            recon.setPadding(0, Ui.dp(6), 0, 0);
+            texts.addView(recon);
+        }
         top.addView(texts, Ui.weight(1));
         LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP);
         pl.leftMargin = Ui.dp(8);
@@ -530,6 +546,19 @@ final class Screens {
 
     private void reconciliationCard(LinearLayout page, List<Order> rows) {
         List<Metrics.Check> checks = Metrics.reconciliation(rows, h.filters, h.dayRecon);
+        Metrics.PosBridge b = Metrics.posBridge(rows, h.filters, h.posRecon, h.source, h.metaFrom, h.metaTo);
+        if (b != null && !h.dayRecon.isEmpty()) {
+            checks.add(new Metrics.Check("POS · Tất cả (loại CSKH + Đơn đổi)", true,
+                    Ui.money(b.posNet) + " · " + Ui.num(b.posOrders) + " đơn"));
+            checks.add(new Metrics.Check("− Đơn huỷ / xoá", true,
+                    Ui.money(b.cancelledNet) + " · " + Ui.num(b.cancelledOrders) + " đơn"));
+            if (b.untrackedOrders > 0) {
+                checks.add(new Metrics.Check("− Ngoài Ads / Live / Zalo", true,
+                        Ui.money(b.untrackedNet) + " · " + Ui.num(b.untrackedOrders) + " đơn"));
+            }
+            checks.add(new Metrics.Check("= Khớp POS sau khi trừ", b.ok,
+                    Ui.money(b.expectedNet) + " · " + Ui.num(b.expectedOrders) + " đơn"));
+        }
         boolean bad = false;
         for (Metrics.Check ch : checks) if (!ch.ok) bad = true;
         LinearLayout c = card(page, "Đối soát dữ liệu", "Tổng = kênh = Sale = trạng thái = nguồn API",
