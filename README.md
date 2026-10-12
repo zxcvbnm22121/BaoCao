@@ -1,35 +1,64 @@
-# WA Agent - báo cáo KPI ngày
+# Seven.AM — Dashboard doanh thu thời gian thực
 
-Gõ `/baocao` trong chat WhatsApp với chính mình. Bot (một cửa sổ Chrome thật) sẽ:
-1. Vào nhóm ALL TEAM, đọc tin hôm nay, lấy % của CSKH, Zalo, Web, Ads, Live, Bán lẻ (chờ tối đa WAIT_MINUTES nếu chưa đủ).
-2. Mở Google Sheet, nhập % vào các ô đã cấu hình, copy bảng.
-3. Mở dashboard, xóa cũ, dán bảng, bấm Phân tích dữ liệu, Xuất BC1, Xuất BC2.
-4. Gửi 2 ảnh cho c Hằng.
-5. Mở Google Slides, thay hình cũ bằng BC1 (dùng "Thay thế hình ảnh" nên giữ đúng vị trí/kích thước).
-6. Nhắn lại kết quả + ảnh slide vào chat với chính mình để bạn kiểm tra.
+Website theo dõi doanh thu và đơn hàng Pancake, triển khai trên Vercel:
 
-## Cài đặt
+**https://sevenam-pancake-live.vercel.app**
+
+## Cấu trúc source
+
+| Đường dẫn | Vai trò |
+| --- | --- |
+| `vercel-pancake-backend/` | Website chính: giao diện HTML/CSS/JavaScript và API serverless `api/pancake.mjs`. |
+| `site/` | Bản dashboard trên GitHub Pages và dashboard showroom Nhanh.vn trong `site/nhanh/`. |
+| `scripts/sync-pancake-pages.mjs` | Đồng bộ dữ liệu Pancake và tạo dữ liệu mã hoá cho dashboard. |
+| `scripts/sync-nhanh-pages.mjs` | Đồng bộ dữ liệu showroom Nhanh.vn. |
+| `.github/workflows/sevenam-pages.yml` | Đồng bộ và xuất bản GitHub Pages, có lịch chạy mỗi 10 phút. |
+| `android-pancake/` | App Android xem cùng dữ liệu doanh thu Pancake. |
+| `.github/workflows/android-pancake-apk.yml` | Build và phát hành APK của app Android. |
+
+## Website trên Vercel
+
+- Thư mục source của website: `vercel-pancake-backend/`.
+- Runtime khai báo trong `package.json`: Node.js 24.x.
+- Giao diện chính: `index.html`, `app.js`, `styles.css`.
+- API: `POST /api/pancake`, yêu cầu mật khẩu dashboard.
+- Cấu hình hàm serverless và HTTP cache: `vercel.json`.
+- Dự án dùng file tĩnh và API Node.js; hiện không có lệnh `npm run build` hay dependency npm.
+
+Biến môi trường được API sử dụng:
+
+| Biến | Vai trò |
+| --- | --- |
+| `PANCAKE_API_KEY` | Khoá truy cập Pancake. |
+| `PANCAKE_SHOP_ID` | ID shop Pancake. |
+| `DASHBOARD_PASSWORD` | Mật khẩu mở dashboard. |
+| `MONTHLY_TARGET` | Mục tiêu doanh thu tháng; có giá trị mặc định trong source. |
+| `ALLOWED_ORIGIN` | Origin được phép gọi API; mặc định là GitHub Pages của repo. |
+
+Cấu hình các giá trị thực trong Environment Variables của Vercel. Không đưa khoá API hoặc mật khẩu vào source.
+
+## Đồng bộ dữ liệu và GitHub Pages
+
+Workflow `sevenam-pages.yml` sao chép ba file giao diện chính từ `vercel-pancake-backend/` sang `site/` trước khi xuất bản. Khi chỉnh giao diện dashboard chính, sửa bản trong `vercel-pancake-backend/`.
+
+Workflow dùng GitHub Actions Secrets:
+- Pancake: `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID`, `DASHBOARD_PASSWORD`.
+- Nhanh.vn: `NHANH_APP_ID`, `NHANH_BUSINESS_ID`, `NHANH_ACCESS_TOKEN` và `DASHBOARD_PASSWORD`.
+- GitHub Actions Variable tuỳ chọn: `MONTHLY_TARGET`.
+
+Giữ `site/`, các script đồng bộ và workflow Pages: website Vercel còn tham chiếu `data/live.enc` và `data/pancake-key.enc` trên GitHub Pages để mở snapshot và hỗ trợ nguồn dữ liệu dự phòng.
+
+## Kiểm tra source
+
+Với Node.js 24, có thể kiểm tra cú pháp từ thư mục gốc:
+
+```sh
+node --check vercel-pancake-backend/app.js
+node --check vercel-pancake-backend/api/pancake.mjs
+node --check scripts/sync-pancake-pages.mjs
+node --check scripts/sync-nhanh-pages.mjs
+node --check site/app.js
+node --check site/nhanh/app.js
 ```
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m playwright install chromium
-copy .env.example .env
-notepad .env
-```
-Cần cài Google Chrome (bot dùng Chrome thật để đăng nhập Google được).
 
-## Điền .env (bắt buộc)
-- `WA_SELF_PHONE`: số điện thoại của bạn.
-- `SHEET_CELLS` và `SHEET_COPY_RANGE`: số dòng thật trong Sheet (mở Sheet, xem số dòng ở lề trái).
-- `WA_GROUP`: tên nhóm đúng như hiển thị.
-
-## Chạy
-1. Lần đầu (bot đang tắt): `.venv\Scripts\python.exe setup_login.py` - quét QR WhatsApp, đăng nhập Google, nhấn Enter.
-2. `.venv\Scripts\python.exe bot.py` và để cửa sổ Chrome mở.
-3. Trong chat với chính mình gõ `/baocao`.
-
-## Lưu ý
-- Shopee không có trong tin báo cáo nên bot giữ nguyên ô Shopee.
-- Nếu tên người báo/cách viết lạ, đặt `ANTHROPIC_API_KEY` để Claude đọc hộ khi cách tách thông thường không ra.
-- Bước Slides và các selector phụ thuộc giao diện Google/WhatsApp, cần chạy thử 1-2 lần để chỉnh.
-- Luồng cũ (Pancake + Drive) nằm trong thư mục `legacy/`, hiện không dùng.
+Mã automation KPI chạy trên PC (`wa-agent`) đã được loại khỏi phiên bản hiện tại. Có thể tra cứu phiên bản cũ trong lịch sử Git nếu cần.

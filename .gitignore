@@ -1,0 +1,9 @@
+# Local credentials and environment configuration
+.env
+.env.*
+!.env.example
+
+# Local dependencies, deployment state, and logs
+node_modules/
+.vercel/
+*.log
