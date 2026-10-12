@@ -442,6 +442,22 @@ function keepTrackedChannels(orders){
   console.log('[pancake] channels',JSON.stringify(counts),top?'| dropped: '+top:'');
   return orders.filter(o=>TRACKED_CHANNELS.has(o.channel))
 }
+// Per-day bridge to the Pancake POS order list, built BEFORE channels are
+// dropped. POS "Tất cả" with CSKH / Đơn đổi sources excluded still counts
+// cancelled orders and every channel; the dashboard total removes cancelled
+// orders and anything outside Ads / Live / Zalo. Shipping both parts lets the
+// UI prove: POS total - cancelled - other channels = dashboard total.
+function posReconciliationOf(orders){
+  const days={};
+  for(const o of orders){
+    if(o.excludedExchangeSource||o.excludedCskhSource)continue;
+    const d=days[o.createdDate]??={posOrders:0,posNet:0,cancelledOrders:0,cancelledNet:0,untrackedOrders:0,untrackedNet:0};
+    d.posOrders++;d.posNet+=o.netAmount;
+    if(o.excludedStatus){d.cancelledOrders++;d.cancelledNet+=o.netAmount}
+    else if(!TRACKED_CHANNELS.has(o.channel)){d.untrackedOrders++;d.untrackedNet+=o.netAmount}
+  }
+  return days
+}
 function rawOrderKey(raw,index=0){return str(get(raw,'id|display_id|order_id|code'))||`${str(get(raw,'inserted_at|created_at|creation_time'))}:${index}`}
 // One malformed Pancake order (missing timestamp, negative amount) must not
 // fail the whole dashboard: skip it, log it and report the count in meta.
@@ -522,8 +538,10 @@ async function fetchOrders(from,to,deadline){
   const skippedIds=raws.filter((raw,i)=>!normalized[i]).map(raw=>str(get(raw,'display_id|id|order_id|code'),'?'));
   const skippedOrders=skippedIds.length;
   if(skippedOrders)console.warn(`Skipped ${skippedOrders} malformed Pancake order(s):`,skippedIds.slice(0,20).join(', '));
-  const orders=keepTrackedChannels(normalized.filter(o=>o&&o.createdDate>=from&&o.createdDate<=to));
-  return {orders,stats:{passes,skippedOrders}};
+  const inRange=normalized.filter(o=>o&&o.createdDate>=from&&o.createdDate<=to);
+  const posReconciliation=posReconciliationOf(inRange);
+  const orders=keepTrackedChannels(inRange);
+  return {orders,stats:{passes,skippedOrders,posReconciliation}};
 }
 
 function buildPayload({orders,stats},from,to){
@@ -552,7 +570,7 @@ function buildPayload({orders,stats},from,to){
     d.orders++;d.net+=o.netAmount;d.cod+=o.codAmount;d.prepaid+=o.prepaidAmount;d.gross+=o.grossAmount;
   }
   return {
-    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,fetchPasses:stats.passes,skippedOrders:stats.skippedOrders,statusDistribution,channelDistribution,dayReconciliation,pageCoverage,productCoverage},
+    meta:{source:'PANCAKE',transport:'VERCEL_DIRECT',lastUpdated:new Date().toISOString(),from,to,count:orders.length,fetchPasses:stats.passes,skippedOrders:stats.skippedOrders,statusDistribution,channelDistribution,dayReconciliation,posReconciliation:stats.posReconciliation||{},pageCoverage,productCoverage},
     monthlyTarget:MONTHLY_TARGET,
     channelTargets:CHANNEL_TARGETS,
     orders
