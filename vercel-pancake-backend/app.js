@@ -121,10 +121,12 @@ async function fetchRangeChunks(password,from,to,{force=false}={}){
 }
 function combineRangePayloads(payloads,from,to){
   const orders=[],dayReconciliation={};
-  let skippedOrders=0,latest=payloads[payloads.length-1];
+  let posReconciliation={},skippedOrders=0,latest=payloads[payloads.length-1];
   for(const p of payloads){
     orders.push(...p.orders);
     Object.assign(dayReconciliation,p.meta?.dayReconciliation||{});
+    if(posReconciliation&&p.meta?.posReconciliation)Object.assign(posReconciliation,p.meta.posReconciliation);
+    else posReconciliation=null;
     skippedOrders+=Number(p.meta?.skippedOrders)||0
   }
   return {
@@ -132,6 +134,7 @@ function combineRangePayloads(payloads,from,to){
     monthlyTarget:latest?.monthlyTarget,
     meta:{
       source:'PANCAKE',transport:'VERCEL_DIRECT',from,to,count:orders.length,skippedOrders,dayReconciliation,
+      ...(posReconciliation?{posReconciliation}:{}),
       // Freshness follows the newest chunk, which is the one re-read every time.
       lastUpdated:latest?.meta?.lastUpdated||new Date().toISOString()
     }
@@ -504,6 +507,31 @@ function bindDrilldowns(){
     }
   })
 }
+// Bridge to the Pancake POS order list ("Tất cả", CSKH + Đơn đổi sources
+// excluded). Only meaningful without channel / Sale / status filters and when
+// the loaded payload covers every selected day.
+function posBridge(rows){
+  const noFilter=$('channel').value==='Tất cả'&&$('staff').value==='Tất cả'&&$('status').value==='Tất cả';
+  const pr=meta.posReconciliation;
+  if(!noFilter||!pr||meta.source!=='PANCAKE')return null;
+  const dates=selectedCalendarDays();
+  if(!dates.length||(meta.from&&dates[0]<meta.from)||(meta.to&&dates[dates.length-1]>meta.to))return null;
+  const refs=dates.map(d=>pr[d]).filter(Boolean);
+  const b={posOrders:sum(refs,x=>x.posOrders),posNet:sum(refs,x=>x.posNet),cancelledOrders:sum(refs,x=>x.cancelledOrders),cancelledNet:sum(refs,x=>x.cancelledNet),untrackedOrders:sum(refs,x=>x.untrackedOrders),untrackedNet:sum(refs,x=>x.untrackedNet)};
+  const k=overview(rows);
+  b.expectedNet=b.posNet-b.cancelledNet-b.untrackedNet;
+  b.expectedOrders=b.posOrders-b.cancelledOrders-b.untrackedOrders;
+  b.ok=Math.abs(b.expectedNet-k.createdRevenue)<.01&&b.expectedOrders===k.orders;
+  b.net=k.createdRevenue;b.orders=k.orders;
+  return b
+}
+function posBridgeHtml(b){
+  if(!b)return '';
+  const parts=[`POS ${money(b.posNet)} (${numFmt(b.posOrders)} đơn)`];
+  if(b.cancelledOrders)parts.push(`− huỷ ${money(b.cancelledNet)} (${numFmt(b.cancelledOrders)})`);
+  if(b.untrackedOrders)parts.push(`− ngoài Ads/Live/Zalo ${money(b.untrackedNet)} (${numFmt(b.untrackedOrders)})`);
+  return `<div class="heroRecon ${b.ok?'good':'bad'}" title="POS · Đơn hàng · Tất cả, lọc loại trừ nguồn CSKH và Đơn đổi">Đối chiếu ${parts.join(' ')} = ${money(b.expectedNet)} ${b.ok?'✓ khớp':'✕ lệch '+money(b.net-b.expectedNet)}</div>`
+}
 function renderReconciliation(rows){
   const k=overview(rows),checks=[];
   const total=k.createdRevenue,eps=.01;
@@ -521,6 +549,13 @@ function renderReconciliation(rows){
     checks.push({name:'Khớp nguồn API · số đơn',ok:expected.orders===rows.length,text:`${numFmt(rows.length)} / ${numFmt(expected.orders)} đơn`});
     checks.push({name:'Khớp nguồn API · sau CK',ok:Math.abs(expected.net-total)<eps,text:`${money(total)} / ${money(expected.net)}`});
     checks.push({name:'Khớp nguồn API · COD + trả trước',ok:Math.abs((expected.cod+expected.prepaid)-(k.codRevenue+k.prepaidRevenue))<eps,text:`${money(k.codRevenue+k.prepaidRevenue)} / ${money(expected.cod+expected.prepaid)}`});
+    const b=posBridge(rows);
+    if(b){
+      checks.push({name:'POS · Tất cả (loại CSKH + Đơn đổi)',ok:true,text:`${money(b.posNet)} · ${numFmt(b.posOrders)} đơn`});
+      checks.push({name:'− Đơn huỷ / xoá',ok:true,text:`${money(b.cancelledNet)} · ${numFmt(b.cancelledOrders)} đơn`});
+      if(b.untrackedOrders)checks.push({name:'− Ngoài Ads / Live / Zalo',ok:true,text:`${money(b.untrackedNet)} · ${numFmt(b.untrackedOrders)} đơn`});
+      checks.push({name:'= Khớp POS sau khi trừ',ok:b.ok,text:`${money(b.expectedNet)} · ${numFmt(b.expectedOrders)} đơn`});
+    }
   }else{
     checks.push({name:'Đối soát nguồn API',ok:true,text:'Đang có bộ lọc · kiểm tra nội bộ'});
   }
@@ -813,6 +848,7 @@ function renderHero(rows){
       <div class="heroLabel">${esc(label)}</div>
       <div class="heroValue">${money(k.createdRevenue)}</div>
       <div class="heroSub">${numFmt(k.orders)} đơn · AOV ${compact(k.aov)} · thành công ${compact(k.successfulRevenue)} (${pct(successShare)})</div>
+      ${posBridgeHtml(posBridge(rows))}
     </div><span class="paceBadge ${paceLevel(p)}">${paceText(p)}</span></div>`;
   if(!p.goal){
     el.innerHTML=head+`<div class="heroEmpty"><span>Nhập target tháng cho Ads, Live, Zalo để xem tiến độ, chênh lệch và dự báo.</span><button type="button" class="miniBtn" data-open-settings>Nhập target</button></div>`;

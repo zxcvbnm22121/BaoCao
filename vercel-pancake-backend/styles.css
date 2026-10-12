@@ -475,3 +475,6 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .liveBadge{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.heroRecon{margin-top:6px;font-size:12px;line-height:1.45;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.heroRecon.bad{color:var(--critical-text)}
