@@ -171,6 +171,7 @@ td{font-weight:650;border-color:#cbd9ea;background:#fff}
   <label>Ngày <input id="reportDate" class="field" type="date"></label>
   <label>Target ngày <input id="dayTarget" class="field" style="width:130px" type="number" min="0" step="1000000" placeholder="VD 100000000"></label>
   <label>Target tháng <input id="monthTarget" class="field" style="width:150px" type="number" min="0" step="1000000" placeholder="VD 3200000000"></label>
+  <label title="Target riêng của kênh Website trong ngày. Target ngày ở bên trái là tổng mọi kênh.">Target Web ngày <input id="webTarget" class="field" style="width:120px" type="number" min="0" step="100000" placeholder="VD 5000000"></label>
   <span id="targetStatus" class="file-status" title="Target được lưu trong trình duyệt này theo từng tháng">💾 Target tự lưu</span>
   <button class="btn" id="reloadBtn" type="button">↻ Làm mới</button>
   <button class="btn alt" id="exportBtn" type="button">⬇ Xuất PNG</button>
@@ -256,9 +257,9 @@ function loadTargetStore(){try{const s=JSON.parse(localStorage.getItem(TARGET_KE
 function saveTargetStore(s){try{localStorage.setItem(TARGET_KEY,JSON.stringify(s));return true}catch{return false}}
 let targetFlash=null,targetMonth='';
 function saveTargets(){
-  const day=num($('dayTarget').value),month=num($('monthTarget').value);
-  if(day<=0&&month<=0)return;
-  const s=loadTargetStore(),mk=$('reportDate').value.slice(0,7),t={day,month};
+  const day=num($('dayTarget').value),month=num($('monthTarget').value),web=num($('webTarget').value);
+  if(day<=0&&month<=0&&web<=0)return;
+  const s=loadTargetStore(),mk=$('reportDate').value.slice(0,7),t={day,month,web};
   s.last=t;if(mk){s.byMonth=s.byMonth||{};s.byMonth[mk]=t}
   const ok=saveTargetStore(s),el=$('targetStatus');
   el.textContent=ok?`✓ Đã lưu target${mk?' tháng '+mk.slice(5,7)+'/'+mk.slice(0,4):''}`:'⚠ Trình duyệt chặn lưu target';
@@ -271,10 +272,11 @@ function syncTargets(dk){
   const mk=String(dk||'').slice(0,7);if(!mk||mk===targetMonth)return;
   targetMonth=mk;
   const s=loadTargetStore(),t=(s.byMonth&&s.byMonth[mk])||s.last;
-  let day=num(t?.day),month=num(t?.month);
-  if(!day||!month){try{const d=provider()?.targets?.(dk);if(!day)day=num(d?.day);if(!month)month=num(d?.month)}catch{}}
+  let day=num(t?.day),month=num(t?.month),web=num(t?.web);
+  if(!day||!month||!web){try{const d=provider()?.targets?.(dk);if(!day)day=num(d?.day);if(!month)month=num(d?.month);if(!web)web=num(d?.webDay)}catch{}}
   if(day)$('dayTarget').value=day;
-  if(month)$('monthTarget').value=month
+  if(month)$('monthTarget').value=month;
+  if(web)$('webTarget').value=web
 }
 
 /* ===== Biểu đồ tròn vẽ bằng canvas (html2canvas không hỗ trợ conic-gradient) ===== */
@@ -300,7 +302,7 @@ const delta=(cur,prev,money)=>{
 function render(){
   const m=MODEL;if(!m)return;
   const d=m.date,dd=displayDate(d),cur=m.day,prev=m.prev,ps=displayDate(prev.date).slice(0,5);
-  const dayTarget=num($('dayTarget').value),monthTarget=num($('monthTarget').value);
+  const dayTarget=num($('dayTarget').value),monthTarget=num($('monthTarget').value),webTarget=num($('webTarget').value);
   document.querySelectorAll('.rdate').forEach(x=>x.textContent=dd);
   $('hdrDate').textContent=dd;$('monthLabel').textContent=d.slice(5,7)+'/'+d.slice(0,4);
   $('monthTargetLabel').textContent=monthTarget?fmt(monthTarget):'—';
@@ -356,7 +358,9 @@ function render(){
   $('detailCards').innerHTML=
     detail('live','🎥 LIVESTREAM','dlive',[['Data Live:',cur.data.live==null?'–':dataLive,'live'],['Số đơn:',channels[1].orders,'live'],['Doanh thu:',fmt(channels[1].revenue),'live'],['CR:',crText(cur.cr.live),'live'],['AOV chuẩn:',fmt(channels[1].aov),'live']])
     +detail('zalo','ⓩ ZALO','dz',[['Người trực:',esc(cur.zalo.staff||'–'),'zalo'],['KH quan tâm:',cur.data.zalo==null?'–':num(cur.data.zalo),'zalo'],['Số đơn:',channels[2].orders,'zalo'],['Doanh thu:',fmt(channels[2].revenue),'zalo'],['CR:',crText(cur.cr.zalo),'zalo'],['AOV:',fmt(channels[2].aov),'zalo']])
-    +detail('web','🌐 WEBSITE','dweb',[['NV trực:',esc(cur.web.staff||'–'),'web'],['Số đơn:',channels[3].orders,'web'],['Doanh thu:',fmt(channels[3].revenue),'web'],['AOV chuẩn:',fmt(channels[3].aov),'web']])
+    +detail('web','🌐 WEBSITE','dweb',[['NV trực:',esc(cur.web.staff||'–'),'web'],['Số đơn:',channels[3].orders,'web'],['Doanh thu:',fmt(channels[3].revenue),'web'],['AOV chuẩn:',fmt(channels[3].aov),'web'],['Target ngày:',webTarget?fmt(webTarget):'chưa nhập','web'],
+      ['Đạt target:',webTarget?pct(channels[3].revenue/webTarget):'–',webTarget?(channels[3].revenue>=webTarget?'good':'danger'):'web'],
+      ...(webTarget?[[channels[3].revenue>=webTarget?'Vượt:':'Còn thiếu:',fmt(Math.abs(channels[3].revenue-webTarget)),channels[3].revenue>=webTarget?'good':'danger']]:[])])
     +detail('fb','ⓕ FACEBOOK ADS','dfb',[['Data Ads:',dataAds,'fb'],['Số đơn:',channels[0].orders,'fb'],['Doanh thu:',fmt(channels[0].revenue),'fb'],['CR:',crText(cur.cr.ads),'fb'],['AOV chuẩn:',fmt(channels[0].aov),'fb']]);
 
   // 6. Hiệu suất nhân viên (tổng hợp mọi kênh)
@@ -456,7 +460,7 @@ if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||start>today)start=today;
 $('reportDate').max=today;
 $('reportDate').value=start;
 $('reportDate').addEventListener('change',e=>{const v=e.target.value;if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v<=today)load(v)});
-['dayTarget','monthTarget'].forEach(id=>{const el=$(id);el.addEventListener('input',()=>{saveTargets();render()});el.addEventListener('change',()=>{saveTargets();render()})});
+['dayTarget','monthTarget','webTarget'].forEach(id=>{const el=$(id);el.addEventListener('input',()=>{saveTargets();render()});el.addEventListener('change',()=>{saveTargets();render()})});
 $('reloadBtn').onclick=()=>load($('reportDate').value);
 $('exportBtn').onclick=exportPng;
 $('backBtn').onclick=e=>{
