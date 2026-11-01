@@ -1521,21 +1521,37 @@ async function copyQuickReport(){
   }else showError('Trình duyệt chưa cho phép sao chép tự động.')
 }
 
-// ---------- Báo cáo ngày của Sale (kênh Ads) ----------
-// Each Sale picks their name and types the day's Data Ads. Đơn, Doanh số and
-// SP come from the same Pancake orders as the rest of the dashboard: channel
-// Facebook Ads, order creation date in Vietnam time, cancelled / CSKH / Đơn
-// đổi left out. CR = Đơn / Data Ads. The Data numbers are kept by the backend
-// (private Vercel Blob) so every device sees and exports the same report.
+// ---------- Báo cáo ngày của Sale: Ads · Zalo · Website ----------
+// Ads: each Sale picks their name and types the day's Data Ads. Đơn,
+//   Doanh số and SP come from Pancake (channel Facebook Ads, creation date in
+//   Vietnam time, cancelled / CSKH / Đơn đổi left out). CR = Đơn / Data Ads.
+// Zalo: one row per day. The Sale on duty picks their name and types Bài
+//   đăng + KH quan tâm; Đơn / Doanh số / SP are that day's Pancake Zalo
+//   orders. CR Zalo = Đơn / KH quan tâm, AOV = Doanh số / SP (as in BC-SOL).
+// Website: one row per day. Pancake does not tag web orders yet, so the Sale
+//   on duty types Đơn / Doanh số / SP. AOV = Doanh số / SP, UPT = SP / Đơn.
+// Everything typed is kept by the backend (private Vercel Blob, one JSON per
+// month) so every device sees and exports the same report.
 const REPORT_STAFF_KEY='sevenam_report_staff_v1';
-const REPORT_NAMES_KEY='sevenam_report_staff_seen_v1';
-const REPORT_CHANNEL='Facebook Ads';
-const REPORT_ORDERS_REFRESH_MS=45000,REPORT_DATA_REFRESH_MS=60000;
+const REPORT_KIND_KEY='sevenam_report_kind_v1';
+// Always pickable, even before they have an order this month (the same list
+// as the BC-SOL dropdowns). Pancake spellings such as "Thu - SOL" are matched
+// to these through staffKey().
+const REPORT_ROSTER=['Diễm SOL','Hương SOL','Thu SOL','Linh Live'];
+const REPORT_KIND_LABEL={ads:'Ads',zalo:'Zalo',web:'Website'};
+const ADS_CHANNEL='Facebook Ads',ZALO_CHANNEL='Zalo';
+const REPORT_ORDERS_REFRESH_MS=45000,REPORT_DATA_REFRESH_MS=180000;
 const WEEKDAY_VI=['CN','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
+// Fields typed in the one-row-per-day reports; limits match the backend.
+const ROW_FIELDS={
+  zalo:{staff:{type:'staff'},posts:{type:'int',max:10000,label:'Bài đăng'},interested:{type:'int',max:1000000,label:'KH quan tâm'}},
+  web:{staff:{type:'staff'},orders:{type:'int',max:10000,label:'Đơn Web'},revenue:{type:'money',max:100000000000,label:'Doanh số Web'},qty:{type:'int',max:100000,label:'SP'},note:{type:'text'}}
+};
+let reportKind=(()=>{const k=storageGet(REPORT_KIND_KEY);return REPORT_KIND_LABEL[k]?k:'ads'})();
 let reportOrders=[],reportOrdersKey='',reportOrdersLoadingKey='',reportOrdersError='',reportOrdersAt=0,reportOrdersReqId=0;
 let saleDoc=null,saleDocMonth='',saleDocLoadingMonth='',saleDocError='',saleDocAt=0,saleDocReqId=0;
-const reportRowState=new Map();      // `${staff}|${day}` → 'saving' | 'invalid'
-const reportPendingValues=new Map(); // `${staff}|${day}` → {value,token} not yet confirmed by the backend
+const reportRowState=new Map(); // field key → 'saving' | 'invalid'
+const reportPending=new Map();  // field key → {token,apply}: typed locally, not yet confirmed by the backend
 let reportSaveChain=Promise.resolve(),reportSaveSeq=0,reportLastSavedAt=0;
 // True while the table is rebuilt: removing the focused cell fires focusout,
 // which must not be taken as the Sale leaving the cell (it would save a
@@ -1560,6 +1576,15 @@ function weekdayVi(day){return WEEKDAY_VI[new Date(day+'T12:00:00Z').getUTCDay()
 function fullDate(day){return `${day.slice(8,10)}/${day.slice(5,7)}/${day.slice(0,4)}`}
 function monthLabel(month){return `${month.slice(5,7)}/${month.slice(0,4)}`}
 function clockTime(ms){return new Date(ms).toLocaleTimeString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit'})}
+function numOrNull(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}
+// "Thu - SOL" and "Thu SOL" are the same Sale; accents still count (Thu ≠ Thư).
+function staffKey(name){return String(name??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'')}
+function canonicalStaff(name){
+  const n=String(name??'').replace(/\s+/g,' ').trim();
+  if(!n)return '';
+  const k=staffKey(n);
+  return REPORT_ROSTER.find(x=>staffKey(x)===k)||n
+}
 function reportCoveredByMain(r=reportRange()){
   return meta.source==='PANCAKE'&&Boolean(meta.from)&&Boolean(meta.to)&&r.from>=meta.from&&r.to<=meta.to
 }
@@ -1572,73 +1597,145 @@ function reportBaseOrders(r=reportRange()){
   return null
 }
 function orderQty(o){return Array.isArray(o?.products)?o.products.reduce((n,x)=>n+Math.max(0,Number(x?.quantity)||0),0):0}
-function reportAdsRows(r=reportRange()){
+function channelRows(channel,r=reportRange()){
   const base=reportBaseOrders(r);
   if(!base)return null;
-  return base.filter(o=>{const d=orderDate(o);return d>=r.from&&d<=r.to&&o.channel===REPORT_CHANNEL&&!isDefaultExcluded(o)})
+  return base.filter(o=>{const d=orderDate(o);return d>=r.from&&d<=r.to&&o.channel===channel&&!isDefaultExcluded(o)})
 }
-function saleEntries(staff,month=reportMonth()){return (saleDoc&&saleDocMonth===month&&saleDoc.entries?.[staff])||{}}
-function saleValue(staff,day){const e=saleEntries(staff,day.slice(0,7))[day];return e&&Number.isFinite(Number(e.data))?Number(e.data):null}
-function setLocalSaleValue(staff,day,value){
-  const month=day.slice(0,7);
-  if(!saleDoc||saleDocMonth!==month){saleDoc={version:1,month,updatedAt:null,entries:{}};saleDocMonth=month}
-  const entries=saleDoc.entries||(saleDoc.entries={});
-  if(value===null){if(entries[staff]){delete entries[staff][day];if(!Object.keys(entries[staff]).length)delete entries[staff]}}
-  else (entries[staff]??={})[day]={data:value,at:new Date().toISOString()}
+
+// ----- the stored month document (with not-yet-confirmed local edits) -----
+function ensureLocalDoc(month){
+  if(!saleDoc||saleDocMonth!==month){saleDoc={version:1,month,updatedAt:null,entries:{},zalo:{},web:{}};saleDocMonth=month}
+  saleDoc.entries??={};saleDoc.zalo??={};saleDoc.web??={};
+  return saleDoc
 }
+function docForMonth(month){return saleDoc&&saleDocMonth===month?saleDoc:null}
+function adsEntries(staff,month=reportMonth()){
+  const out={},k=staffKey(staff),doc=docForMonth(month);
+  if(!doc)return out;
+  for(const [name,days] of Object.entries(doc.entries||{})){
+    if(staffKey(name)!==k)continue;
+    for(const [day,e] of Object.entries(days||{}))if(!out[day]||String(e?.at||'')>String(out[day].at||''))out[day]=e
+  }
+  return out
+}
+function adsValue(staff,day){const e=adsEntries(staff,day.slice(0,7))[day];return e?numOrNull(e.data):null}
+function setLocalAdsValue(staff,day,value){
+  const entries=ensureLocalDoc(day.slice(0,7)).entries,k=staffKey(staff);
+  for(const name of Object.keys(entries)){
+    if(staffKey(name)!==k)continue;
+    delete entries[name][day];
+    if(!Object.keys(entries[name]).length)delete entries[name]
+  }
+  if(value!==null)(entries[staff]??={})[day]={data:value,at:new Date().toISOString()}
+}
+function dayRecord(kind,day){return docForMonth(day.slice(0,7))?.[kind]?.[day]||null}
+function rowFields(kind,rec){
+  const out={};
+  for(const f of Object.keys(ROW_FIELDS[kind]))out[f]=rec&&rec[f]!==undefined&&rec[f]!==''?rec[f]:null;
+  return out
+}
+function setLocalDayRecord(kind,day,row){
+  const doc=ensureLocalDoc(day.slice(0,7));
+  if(row&&Object.values(row).some(v=>v!==null&&v!==''))doc[kind][day]={...row,at:new Date().toISOString()};
+  else delete doc[kind][day]
+}
+
+// ----- report builders -----
 function buildStaffReport(staff,rows,r=reportRange()){
-  const today=vnDate(),mine=(rows||[]).filter(o=>(o.salesStaff||'Chưa gán')===staff),byDay=group(mine,o=>orderDate(o)),entries=saleEntries(staff,r.month);
+  const today=vnDate(),k=staffKey(staff),entries=adsEntries(staff,r.month);
+  const mine=(rows||[]).filter(o=>staffKey(o.salesStaff||'Chưa gán')===k),byDay=group(mine,o=>orderDate(o));
   const days=r.days.map(day=>{
     const list=byDay[day]||[],past=day<=today,e=entries[day];
-    const data=e&&Number.isFinite(Number(e.data))?Number(e.data):null;
-    return {day,weekday:weekdayVi(day),past,isToday:day===today,data,savedAt:e?.at||null,
+    return {day,weekday:weekdayVi(day),past,isToday:day===today,data:e?numOrNull(e.data):null,savedAt:e?.at||null,
       orders:past?list.length:null,revenue:past?sum(list,orderRevenue):null,qty:past?sum(list,orderQty):null,rows:list}
   });
   const total={data:sum(days,d=>d.data),orders:sum(days,d=>d.orders),revenue:sum(days,d=>d.revenue),qty:sum(days,d=>d.qty),
-    enteredDays:days.filter(d=>d.past&&d.data!=null).length,elapsedDays:days.filter(d=>d.past).length};
-  total.cr=total.data?total.orders/total.data:null;
+    enteredDays:days.filter(d=>d.past&&d.data!=null).length,elapsedDays:days.filter(d=>d.past).length,
+    // Month CR counts only the orders of days whose Data is entered, so a day
+    // still waiting for its Data (e.g. today) does not inflate it.
+    crOrders:sum(days.filter(d=>d.data!=null),d=>d.orders)};
+  total.cr=total.data?total.crOrders/total.data:null;
   total.aov=total.orders?total.revenue/total.orders:null;
   return {staff,days,total,missingItems:mine.filter(o=>!Array.isArray(o.products)||!o.products.length).length}
 }
-// Names a Sale can pick: anyone with Ads orders in what is loaded, anyone who
-// already has Data saved this month, plus names this device has seen during
-// the last two months, so the list is not empty on the first day of a month.
-function rememberStaffNames(rows){
-  if(!rows||!rows.length)return;
-  const seen=readJsonStorage(REPORT_NAMES_KEY),today=vnDate();let changed=false;
-  for(const o of rows){const n=o.salesStaff;if(n&&n!=='Chưa gán'&&seen[n]!==today){seen[n]=today;changed=true}}
-  if(changed)writeJsonStorage(REPORT_NAMES_KEY,seen)
+function buildZaloReport(rows,r=reportRange()){
+  const today=vnDate(),byDay=group(rows||[],o=>orderDate(o));
+  const days=r.days.map(day=>{
+    const rec=dayRecord('zalo',day)||{},list=byDay[day]||[],past=day<=today;
+    const orders=past?list.length:null,revenue=past?sum(list,orderRevenue):null,qty=past?sum(list,orderQty):null;
+    const posts=numOrNull(rec.posts),interested=numOrNull(rec.interested);
+    return {day,weekday:weekdayVi(day),past,isToday:day===today,staff:canonicalStaff(rec.staff),posts,interested,orders,revenue,qty,rows:list,savedAt:rec.at||null,
+      cr:interested?(orders||0)/interested:null,aov:qty?revenue/qty:null}
+  });
+  const t={posts:sum(days,d=>d.posts),interested:sum(days,d=>d.interested),orders:sum(days,d=>d.orders),revenue:sum(days,d=>d.revenue),qty:sum(days,d=>d.qty),
+    filledDays:days.filter(d=>d.past&&d.staff&&d.interested!=null).length,elapsedDays:days.filter(d=>d.past).length,
+    crOrders:sum(days.filter(d=>d.interested!=null),d=>d.orders)};
+  t.cr=t.interested?t.crOrders/t.interested:null;t.aov=t.qty?t.revenue/t.qty:null;
+  return {kind:'zalo',days,total:t,missingItems:(rows||[]).filter(o=>!Array.isArray(o.products)||!o.products.length).length}
 }
-function reportStaffNames(rows){
-  const names=new Set(),cut=shiftIsoDay(vnDate(),-62);
-  const add=n=>{n=String(n||'').trim();if(n&&n!=='Chưa gán')names.add(n)};
-  (rows||[]).forEach(o=>add(o.salesStaff));
-  sourceOrders.filter(o=>o.channel===REPORT_CHANNEL).forEach(o=>add(o.salesStaff));
-  Object.keys((saleDocMonth===reportMonth()&&saleDoc?.entries)||{}).forEach(add);
-  Object.entries(readJsonStorage(REPORT_NAMES_KEY)).forEach(([n,d])=>{if(typeof d==='string'&&d>=cut)add(n)});
+function buildWebReport(r=reportRange()){
+  const today=vnDate();
+  const days=r.days.map(day=>{
+    const rec=dayRecord('web',day)||{},past=day<=today;
+    const orders=numOrNull(rec.orders),revenue=numOrNull(rec.revenue),qty=numOrNull(rec.qty);
+    return {day,weekday:weekdayVi(day),past,isToday:day===today,staff:canonicalStaff(rec.staff),orders,revenue,qty,note:rec.note||'',savedAt:rec.at||null,
+      aov:qty?(revenue||0)/qty:null,upt:orders?(qty||0)/orders:null}
+  });
+  const t={orders:sum(days,d=>d.orders),revenue:sum(days,d=>d.revenue),qty:sum(days,d=>d.qty),
+    filledDays:days.filter(d=>d.past&&d.staff&&d.orders!=null).length,elapsedDays:days.filter(d=>d.past).length};
+  t.aov=t.qty?t.revenue/t.qty:null;t.upt=t.orders?t.qty/t.orders:null;
+  return {kind:'web',days,total:t}
+}
+// Zalo / Website totals per Sale on duty (what the BC-SOL Dashboard SUMIFs).
+function dutySummary(rep){
+  const m=new Map();
+  for(const d of rep.days){
+    if(!d.past)continue;
+    const typed=rep.kind==='zalo'?(d.posts!=null||d.interested!=null||d.orders):(d.orders!=null||d.revenue!=null||d.qty!=null);
+    if(!d.staff&&!typed)continue;
+    const name=d.staff||'Chưa chọn NV',k=staffKey(name);
+    let x=m.get(k);
+    if(!x){x={staff:name,days:0,posts:0,interested:0,orders:0,crOrders:0,revenue:0,qty:0};m.set(k,x)}
+    x.days++;x.posts+=d.posts||0;x.interested+=d.interested||0;x.orders+=d.orders||0;x.revenue+=d.revenue||0;x.qty+=d.qty||0;
+    if(d.interested!=null)x.crOrders+=d.orders||0
+  }
+  // Days nobody claimed go last, as a reminder rather than a ranking.
+  return [...m.values()].sort((a,b)=>(a.staff==='Chưa chọn NV')-(b.staff==='Chưa chọn NV')||b.revenue-a.revenue||b.days-a.days)
+}
+function reportStaffNames(adsRows){
+  const names=new Map(),add=n=>{n=canonicalStaff(n);if(n&&n!=='Chưa gán')names.set(staffKey(n),names.get(staffKey(n))||n)};
+  REPORT_ROSTER.forEach(add);
+  (adsRows||[]).forEach(o=>add(o.salesStaff));
+  const doc=docForMonth(reportMonth());
+  if(doc){
+    Object.keys(doc.entries||{}).forEach(add);
+    for(const kind of ['zalo','web'])Object.values(doc[kind]||{}).forEach(rec=>add(rec?.staff))
+  }
   add(storageGet(REPORT_STAFF_KEY));
-  return [...names].sort((a,b)=>a.localeCompare(b,'vi'))
+  return [...names.values()].sort((a,b)=>a.localeCompare(b,'vi'))
 }
 function fillReportStaffSelect(names){
   const el=$('reportStaff');if(!el)return;
-  const wanted=el.dataset.ready?el.value:storageGet(REPORT_STAFF_KEY);
-  if(wanted&&!names.includes(wanted))names=[...names,wanted];
+  const wanted=canonicalStaff(el.dataset.ready?el.value:storageGet(REPORT_STAFF_KEY));
+  if(wanted&&!names.some(n=>staffKey(n)===staffKey(wanted)))names=[...names,wanted];
   const sig=names.join('\u0001');
   if(el.dataset.sig!==sig){
     el.innerHTML='<option value="">— Chọn tên —</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     el.dataset.sig=sig
   }
-  el.value=wanted||'';
+  el.value=names.find(n=>staffKey(n)===staffKey(wanted))||'';
   el.dataset.ready='1'
 }
-function reportTeamNames(rows){
-  const names=new Set((rows||[]).map(o=>o.salesStaff||'Chưa gán'));
-  Object.keys((saleDocMonth===reportMonth()&&saleDoc?.entries)||{}).forEach(n=>names.add(n));
-  return [...names]
+function reportTeam(adsRows,r=reportRange()){
+  const names=new Map(),add=n=>{n=canonicalStaff(n)||'Chưa gán';if(!names.has(staffKey(n)))names.set(staffKey(n),n)};
+  (adsRows||[]).forEach(o=>add(o.salesStaff||'Chưa gán'));
+  Object.keys(docForMonth(r.month)?.entries||{}).forEach(add);
+  return [...names.values()].map(n=>buildStaffReport(n,adsRows,r))
+    .sort((a,b)=>b.total.revenue-a.total.revenue||b.total.data-a.total.data||a.staff.localeCompare(b.staff,'vi'))
 }
-function reportTeam(rows,r=reportRange()){
-  return reportTeamNames(rows).map(n=>buildStaffReport(n,rows,r)).sort((a,b)=>b.total.revenue-a.total.revenue||b.total.data-a.total.data||a.staff.localeCompare(b.staff,'vi'))
-}
+
+// ----- rendering -----
 function setReportNote(messages){
   const el=$('reportNote');if(!el)return;
   const level=messages.some(m=>m.level==='bad')?'bad':messages.some(m=>m.level==='warn')?'warn':'';
@@ -1650,91 +1747,112 @@ function renderReportSaveState(){
   const el=$('reportSaveState');if(!el)return;
   const saving=[...reportRowState.values()].some(v=>v==='saving');
   el.textContent=meta.source!=='PANCAKE'?'Chưa mở LIVE'
-    :saving?'Đang lưu Data…'
+    :saving?'Đang lưu…'
     :reportLastSavedAt?'✓ Đã lưu lúc '+clockTime(reportLastSavedAt)
-    :saleDocLoadingMonth&&!saleDocAt?'Đang tải Data…'
-    :saleDocAt?'Data lưu chung · cập nhật '+clockTime(saleDocAt)
+    :saleDocLoadingMonth&&!saleDocAt?'Đang tải số đã nhập…'
+    :saleDocAt?'Lưu chung · cập nhật '+clockTime(saleDocAt)
     :'—'
 }
+function fieldKey(kind,day,field,staff=''){return kind==='ads'?`ads|${staffKey(staff)}|${day}|data`:`${kind}|${day}|${field}`}
+function fmtField(field,v){return v===null||v===undefined||v===''?'':field==='revenue'?numFmt(v):String(v)}
+function savedTitle(at){return at?`Lưu lúc ${new Date(at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}`:''}
+function inputCell(label,{kind,day,field,staff='',value,editable,placeholder='Nhập',title='',cls='',mode='numeric'}){
+  const state=reportRowState.get(fieldKey(kind,day,field,staff))||'';
+  return `<td data-label="${label}" class="reportInputCell"><input class="reportInput ${cls} ${state}" data-kind="${kind}" data-day="${day}" data-field="${field}" data-staff="${esc(staff)}" type="text" inputmode="${mode}" autocomplete="off" enterkeyhint="next" value="${esc(fmtField(field,value))}" placeholder="${editable?esc(placeholder):''}" ${editable?'':'disabled'} title="${esc(state==='invalid'?'Chưa lưu được, sửa rồi Enter để lưu lại':title)}" aria-label="${esc(label)} ngày ${fullDate(day)}"></td>`
+}
+function staffCell(label,kind,d,names,editable){
+  const state=reportRowState.get(fieldKey(kind,d.day,'staff'))||'';
+  const opts=['',...names];
+  if(d.staff&&!names.some(n=>staffKey(n)===staffKey(d.staff)))opts.push(d.staff);
+  return `<td data-label="${label}" class="reportInputCell"><select class="reportInput reportStaffPick ${state}" data-kind="${kind}" data-day="${d.day}" data-field="staff" ${editable?'':'disabled'} aria-label="${label} ngày ${fullDate(d.day)}">${opts.map(n=>`<option value="${esc(n)}"${staffKey(n)===staffKey(d.staff)?' selected':''}>${n?esc(n):(editable?'— chọn —':'')}</option>`).join('')}</select></td>`
+}
+function dateCells(d){
+  const f=fullDate(d.day);
+  return `<td data-label="Ngày"><span>${f.slice(0,5)}</span><span class="rYear">${f.slice(5)}</span><small class="rWeek">${d.weekday}</small></td><td data-label="Thứ" class="rWeekCol">${d.weekday}</td>`
+}
+function moneyCell(label,v){return `<td data-label="${label}">${v==null?'':`<span class="rFull">${money(v)}</span><span class="rShort">${v?compact(v):'0'}</span>`}</td>`}
+function rowClass(d){return `${d.isToday?'todayRow':''}${d.past?'':' futureRow'}`}
+function drillLink(kind,d,v){return v?`<button type="button" class="linkBtn" data-report-drill="${d.day}" data-drill-kind="${kind}">${numFmt(v)}</button>`:'0'}
+// Rebuild the table, keeping the cell being typed in (focus, text, caret).
+function replaceReportTable(kind,head,body,foot){
+  const tbody=$('reportRows'),active=document.activeElement;
+  const focus=active&&active.tagName==='INPUT'&&active.classList.contains('reportInput')&&tbody.contains(active)
+    ?{sel:`input.reportInput[data-kind="${active.dataset.kind}"][data-day="${active.dataset.day}"][data-field="${active.dataset.field}"]`,staff:active.dataset.staff||'',value:active.value,start:active.selectionStart,end:active.selectionEnd}:null;
+  $('reportTable').className='reportTable kind-'+kind;
+  $('reportHead').innerHTML=head;
+  reportRendering=true;
+  try{tbody.innerHTML=body}finally{reportRendering=false}
+  $('reportFoot').innerHTML=foot;
+  if(focus){
+    const inp=tbody.querySelector(focus.sel);
+    if(inp&&!inp.disabled&&(inp.dataset.staff||'')===focus.staff){inp.value=focus.value;inp.focus({preventScroll:true});try{inp.setSelectionRange(focus.start,focus.end)}catch{}}
+  }
+}
+function th(cols){return '<tr>'+cols.map(c=>typeof c==='string'?`<th>${c}</th>`:`<th class="${c.cls}">${c.t}</th>`).join('')+'</tr>'}
 function renderReport(){
   if(currentView!=='report')return;
-  const tbody=$('reportRows');if(!tbody)return;
-  const r=reportRange(),locked=meta.source!=='PANCAKE';
+  if(!$('reportRows'))return;
+  const r=reportRange(),locked=meta.source!=='PANCAKE',kind=reportKind;
   $('reportMonth').max=vnDate().slice(0,7);
-  const rows=locked?null:reportAdsRows(r);
-  rememberStaffNames(rows);
-  fillReportStaffSelect(reportStaffNames(rows));
-  const staff=$('reportStaff').value;
+  document.querySelectorAll('[data-report-kind]').forEach(b=>b.classList.toggle('active',b.dataset.reportKind===kind));
+  $('reportStaffLabel').textContent=kind==='ads'?'Tên Sale':'Tên của bạn';
+  const adsRows=locked?null:channelRows(ADS_CHANNEL,r);
+  const names=reportStaffNames(adsRows);
+  fillReportStaffSelect(names);
   renderReportSaveState();
-
+  const ordersPending=!locked&&!r.future&&reportBaseOrders(r)===null;
   const notes=[];
-  if(locked)notes.push({level:'warn',html:'Bấm 🔒 và nhập mật khẩu dashboard để xem số đơn và nhập Data.'});
+  if(locked)notes.push({level:'warn',html:'Bấm 🔒 và nhập mật khẩu dashboard để xem số đơn và nhập báo cáo.'});
   else{
-    if(rows===null)notes.push({level:'',html:reportOrdersError?`⚠ Không tải được đơn Pancake tháng ${monthLabel(r.month)}: <b>${esc(reportOrdersError)}</b>. Bấm ↻ để thử lại.`:`Đang lấy đơn Pancake tháng ${monthLabel(r.month)}…`});
-    if(saleDocError&&saleDocMonth!==r.month)notes.push({level:'bad',html:`⚠ Chưa đọc được Data đã lưu: <b>${esc(saleDocError)}</b>. Chưa nên xuất báo cáo lúc này.`});
-    else if(saleDocError)notes.push({level:'warn',html:`⚠ Không cập nhật được Data mới nhất: ${esc(saleDocError)}. Đang hiển thị bản đọc lúc ${clockTime(saleDocAt)}.`});
-    if(!staff)notes.push({level:'warn',html:'Chọn tên của bạn ở ô <b>Tên Sale</b> để nhập Data Ads.'});
+    if(ordersPending&&kind!=='web')notes.push({level:'',html:reportOrdersError?`⚠ Không tải được đơn Pancake tháng ${monthLabel(r.month)}: <b>${esc(reportOrdersError)}</b>. Bấm ↻ để thử lại.`:`Đang lấy đơn Pancake tháng ${monthLabel(r.month)}…`});
+    if(saleDocError&&saleDocMonth!==r.month)notes.push({level:'bad',html:`⚠ Chưa đọc được số đã nhập: <b>${esc(saleDocError)}</b>. Chưa nên xuất báo cáo lúc này.`});
+    else if(saleDocError)notes.push({level:'warn',html:`⚠ Không cập nhật được số mới nhất: ${esc(saleDocError)}. Đang hiển thị bản đọc lúc ${clockTime(saleDocAt)}.`});
   }
-
-  const rep=staff?buildStaffReport(staff,rows,r):null;
-  const today=vnDate();
-  if(rep&&!locked&&r.to===today&&saleDocMonth===r.month&&!saleDocLoadingMonth){
-    const t=rep.days.find(d=>d.isToday);
-    if(t&&t.data==null)notes.push({level:'warn',html:`Hôm nay (${fullDate(today)}) <b>${esc(staff)}</b> chưa nhập Data Ads.`});
-  }
+  const ctx={r,locked,names,notes,ordersPending,me:$('reportStaff').value,docReady:saleDocMonth===r.month&&!saleDocLoadingMonth,today:vnDate()};
+  if(kind==='ads')renderAdsReport(ctx,adsRows);
+  else if(kind==='zalo')renderZaloReport(ctx,locked?null:channelRows(ZALO_CHANNEL,r));
+  else renderWebReport(ctx);
+  setReportNote(notes)
+}
+function renderAdsReport(ctx,rows){
+  const {r,locked,notes,me,today}=ctx,loading=ctx.ordersPending;
+  if(!locked&&!me)notes.push({level:'warn',html:'Chọn tên của bạn ở ô <b>Tên Sale</b> để nhập Data Ads.'});
+  const rep=me?buildStaffReport(me,rows,r):null,t=rep?.total;
+  if(rep&&!locked&&r.to===today&&ctx.docReady&&rep.days.find(d=>d.isToday)?.data==null)notes.push({level:'warn',html:`Hôm nay (${fullDate(today)}) <b>${esc(me)}</b> chưa nhập Data Ads.`});
   if(rep&&rep.missingItems)notes.push({level:'',html:`${numFmt(rep.missingItems)} đơn chưa có chi tiết sản phẩm từ Pancake nên cột SP có thể thiếu.`});
-  setReportNote(notes);
-
-  const loadingCells=rows===null&&!locked;
-  const t=rep?.total;
   $('reportKpis').innerHTML=[
     mini('Data Ads',t?numFmt(t.data):'—'),
-    mini('Đơn',loadingCells?'…':t?numFmt(t.orders):'—'),
-    mini('Doanh số',loadingCells?'…':t?money(t.revenue):'—'),
-    mini('SP',loadingCells?'…':t?numFmt(t.qty):'—'),
-    mini('CR',loadingCells?'…':t&&t.cr!=null?pct(t.cr):'—',t&&t.cr!=null&&t.cr<.1?'bad':'')
+    mini('Đơn',loading?'…':t?numFmt(t.orders):'—'),
+    mini('Doanh số',loading?'…':t?money(t.revenue):'—'),
+    mini('SP',loading?'…':t?numFmt(t.qty):'—'),
+    mini('CR',loading?'…':t&&t.cr!=null?pct(t.cr):'—',t&&t.cr!=null&&t.cr<.1?'bad':'')
   ].join('');
-  $('reportTitle').textContent=staff?`Nhập liệu kênh Ads — ${staff}`:'Nhập liệu kênh Ads';
+  $('reportTitle').textContent=me?`Nhập liệu kênh Ads — ${me}`:'Nhập liệu kênh Ads';
+  $('reportSub').textContent='Ô vàng = Sale nhập Data · Enter để lưu · có thể gõ 107+50 · Đơn, Doanh số, SP lấy từ Pancake kênh Ads · CR = Đơn / Data Ads (CR tháng chỉ tính những ngày đã nhập Data)';
   $('reportRangeChip').textContent=locked?'Chưa mở LIVE':r.future?monthLabel(r.month):`${fullDate(r.from)} → ${fullDate(r.to)}${rows?` · ${numFmt(rows.length)} đơn Ads`:''}`;
-
-  // Keep what the Sale is typing across the 30-second refresh re-render.
-  const active=document.activeElement;
-  const focus=active&&active.classList?.contains('reportDataInput')&&tbody.contains(active)
-    ?{day:active.dataset.day,staff:active.dataset.staff,value:active.value,start:active.selectionStart,end:active.selectionEnd}:null;
-
-  const days=rep?rep.days:r.days.map(day=>({day,weekday:weekdayVi(day),past:day<=today,isToday:day===today,data:null,orders:null,revenue:null,qty:null}));
-  reportRendering=true;
-  try{tbody.innerHTML=days.map(d=>{
-    const key=staff+'|'+d.day,state=reportRowState.get(key)||'';
+  const days=rep?rep.days:r.days.map(day=>({day,weekday:weekdayVi(day),past:day<=today,isToday:day===today,data:null}));
+  const cell=(d,v,fmt)=>!d.past||!rep?'':loading?'…':fmt(v);
+  const body=days.map(d=>{
     const cr=d.data?(d.orders||0)/d.data:null;
-    const editable=Boolean(staff)&&d.past&&!locked;
-    const saved=d.savedAt?`Lưu lúc ${new Date(d.savedAt).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}`:'';
-    const cell=(v,fmt)=>!d.past||!rep?'':loadingCells?'…':fmt(v);
-    return `<tr class="${d.isToday?'todayRow':''}${d.past?'':' futureRow'}">
-      <td data-label="Ngày"><span>${fullDate(d.day).slice(0,5)}</span><span class="rYear">${fullDate(d.day).slice(5)}</span><small class="rWeek">${d.weekday}</small></td>
-      <td data-label="Thứ" class="rWeekCol">${d.weekday}</td>
-      <td data-label="Data Ads" class="reportDataCell"><input class="reportDataInput ${state}" data-day="${d.day}" data-staff="${esc(staff)}" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="next" value="${d.data??''}" placeholder="${editable?'Nhập':''}" ${editable?'':'disabled'} title="${esc(state==='invalid'?'Chưa lưu được, sửa rồi Enter để lưu lại':saved)}" aria-label="Data Ads ngày ${fullDate(d.day)}"></td>
-      <td data-label="Đơn">${cell(d.orders,v=>v?`<button type="button" class="linkBtn" data-report-drill="${d.day}">${numFmt(v)}</button>`:'0')}</td>
-      <td data-label="Doanh số">${cell(d.revenue,v=>`<span class="rFull">${money(v)}</span><span class="rShort">${v?compact(v):'0'}</span>`)}</td>
-      <td data-label="SP">${cell(d.qty,numFmt)}</td>
-      <td data-label="CR" class="${cr!=null&&cr<.1&&!loadingCells?'bad':''}">${!d.past||!rep?'':loadingCells?'…':cr==null?'—':pct(cr)}</td>
+    return `<tr class="${rowClass(d)}">${dateCells(d)}
+      ${inputCell('Data Ads',{kind:'ads',day:d.day,field:'data',staff:me,value:d.data,editable:Boolean(me)&&d.past&&!locked,title:savedTitle(d.savedAt),cls:'reportDataInput'})}
+      <td data-label="Đơn">${cell(d,d.orders,v=>drillLink('ads',d,v))}</td>
+      ${!d.past||!rep||loading?`<td data-label="Doanh số">${d.past&&rep&&loading?'…':''}</td>`:moneyCell('Doanh số',d.revenue)}
+      <td data-label="SP">${cell(d,d.qty,numFmt)}</td>
+      <td data-label="CR" class="${cr!=null&&cr<.1&&!loading?'bad':''}">${!d.past||!rep?'':loading?'…':cr==null?'—':pct(cr)}</td>
     </tr>`
-  }).join('')}finally{reportRendering=false}
-  $('reportFoot').innerHTML=rep?`<tr>
-      <td data-label="Ngày">TỔNG<span class="rYear"> THÁNG</span></td><td class="rWeekCol"></td>
-      <td data-label="Data Ads">${numFmt(t.data)}</td>
-      <td data-label="Đơn">${loadingCells?'…':numFmt(t.orders)}</td>
-      <td data-label="Doanh số">${loadingCells?'…':`<span class="rFull">${money(t.revenue)}</span><span class="rShort">${compact(t.revenue)}</span>`}</td>
-      <td data-label="SP">${loadingCells?'…':numFmt(t.qty)}</td>
-      <td data-label="CR" class="${t.cr!=null&&t.cr<.1?'bad':''}">${loadingCells?'…':t.cr==null?'—':pct(t.cr)}</td>
-    </tr>`:'';
-  if(focus&&focus.staff===staff){
-    const inp=tbody.querySelector(`.reportDataInput[data-day="${focus.day}"]`);
-    if(inp&&!inp.disabled){inp.value=focus.value;inp.focus({preventScroll:true});try{inp.setSelectionRange(focus.start,focus.end)}catch{}}
-  }
+  }).join('');
+  const foot=rep?`<tr><td data-label="Ngày">TỔNG<span class="rYear"> THÁNG</span></td><td class="rWeekCol"></td>
+      <td data-label="Data Ads">${numFmt(t.data)}</td><td data-label="Đơn">${loading?'…':numFmt(t.orders)}</td>
+      ${loading?'<td>…</td>':moneyCell('Doanh số',t.revenue)}<td data-label="SP">${loading?'…':numFmt(t.qty)}</td>
+      <td data-label="CR" class="${t.cr!=null&&t.cr<.1?'bad':''}">${loading?'…':t.cr==null?'—':pct(t.cr)}</td></tr>`:'';
+  replaceReportTable('ads',th(['Ngày',{t:'Thứ',cls:'rWeekCol'},'Data Ads','Đơn','Doanh số','SP','CR']),body,foot);
 
+  $('reportTeamTitle').textContent='Tổng hợp tháng theo Sale · Ads';
+  $('reportTeamSub').textContent='Kênh Ads · bấm một dòng để mở báo cáo của Sale đó';
+  $('reportTeamHead').innerHTML=th(['Nhân viên','Data Ads','Đơn','Doanh số','SP','CR','AOV','Ngày đã nhập Data']);
   const team=locked||rows===null?[]:reportTeam(rows,r);
-  $('reportTeamRows').innerHTML=team.map(x=>`<tr class="clickable${x.staff===staff?' selected':''}" data-report-staff="${esc(x.staff)}">
+  $('reportTeamRows').innerHTML=team.map(x=>`<tr class="clickable${staffKey(x.staff)===staffKey(me)?' selected':''}" data-report-staff="${esc(x.staff)}">
       <td data-label="Nhân viên">${esc(x.staff)}</td>
       <td data-label="Data Ads">${x.total.data?numFmt(x.total.data):'—'}</td>
       <td data-label="Đơn">${numFmt(x.total.orders)}</td>
@@ -1745,10 +1863,97 @@ function renderReport(){
       <td data-label="Ngày đã nhập Data" class="${x.staff!=='Chưa gán'&&x.total.enteredDays<x.total.elapsedDays?'warnText':''}">${x.staff==='Chưa gán'?'—':`${x.total.enteredDays}/${x.total.elapsedDays}`}</td>
     </tr>`).join('')||`<tr><td colspan="8">${locked?'Chưa mở dữ liệu LIVE.':rows===null?'Đang tải…':'Chưa có đơn Ads hoặc Data trong tháng này.'}</td></tr>`;
   if(team.length){
-    const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty)};
-    $('reportTeamFoot').innerHTML=`<tr><td data-label="Nhân viên">TEAM</td><td data-label="Data Ads">${numFmt(tt.data)}</td><td data-label="Đơn">${numFmt(tt.orders)}</td><td data-label="Doanh số">${money(tt.revenue)}</td><td data-label="SP">${numFmt(tt.qty)}</td><td data-label="CR" class="${tt.data&&tt.orders/tt.data<.1?'bad':''}">${tt.data?pct(tt.orders/tt.data):'—'}</td><td data-label="AOV">${tt.orders?compact(tt.revenue/tt.orders):'—'}</td><td></td></tr>`
-  }else $('reportTeamFoot').innerHTML='';
+    const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),crOrders:sum(team,x=>x.total.crOrders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty)};
+    $('reportTeamFoot').innerHTML=`<tr><td data-label="Nhân viên">TEAM</td><td data-label="Data Ads">${numFmt(tt.data)}</td><td data-label="Đơn">${numFmt(tt.orders)}</td><td data-label="Doanh số">${money(tt.revenue)}</td><td data-label="SP">${numFmt(tt.qty)}</td><td data-label="CR" class="${tt.data&&tt.crOrders/tt.data<.1?'bad':''}">${tt.data?pct(tt.crOrders/tt.data):'—'}</td><td data-label="AOV">${tt.orders?compact(tt.revenue/tt.orders):'—'}</td><td></td></tr>`
+  }else $('reportTeamFoot').innerHTML=''
 }
+function renderZaloReport(ctx,rows){
+  const {r,locked,notes,names,today}=ctx,loading=ctx.ordersPending;
+  const rep=buildZaloReport(rows,r),t=rep.total;
+  if(!locked&&r.to===today&&ctx.docReady){
+    const d=rep.days.find(x=>x.isToday);
+    if(d&&(!d.staff||d.interested==null))notes.push({level:'warn',html:`Hôm nay (${fullDate(today)}) Zalo chưa ${!d.staff?'chọn người trực':''}${!d.staff&&d.interested==null?' và chưa ':''}${d.interested==null?'nhập KH quan tâm':''}.`});
+  }
+  if(rep.missingItems)notes.push({level:'',html:`${numFmt(rep.missingItems)} đơn Zalo chưa có chi tiết sản phẩm từ Pancake nên cột SP có thể thiếu.`});
+  $('reportKpis').innerHTML=[
+    mini('Bài đăng',numFmt(t.posts)),mini('KH quan tâm',numFmt(t.interested)),
+    mini('Đơn',loading?'…':numFmt(t.orders)),mini('CR Zalo',loading?'…':t.cr==null?'—':pct(t.cr)),
+    mini('Doanh số',loading?'…':money(t.revenue))
+  ].join('');
+  $('reportTitle').textContent='Zalo — chi tiết theo ngày';
+  $('reportSub').textContent='Người trực chọn tên mình, nhập Bài đăng và KH quan tâm · Đơn, Doanh số, SP lấy từ Pancake kênh Zalo · CR Zalo = Đơn / KH quan tâm (CR tháng chỉ tính những ngày đã nhập KH quan tâm) · AOV = Doanh số / SP';
+  $('reportRangeChip').textContent=locked?'Chưa mở LIVE':r.future?monthLabel(r.month):`${fullDate(r.from)} → ${fullDate(r.to)}${rows?` · ${numFmt(rows.length)} đơn Zalo`:''}`;
+  const body=rep.days.map(d=>{
+    const editable=d.past&&!locked,show=d.past&&!locked;
+    const auto=(v,fmt)=>!show?'':loading?'…':fmt(v);
+    return `<tr class="${rowClass(d)}">${dateCells(d)}
+      ${staffCell('Nhân viên','zalo',d,names,editable)}
+      ${inputCell('Bài đăng',{kind:'zalo',day:d.day,field:'posts',value:d.posts,editable,title:savedTitle(d.savedAt),cls:'reportSmallInput'})}
+      ${inputCell('KH quan tâm',{kind:'zalo',day:d.day,field:'interested',value:d.interested,editable,title:savedTitle(d.savedAt),cls:'reportSmallInput'})}
+      <td data-label="Đơn">${auto(d.orders,v=>drillLink('zalo',d,v))}</td>
+      <td data-label="CR Zalo">${!show?'':loading?'…':d.cr==null?'—':pct(d.cr)}</td>
+      ${!show||loading?`<td data-label="Doanh số">${show?'…':''}</td>`:moneyCell('Doanh số',d.revenue)}
+      <td data-label="SP">${auto(d.qty,numFmt)}</td>
+      <td data-label="AOV">${!show?'':loading?'…':d.aov==null?'—':money(d.aov)}</td>
+    </tr>`
+  }).join('');
+  const foot=locked?'':`<tr><td data-label="Ngày">TỔNG<span class="rYear"> THÁNG</span></td><td class="rWeekCol"></td><td data-label="Nhân viên">${t.filledDays}/${t.elapsedDays} ngày</td>
+      <td data-label="Bài đăng">${numFmt(t.posts)}</td><td data-label="KH quan tâm">${numFmt(t.interested)}</td><td data-label="Đơn">${loading?'…':numFmt(t.orders)}</td>
+      <td data-label="CR Zalo">${loading?'…':t.cr==null?'—':pct(t.cr)}</td>${loading?'<td>…</td>':moneyCell('Doanh số',t.revenue)}
+      <td data-label="SP">${loading?'…':numFmt(t.qty)}</td><td data-label="AOV">${loading?'…':t.aov==null?'—':money(t.aov)}</td></tr>`;
+  replaceReportTable('zalo',th(['Ngày',{t:'Thứ',cls:'rWeekCol'},'Nhân viên','Bài đăng','KH quan tâm','Đơn','CR Zalo','Doanh số','SP','AOV']),body,foot);
+  renderDutyTeam(rep,locked||loading)
+}
+function renderWebReport(ctx){
+  const {r,locked,notes,names,today}=ctx;
+  const rep=buildWebReport(r),t=rep.total;
+  if(!locked&&r.to===today&&ctx.docReady){
+    const d=rep.days.find(x=>x.isToday);
+    if(d&&!d.staff)notes.push({level:'warn',html:`Hôm nay (${fullDate(today)}) Website chưa chọn người trực.`});
+  }
+  notes.push({level:'',html:'Pancake chưa gắn nguồn Website cho đơn web, nên Đơn, Doanh số và SP của Website do người trực tự nhập.'});
+  $('reportKpis').innerHTML=[
+    mini('Đơn Web',numFmt(t.orders)),mini('Doanh số Web',money(t.revenue)),mini('SP',numFmt(t.qty)),
+    mini('AOV',t.aov==null?'—':money(t.aov)),mini('UPT',t.upt==null?'—':t.upt.toFixed(2).replace('.',','))
+  ].join('');
+  $('reportTitle').textContent='Website — chi tiết theo ngày';
+  $('reportSub').textContent='Người trực chọn tên mình, nhập Đơn Web, Doanh số Web, SP, Ghi chú · AOV = Doanh số / SP · UPT = SP / Đơn';
+  $('reportRangeChip').textContent=locked?'Chưa mở LIVE':r.future?monthLabel(r.month):`${fullDate(r.from)} → ${fullDate(r.to)}`;
+  const body=rep.days.map(d=>{
+    const editable=d.past&&!locked,title=savedTitle(d.savedAt);
+    return `<tr class="${rowClass(d)}">${dateCells(d)}
+      ${staffCell('NV trực','web',d,names,editable)}
+      ${inputCell('Đơn Web',{kind:'web',day:d.day,field:'orders',value:d.orders,editable,title,cls:'reportSmallInput'})}
+      ${inputCell('Doanh số Web',{kind:'web',day:d.day,field:'revenue',value:d.revenue,editable,title,cls:'reportMoneyInput'})}
+      ${inputCell('SP',{kind:'web',day:d.day,field:'qty',value:d.qty,editable,title,cls:'reportSmallInput'})}
+      <td data-label="AOV">${d.aov==null?(d.past?'—':''):money(d.aov)}</td>
+      <td data-label="UPT">${d.upt==null?(d.past?'—':''):d.upt.toFixed(2).replace('.',',')}</td>
+      ${inputCell('Ghi chú',{kind:'web',day:d.day,field:'note',value:d.note,editable,title,cls:'reportNoteInput',placeholder:'',mode:'text'})}
+    </tr>`
+  }).join('');
+  const foot=locked?'':`<tr><td data-label="Ngày">TỔNG<span class="rYear"> THÁNG</span></td><td class="rWeekCol"></td><td data-label="NV trực">${t.filledDays}/${t.elapsedDays} ngày</td>
+      <td data-label="Đơn Web">${numFmt(t.orders)}</td>${moneyCell('Doanh số Web',t.revenue)}<td data-label="SP">${numFmt(t.qty)}</td>
+      <td data-label="AOV">${t.aov==null?'—':money(t.aov)}</td><td data-label="UPT">${t.upt==null?'—':t.upt.toFixed(2).replace('.',',')}</td><td></td></tr>`;
+  replaceReportTable('web',th(['Ngày',{t:'Thứ',cls:'rWeekCol'},'NV trực','Đơn Web','Doanh số Web','SP','AOV','UPT','Ghi chú']),body,foot);
+  renderDutyTeam(rep,locked)
+}
+function renderDutyTeam(rep,hideAuto){
+  const zalo=rep.kind==='zalo',list=dutySummary(rep);
+  $('reportTeamTitle').textContent=zalo?'Tổng hợp Zalo theo người trực':'Tổng hợp Website theo người trực';
+  $('reportTeamSub').textContent=zalo?'Gom các ngày theo tên người trực đã chọn':'Gom các ngày theo tên NV trực đã chọn';
+  $('reportTeamHead').innerHTML=th(zalo?['Nhân viên','Ngày trực','Bài đăng','KH quan tâm','Đơn','CR Zalo','Doanh số','SP','AOV']:['Nhân viên','Ngày trực','Đơn Web','Doanh số Web','SP','AOV','UPT']);
+  const a=(v,fmt)=>hideAuto?'…':fmt(v);
+  const row=(x,total)=>zalo
+    ?`<td data-label="Nhân viên">${esc(x.staff)}</td><td data-label="Ngày trực">${numFmt(x.days)}</td><td data-label="Bài đăng">${numFmt(x.posts)}</td><td data-label="KH quan tâm">${numFmt(x.interested)}</td><td data-label="Đơn">${a(x.orders,numFmt)}</td><td data-label="CR Zalo">${a(x,v=>v.interested?pct(v.crOrders/v.interested):'—')}</td><td data-label="Doanh số">${a(x.revenue,money)}</td><td data-label="SP">${a(x.qty,numFmt)}</td><td data-label="AOV">${a(x,v=>v.qty?money(v.revenue/v.qty):'—')}</td>`
+    :`<td data-label="Nhân viên">${esc(x.staff)}</td><td data-label="Ngày trực">${numFmt(x.days)}</td><td data-label="Đơn Web">${numFmt(x.orders)}</td><td data-label="Doanh số Web">${money(x.revenue)}</td><td data-label="SP">${numFmt(x.qty)}</td><td data-label="AOV">${x.qty?money(x.revenue/x.qty):'—'}</td><td data-label="UPT">${x.orders?(x.qty/x.orders).toFixed(2).replace('.',','):'—'}</td>`;
+  $('reportTeamRows').innerHTML=list.map(x=>`<tr${x.staff==='Chưa chọn NV'?' class="warnText"':''}>${row(x)}</tr>`).join('')||`<tr><td colspan="${zalo?9:7}">Chưa có ngày nào được nhập trong tháng này.</td></tr>`;
+  if(list.length){
+    const tt={staff:'TEAM',days:sum(list,x=>x.days),posts:sum(list,x=>x.posts),interested:sum(list,x=>x.interested),orders:sum(list,x=>x.orders),crOrders:sum(list,x=>x.crOrders),revenue:sum(list,x=>x.revenue),qty:sum(list,x=>x.qty)};
+    $('reportTeamFoot').innerHTML=`<tr>${row(tt)}</tr>`
+  }else $('reportTeamFoot').innerHTML=''
+}
+
+// ----- loading -----
 async function loadReportOrders(force=false){
   const r=reportRange(),key=r.from+'|'+r.to;
   if(r.future||meta.source!=='PANCAKE'||(!force&&reportCoveredByMain(r))||reportOrdersLoadingKey===key)return;
@@ -1769,6 +1974,10 @@ async function loadReportOrders(force=false){
     if(id===reportOrdersReqId){reportOrdersLoadingKey='';renderReport()}
   }
 }
+function applySaleDoc(doc,month){
+  saleDoc={...doc,entries:doc.entries||{},zalo:doc.zalo||{},web:doc.web||{}};
+  saleDocMonth=month;saleDocAt=Date.now();saleDocError=''
+}
 async function loadSaleDoc({fresh=false}={}){
   const month=reportMonth(),pwd=sessionGet('sevenam_dashboard_password');
   if(meta.source!=='PANCAKE'||!pwd||saleDocLoadingMonth===month)return;
@@ -1778,19 +1987,22 @@ async function loadSaleDoc({fresh=false}={}){
   try{
     const doc=await callPancakeBackend(pwd,'saleReport',20000,{month,fresh});
     if(id!==saleDocReqId)return;
-    if(!doc||doc.month!==month||typeof doc.entries!=='object')throw new Error('Dữ liệu Data không hợp lệ');
-    // A save still on its way would be undone by this older read: keep the
-    // numbers typed locally until the backend confirms them.
-    saleDoc=doc;saleDocMonth=month;saleDocAt=Date.now();saleDocError='';
-    for(const [k,p] of reportPendingValues){const [s,d]=k.split('|');if(d.startsWith(month))setLocalSaleValue(s,d,p.value)}
+    if(!doc||doc.month!==month||typeof doc.entries!=='object')throw new Error('Dữ liệu đã nhập không hợp lệ');
+    applySaleDoc(doc,month);
+    // A save still on its way would be undone by this older read: keep what
+    // was typed locally until the backend confirms it.
+    for(const p of reportPending.values())if(p.month===month)p.apply()
   }catch(e){
     if(id!==saleDocReqId)return;
-    saleDocError=e?.message||'Không đọc được Data đã lưu';
+    saleDocError=e?.message||'Không đọc được số đã nhập';
     console.warn('Sale report data load failed:',e)
   }finally{
     if(id===saleDocReqId){saleDocLoadingMonth='';renderReport()}
   }
 }
+// Numbers typed by others are re-read when the report opens, the month
+// changes, ↻ is pressed, or at most every few minutes while it stays open
+// (each read is one Blob operation, so no tight polling).
 function ensureReportData({force=false}={}){
   if(meta.source!=='PANCAKE'||currentView!=='report')return;
   const r=reportRange(),key=r.from+'|'+r.to,now=Date.now();
@@ -1800,75 +2012,96 @@ function ensureReportData({force=false}={}){
   }
   if(force||saleDocMonth!==r.month||now-saleDocAt>REPORT_DATA_REFRESH_MS)loadSaleDoc({fresh:force})
 }
-// "274", "107+50" (as typed in the old sheet) or empty to clear the day.
-function parseDataInput(raw){
-  const s=String(raw??'').replace(/\s+/g,'');
+
+// ----- saving -----
+// "274", "1.398.000", "107+50" (as typed in the old sheet) or empty to clear.
+function parseNumberInput(raw,max){
+  const s=String(raw??'').replace(/[\s.,]/g,'').replace(/[đ₫]$/i,'');
   if(!s)return null;
   if(!/^\d+(\+\d+)*$/.test(s))return NaN;
   const n=s.split('+').reduce((a,x)=>a+Number(x),0);
-  return Number.isSafeInteger(n)&&n<=1000000?n:NaN
+  return Number.isSafeInteger(n)&&n<=max?n:NaN
 }
-function queueReportSave(staff,day,raw,input){
-  if(!staff||!day)return;
-  const value=parseDataInput(raw);
-  if(Number.isNaN(value)){
-    input?.classList.add('invalid');
-    showError('Data chỉ gồm số, ví dụ 274 hoặc 107+50.');
-    return
-  }
-  const key=staff+'|'+day,prev=saleValue(staff,day);
-  if(input)input.value=value??'';
-  if(value===prev&&reportRowState.get(key)!=='invalid'){input?.classList.remove('invalid');return}
+function queueSave(key,payload,apply,revert,label){
   const pwd=sessionGet('sevenam_dashboard_password');
-  if(!pwd){showError('Cần mở dữ liệu LIVE (🔒) trước khi nhập Data.');return}
-  const token=++reportSaveSeq;
-  reportPendingValues.set(key,{value,token});
-  setLocalSaleValue(staff,day,value);
+  if(!pwd){showError('Cần mở dữ liệu LIVE (🔒) trước khi nhập.');renderReport();return}
+  const token=++reportSaveSeq,month=payload.date.slice(0,7);
+  reportPending.set(key,{token,apply,month});
+  apply();
   reportRowState.set(key,'saving');
   renderReport();
   // Saves go out one at a time, so a slower earlier reply can never replace
   // a newer number in the table.
   reportSaveChain=reportSaveChain.then(async()=>{
     try{
-      const doc=await callPancakeBackend(pwd,'saleReportSave',20000,{staff,date:day,value});
-      if(doc&&doc.month===day.slice(0,7)&&typeof doc.entries==='object'){
-        saleDoc=doc;saleDocMonth=doc.month;saleDocAt=Date.now();saleDocError='';
-        for(const [k,p] of reportPendingValues){if(p.token>token){const [s,d]=k.split('|');setLocalSaleValue(s,d,p.value)}}
+      const doc=await callPancakeBackend(pwd,'saleReportSave',20000,payload);
+      if(doc&&doc.month===month&&month===reportMonth()&&typeof doc.entries==='object'){
+        applySaleDoc(doc,month);
+        for(const p of reportPending.values())if(p.token>token&&p.month===month)p.apply()
       }
-      if(reportPendingValues.get(key)?.token===token){reportPendingValues.delete(key);reportRowState.delete(key)}
+      if(reportPending.get(key)?.token===token){reportPending.delete(key);reportRowState.delete(key)}
       reportLastSavedAt=Date.now()
     }catch(e){
-      if(reportPendingValues.get(key)?.token===token){
-        reportPendingValues.delete(key);
-        setLocalSaleValue(staff,day,prev);
-        reportRowState.set(key,'invalid')
-      }
-      showError(`Chưa lưu được Data ngày ${fullDate(day)}: ${e?.message||'lỗi kết nối'}. Gõ lại rồi Enter để lưu.`)
+      if(reportPending.get(key)?.token===token){reportPending.delete(key);revert();reportRowState.set(key,'invalid')}
+      showError(`Chưa lưu được ${label}: ${e?.message||'lỗi kết nối'}. Sửa lại rồi Enter để lưu.`)
     }finally{renderReport()}
   })
 }
-function reportDayRows(staff,day){
-  const r=reportRange(),rows=reportAdsRows(r)||[];
-  return rows.filter(o=>(o.salesStaff||'Chưa gán')===staff&&orderDate(o)===day)
+function queueAdsSave(staff,day,raw,el){
+  if(!staff||!day)return;
+  const value=parseNumberInput(raw,1000000);
+  if(Number.isNaN(value)){el?.classList.add('invalid');showError('Data chỉ gồm số, ví dụ 274 hoặc 107+50.');return}
+  const key=fieldKey('ads',day,'data',staff),prev=adsValue(staff,day);
+  if(el)el.value=value??'';
+  if(value===prev&&reportRowState.get(key)!=='invalid'){el?.classList.remove('invalid');return}
+  queueSave(key,{kind:'ads',staff,date:day,value},()=>setLocalAdsValue(staff,day,value),()=>setLocalAdsValue(staff,day,prev),`Data ngày ${fullDate(day)}`)
 }
-// Clicking an export button blurs the Data cell being edited, which queues
-// its save first; wait for every queued save so the file has that number.
-async function exportGuard(needStaff){
+function queueRowSave(kind,day,field,raw,el){
+  const spec=ROW_FIELDS[kind]?.[field];if(!spec||!day)return;
+  let value;
+  if(spec.type==='staff')value=canonicalStaff(raw)||null;
+  else if(spec.type==='text')value=String(raw??'').replace(/\s+/g,' ').trim().slice(0,200)||null;
+  else{
+    value=parseNumberInput(raw,spec.max);
+    if(Number.isNaN(value)){el?.classList.add('invalid');showError(`${spec.label} chỉ gồm số.`);return}
+  }
+  if(el&&el.tagName==='INPUT')el.value=fmtField(field,value);
+  const cur=dayRecord(kind,day),prevRow=cur?rowFields(kind,cur):null,key=fieldKey(kind,day,field);
+  if(value===(prevRow?.[field]??null)&&reportRowState.get(key)!=='invalid'){el?.classList.remove('invalid');return}
+  const next={...rowFields(kind,cur),[field]:value};
+  // Typing a number on an unassigned day fills in the name picked at the top.
+  if(field!=='staff'&&!next.staff&&value!==null){const me=$('reportStaff').value;if(me)next.staff=me}
+  queueSave(key,{kind,date:day,row:next},()=>setLocalDayRecord(kind,day,next),()=>setLocalDayRecord(kind,day,prevRow),`${REPORT_KIND_LABEL[kind]} ngày ${fullDate(day)}`)
+}
+function commitReportInput(el){
+  const {kind,day,field}=el.dataset;
+  if(kind==='ads')queueAdsSave(el.dataset.staff,day,el.value,el);
+  else queueRowSave(kind,day,field,el.value,el)
+}
+function shownValue(el){
+  const {kind,day,field}=el.dataset;
+  if(kind==='ads')return adsValue(el.dataset.staff,day)??'';
+  return fmtField(field,dayRecord(kind,day)?.[field])
+}
+
+// ----- export -----
+// Clicking an export button blurs the cell being edited, which queues its
+// save first; wait for every queued save so the file has that number.
+async function exportGuard({needStaff=false,needOrders=true}={}){
   if([...reportRowState.values()].includes('saving'))await reportSaveChain;
   const r=reportRange();
   if(meta.source!=='PANCAKE'){showError('Bấm 🔒 mở dữ liệu LIVE trước khi xuất báo cáo.');return null}
-  const rows=reportAdsRows(r);
-  if(rows===null){showError(reportOrdersError?'Chưa tải được đơn Pancake, bấm ↻ rồi thử lại.':'Đang tải đơn Pancake, thử lại sau vài giây.');return null}
-  if(saleDocMonth!==r.month){showError(saleDocError?'Chưa đọc được Data đã lưu, bấm ↻ rồi thử lại.':'Đang tải Data đã lưu, thử lại sau vài giây.');return null}
-  if([...reportRowState.values()].includes('invalid')){showError('Có ô Data chưa lưu được (viền đỏ). Sửa rồi Enter để lưu trước khi xuất.');return null}
+  if(needOrders&&reportBaseOrders(r)===null){showError(reportOrdersError?'Chưa tải được đơn Pancake, bấm ↻ rồi thử lại.':'Đang tải đơn Pancake, thử lại sau vài giây.');return null}
+  if(saleDocMonth!==r.month){showError(saleDocError?'Chưa đọc được số đã nhập, bấm ↻ rồi thử lại.':'Đang tải số đã nhập, thử lại sau vài giây.');return null}
+  if([...reportRowState.values()].includes('invalid')){showError('Có ô chưa lưu được (viền đỏ). Sửa rồi Enter để lưu trước khi xuất.');return null}
   const staff=$('reportStaff').value;
   if(needStaff&&!staff){showError('Chọn tên Sale trước khi xuất báo cáo.');$('reportStaff').focus();return null}
-  return {r,rows,staff}
+  return {r,staff}
 }
 
 // ---------- Excel export (.xlsx written in the browser, no library) ----------
 const XLSX_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const XS={title:1,sub:2,head:3,date:4,text:5,input:6,int:7,pct:8,totLabel:9,totInt:10,totPct:11,dec:12,totDec:13};
+const XS={title:1,sub:2,head:3,date:4,text:5,input:6,int:7,pct:8,totLabel:9,totInt:10,totPct:11,dec:12,totDec:13,inputText:14};
 let crcTable=null;
 function crc32(bytes){
   if(!crcTable){crcTable=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;crcTable[n]=c>>>0}}
@@ -1919,10 +2152,12 @@ function sheetXml(sheet){
   const cols=sheet.cols.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
   const freeze=sheet.freezeRow?`<pane ySplit="${sheet.freezeRow}" topLeftCell="A${sheet.freezeRow+1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A${sheet.freezeRow+1}" sqref="A${sheet.freezeRow+1}"/>`:'';
   const merges=sheet.merges?.length?`<mergeCells count="${sheet.merges.length}">${sheet.merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:'';
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0">${freeze}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols><sheetData>${rows}</sheetData>${merges}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${sheet.landscape?'landscape':'portrait'}" fitToWidth="1" fitToHeight="0"/></worksheet>`
+  const lists=(sheet.validations||[]).filter(v=>v.list?.length);
+  const dv=lists.length?`<dataValidations count="${lists.length}">${lists.map(v=>`<dataValidation type="list" allowBlank="1" showErrorMessage="0" sqref="${v.sqref}"><formula1>${xmlEsc('"'+v.list.join(',')+'"')}</formula1></dataValidation>`).join('')}</dataValidations>`:'';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0">${freeze}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols><sheetData>${rows}</sheetData>${merges}${dv}<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${sheet.landscape?'landscape':'portrait'}" fitToWidth="1" fitToHeight="0"/></worksheet>`
 }
 const XLSX_STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="4"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="#,##0"/><numFmt numFmtId="166" formatCode="0.0%"/><numFmt numFmtId="167" formatCode="0.00"/></numFmts><fonts count="5"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="14"/><name val="Calibri"/><family val="2"/></font><font><i/><sz val="9"/><color rgb="FF6B6B6B"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F2A44"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD0D0D0"/></left><right style="thin"><color rgb="FFD0D0D0"/></right><top style="thin"><color rgb="FFD0D0D0"/></top><bottom style="thin"><color rgb="FFD0D0D0"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="14"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="4" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="165" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="165" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="166" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="167" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="4"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="#,##0"/><numFmt numFmtId="166" formatCode="0.0%"/><numFmt numFmtId="167" formatCode="0.00"/></numFmts><fonts count="5"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="14"/><name val="Calibri"/><family val="2"/></font><font><i/><sz val="9"/><color rgb="FF6B6B6B"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font></fonts><fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F2A44"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD0D0D0"/></left><right style="thin"><color rgb="FFD0D0D0"/></right><top style="thin"><color rgb="FFD0D0D0"/></top><bottom style="thin"><color rgb="FFD0D0D0"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="15"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="4" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="165" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="165" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="166" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/><xf numFmtId="167" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 function workbookBlob(sheets){
   const files=[],n=sheets.length,R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   files.push({name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`});
@@ -1965,40 +2200,115 @@ function staffSheet(rep,name){
   rows.push([
     {v:'TỔNG THÁNG',s:XS.totLabel},{v:null,s:XS.totLabel},
     ...[['C',t.data],['D',t.orders],['E',t.revenue],['F',t.qty]].map(([c,v])=>({f:`SUBTOTAL(109,${c}${first}:${c}${last})`,v,s:XS.totInt})),
-    {f:`IFERROR(D${totalRow}/C${totalRow},0)`,v:t.cr||0,s:XS.totPct}
+    {f:`IFERROR(SUMIFS(D${first}:D${last},C${first}:C${last},"<>")/C${totalRow},0)`,v:t.cr||0,s:XS.totPct}
   ]);
   return {name,cols:[12,8,11,8,15,8,9],rows,merges:['A1:G1','A2:G2'],freezeRow:4,heights:{0:22},totalRow}
 }
-function teamSheet(team,month,sheetByStaff){
+// Zalo / Website sheets follow the BC-SOL layout: title, note, headers on row
+// 3, one row per day from row 4, then TỔNG THÁNG.
+const DUTY_FIRST_ROW=4;
+function nameListForExcel(names){
+  const out=[];let len=2;
+  for(const n of names){const v=String(n).replace(/[",]/g,' ').trim();if(!v||len+v.length+1>250)continue;out.push(v);len+=v.length+1}
+  return out
+}
+function zaloSheet(rep,names){
+  const first=DUTY_FIRST_ROW,last=first+rep.days.length-1,tr=last+1,t=rep.total;
   const rows=[
-    [{v:`BÁO CÁO KÊNH ADS THEO SALE — THÁNG ${monthLabel(month)}`,s:XS.title}],
-    [{v:`CR = Đơn / Data Ads  •  Data do Sale nhập trên dashboard, Đơn / Doanh số / SP từ Pancake POS  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
-    [],
-    ['NHÂN VIÊN','DATA ADS','ĐƠN ADS','DS ADS','TỔNG SP','CR ADS','AOV','UPT','NGÀY ĐÃ NHẬP DATA'].map(v=>({v,s:XS.head}))
+    [{v:'ZALO — CHI TIẾT THEO NGÀY',s:XS.title}],
+    [{v:`Ô vàng = nhập tay  •  Đơn / Doanh số / SP lấy từ Pancake POS (kênh Zalo, ngày tạo đơn, không tính đơn huỷ, CSKH, đơn đổi)  •  CR Zalo = Đơn / KH quan tâm  •  AOV = Doanh số / SP  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
+    ['Ngày','Nhân viên','Bài đăng','KH quan tâm','Đơn','CR Zalo','Doanh số','SP','AOV'].map(v=>({v,s:XS.head}))
   ];
-  const first=REPORT_FIRST_ROW;
-  team.forEach((x,i)=>{
-    const r=first+i,sheet=sheetByStaff.get(x.staff),t=x.total;
-    const ref=c=>sheet?{f:`'${sheet.name.replace(/'/g,"''")}'!${c}${sheet.totalRow}`}:{};
+  rep.days.forEach((d,i)=>{
+    const r=first+i;
     rows.push([
-      {v:x.staff,s:XS.text},
-      {...ref('C'),v:t.data,s:XS.int},{...ref('D'),v:t.orders,s:XS.int},{...ref('E'),v:t.revenue,s:XS.int},{...ref('F'),v:t.qty,s:XS.int},
-      {f:`IFERROR(C${r}/B${r},0)`,v:t.data?t.orders/t.data:0,s:XS.pct},
-      {f:`IFERROR(D${r}/C${r},0)`,v:t.orders?t.revenue/t.orders:0,s:XS.int},
-      {f:`IFERROR(E${r}/C${r},0)`,v:t.orders?t.qty/t.orders:0,s:XS.dec},
-      {v:x.staff==='Chưa gán'?'—':`${t.enteredDays}/${t.elapsedDays}`,s:XS.text}
+      {v:excelSerial(d.day),s:XS.date},{v:d.staff||null,s:XS.inputText},{v:d.posts,s:XS.input},{v:d.interested,s:XS.input},
+      {v:d.orders,s:XS.int},{f:`IFERROR(E${r}/D${r},0)`,v:d.interested?(d.orders||0)/d.interested:0,s:XS.pct},
+      {v:d.revenue,s:XS.int},{v:d.qty,s:XS.int},{f:`IFERROR(G${r}/H${r},0)`,v:d.qty?(d.revenue||0)/d.qty:0,s:XS.int}
     ])
   });
-  const last=first+team.length-1,tr=last+1,tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty)};
+  const sub=(c,v)=>({f:`SUBTOTAL(109,${c}${first}:${c}${last})`,v,s:XS.totInt});
   rows.push([
-    {v:'TEAM',s:XS.totLabel},
-    ...[['B',tt.data],['C',tt.orders],['D',tt.revenue],['E',tt.qty]].map(([c,v])=>({f:`SUM(${c}${first}:${c}${last})`,v,s:XS.totInt})),
-    {f:`IFERROR(C${tr}/B${tr},0)`,v:tt.data?tt.orders/tt.data:0,s:XS.totPct},
-    {f:`IFERROR(D${tr}/C${tr},0)`,v:tt.orders?tt.revenue/tt.orders:0,s:XS.totInt},
-    {f:`IFERROR(E${tr}/C${tr},0)`,v:tt.orders?tt.qty/tt.orders:0,s:XS.totDec},
+    {v:'TỔNG THÁNG',s:XS.totLabel},{v:null,s:XS.totLabel},sub('C',t.posts),sub('D',t.interested),sub('E',t.orders),
+    {f:`IFERROR(SUMIFS(E${first}:E${last},D${first}:D${last},"<>")/D${tr},0)`,v:t.cr||0,s:XS.totPct},
+    sub('G',t.revenue),sub('H',t.qty),{f:`IFERROR(G${tr}/H${tr},0)`,v:t.qty?t.revenue/t.qty:0,s:XS.totInt}
+  ]);
+  return {name:'Zalo',cols:[12,16,10,12,8,9,14,8,12],rows,merges:['A1:I1','A2:I2'],freezeRow:3,heights:{0:22},
+    validations:[{sqref:`B${first}:B${last}`,list:nameListForExcel(names)}],first,last,totalRow:tr}
+}
+function webSheet(rep,names){
+  const first=DUTY_FIRST_ROW,last=first+rep.days.length-1,tr=last+1,t=rep.total;
+  const rows=[
+    [{v:'WEBSITE — CHI TIẾT THEO NGÀY',s:XS.title}],
+    [{v:`Ô vàng = nhập tay  •  AOV = Doanh số / SP  •  UPT = SP / Đơn  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
+    ['Ngày','NV trực','Đơn Web','Doanh số Web','SP','AOV','UPT','Ghi chú'].map(v=>({v,s:XS.head}))
+  ];
+  rep.days.forEach((d,i)=>{
+    const r=first+i;
+    rows.push([
+      {v:excelSerial(d.day),s:XS.date},{v:d.staff||null,s:XS.inputText},{v:d.orders,s:XS.input},{v:d.revenue,s:XS.input},{v:d.qty,s:XS.input},
+      {f:`IFERROR(D${r}/E${r},0)`,v:d.qty?(d.revenue||0)/d.qty:0,s:XS.int},
+      {f:`IFERROR(E${r}/C${r},0)`,v:d.orders?(d.qty||0)/d.orders:0,s:XS.dec},
+      {v:d.note||null,s:XS.inputText}
+    ])
+  });
+  const sub=(c,v)=>({f:`SUBTOTAL(109,${c}${first}:${c}${last})`,v,s:XS.totInt});
+  rows.push([
+    {v:'TỔNG THÁNG',s:XS.totLabel},{v:null,s:XS.totLabel},sub('C',t.orders),sub('D',t.revenue),sub('E',t.qty),
+    {f:`IFERROR(D${tr}/E${tr},0)`,v:t.qty?t.revenue/t.qty:0,s:XS.totInt},
+    {f:`IFERROR(E${tr}/C${tr},0)`,v:t.orders?t.qty/t.orders:0,s:XS.totDec},
     {v:null,s:XS.totLabel}
   ]);
-  return {name:'Tổng hợp',cols:[20,11,10,16,10,9,13,8,18],rows,merges:['A1:I1','A2:I2'],freezeRow:4,heights:{0:22,3:30},landscape:true}
+  return {name:'Web',cols:[12,14,10,15,8,12,8,30],rows,merges:['A1:H1','A2:H2'],freezeRow:3,heights:{0:22},
+    validations:[{sqref:`B${first}:B${last}`,list:nameListForExcel(names)}],first,last,totalRow:tr}
+}
+// Tổng hợp = section 02 of the BC-SOL Dashboard: Ads per Sale from each
+// Sale's sheet, DS Zalo / DS Web summed from the Zalo / Web sheets by name.
+function teamSheet(month,team,sheetByStaff,zalo,zs,web,ws){
+  const people=new Map(),add=n=>{if(n&&!people.has(staffKey(n)))people.set(staffKey(n),n)};
+  team.forEach(x=>add(x.staff));
+  zalo.days.forEach(d=>add(d.staff));web.days.forEach(d=>add(d.staff));
+  const adsBy=new Map(team.map(x=>[staffKey(x.staff),x]));
+  const dutySum=(rep,field,name)=>sum(rep.days.filter(d=>name===''?!d.staff:staffKey(d.staff)===staffKey(name)),d=>d[field]);
+  const rows=[
+    [{v:`BÁO CÁO SALE ONLINE THEO NHÂN VIÊN — THÁNG ${monthLabel(month)}`,s:XS.title}],
+    [{v:`Ads: Data do Sale nhập, Đơn / Doanh số / SP từ Pancake POS  •  DS Zalo, DS Web cộng từ sheet Zalo, Web theo tên người trực  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
+    [],
+    ['NHÂN VIÊN','DATA ADS','ĐƠN ADS','DS ADS','TỔNG SP ADS','CR ADS','AOV ADS','UPT ADS','DS ZALO','DS WEB','TỔNG DS','NGÀY ĐÃ NHẬP DATA ADS'].map(v=>({v,s:XS.head}))
+  ];
+  const first=REPORT_FIRST_ROW,zr=`'Zalo'!$B$${zs.first}:$B$${zs.last}`,zg=`'Zalo'!$G$${zs.first}:$G$${zs.last}`,wr=`'Web'!$B$${ws.first}:$B$${ws.last}`,wd=`'Web'!$D$${ws.first}:$D$${ws.last}`;
+  const list=[...people.values()];
+  const unassigned=dutySum(zalo,'revenue','')+dutySum(web,'revenue','');
+  if(unassigned)list.push('');
+  list.forEach((name,i)=>{
+    const r=first+i,x=adsBy.get(staffKey(name)),t=x?.total||{data:0,orders:0,revenue:0,qty:0,enteredDays:0,elapsedDays:0},sheet=x&&sheetByStaff.get(x.staff);
+    const ref=c=>sheet?{f:`'${sheet.name.replace(/'/g,"''")}'!${c}${sheet.totalRow}`}:{};
+    const crit=name===''?'""':`A${r}`;
+    const dz=dutySum(zalo,'revenue',name),dw=dutySum(web,'revenue',name);
+    rows.push([
+      {v:name===''?'Chưa chọn NV (Zalo/Web)':name,s:XS.text},
+      {...ref('C'),v:t.data,s:XS.int},{...ref('D'),v:t.orders,s:XS.int},{...ref('E'),v:t.revenue,s:XS.int},{...ref('F'),v:t.qty,s:XS.int},
+      sheet?{f:`'${sheet.name.replace(/'/g,"''")}'!G${sheet.totalRow}`,v:t.cr||0,s:XS.pct}:{f:`IFERROR(C${r}/B${r},0)`,v:t.data?t.orders/t.data:0,s:XS.pct},
+      {f:`IFERROR(D${r}/C${r},0)`,v:t.orders?t.revenue/t.orders:0,s:XS.int},
+      {f:`IFERROR(E${r}/C${r},0)`,v:t.orders?t.qty/t.orders:0,s:XS.dec},
+      {f:`SUMIF(${zr},${crit},${zg})`,v:dz,s:XS.int},
+      {f:`SUMIF(${wr},${crit},${wd})`,v:dw,s:XS.int},
+      {f:`D${r}+I${r}+J${r}`,v:t.revenue+dz+dw,s:XS.int},
+      {v:!x||x.staff==='Chưa gán'||name===''?'—':`${t.enteredDays}/${t.elapsedDays}`,s:XS.text}
+    ])
+  });
+  const last=first+list.length-1,tr=last+1,col=c=>({f:`SUM(${c}${first}:${c}${last})`,s:XS.totInt});
+  const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),crOrders:sum(team,x=>x.total.crOrders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty),zalo:zalo.total.revenue,web:web.total.revenue};
+  rows.push([
+    {v:'TEAM',s:XS.totLabel},
+    {...col('B'),v:tt.data},{...col('C'),v:tt.orders},{...col('D'),v:tt.revenue},{...col('E'),v:tt.qty},
+    {f:`IFERROR(SUMPRODUCT(F${first}:F${last},B${first}:B${last})/B${tr},0)`,v:tt.data?tt.crOrders/tt.data:0,s:XS.totPct},
+    {f:`IFERROR(D${tr}/C${tr},0)`,v:tt.orders?tt.revenue/tt.orders:0,s:XS.totInt},
+    {f:`IFERROR(E${tr}/C${tr},0)`,v:tt.orders?tt.qty/tt.orders:0,s:XS.totDec},
+    {...col('I'),v:tt.zalo},{...col('J'),v:tt.web},{...col('K'),v:tt.revenue+tt.zalo+tt.web},
+    {v:null,s:XS.totLabel}
+  ]);
+  return {name:'Tổng hợp',cols:[24,11,10,16,11,9,13,8,14,14,16,14],rows,merges:['A1:L1','A2:L2'],freezeRow:4,heights:{0:22,3:30},landscape:true}
 }
 function asciiSlug(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'Sale'}
 function downloadBlob(blob,filename){
@@ -2007,27 +2317,52 @@ function downloadBlob(blob,filename){
   setTimeout(()=>URL.revokeObjectURL(url),5000)
 }
 function monthFileTag(month){return `T${month.slice(5,7)}-${month.slice(0,4)}`}
-async function exportStaffReport(){
-  const g=await exportGuard(true);if(!g)return;
-  const rep=buildStaffReport(g.staff,g.rows,g.r),[name]=sheetNames([g.staff]);
-  downloadBlob(workbookBlob([staffSheet(rep,name)]),`BC-Ads_${asciiSlug(g.staff)}_${monthFileTag(g.r.month)}.xlsx`)
+async function exportCurrentReport(){
+  const kind=reportKind;
+  const g=await exportGuard({needStaff:kind==='ads',needOrders:kind!=='web'});if(!g)return;
+  const r=g.r,adsRows=channelRows(ADS_CHANNEL,r)||[],names=reportStaffNames(adsRows);
+  if(kind==='ads'){
+    const rep=buildStaffReport(g.staff,adsRows,r),[name]=sheetNames([g.staff]);
+    downloadBlob(workbookBlob([staffSheet(rep,name)]),`BC-Ads_${asciiSlug(g.staff)}_${monthFileTag(r.month)}.xlsx`)
+  }else if(kind==='zalo'){
+    downloadBlob(workbookBlob([zaloSheet(buildZaloReport(channelRows(ZALO_CHANNEL,r),r),names)]),`BC-Zalo_${monthFileTag(r.month)}.xlsx`)
+  }else{
+    downloadBlob(workbookBlob([webSheet(buildWebReport(r),names)]),`BC-Website_${monthFileTag(r.month)}.xlsx`)
+  }
 }
 async function exportTeamReport(){
-  const g=await exportGuard(false);if(!g)return;
-  const team=reportTeam(g.rows,g.r);
-  if(!team.length){showError('Tháng này chưa có đơn Ads hoặc Data để xuất.');return}
-  const people=team.filter(x=>x.staff!=='Chưa gán'),names=sheetNames(people.map(x=>x.staff),['Tổng hợp']);
-  const sheets=people.map((x,i)=>staffSheet(x,names[i]));
-  const byStaff=new Map(people.map((x,i)=>[x.staff,sheets[i]]));
-  downloadBlob(workbookBlob([teamSheet(team,g.r.month,byStaff),...sheets]),`BC-Ads_Team_${monthFileTag(g.r.month)}.xlsx`)
+  const g=await exportGuard({needOrders:true});if(!g)return;
+  const r=g.r,adsRows=channelRows(ADS_CHANNEL,r)||[],team=reportTeam(adsRows,r),names=reportStaffNames(adsRows);
+  const zalo=buildZaloReport(channelRows(ZALO_CHANNEL,r),r),web=buildWebReport(r);
+  const people=team.filter(x=>x.staff!=='Chưa gán'&&(x.total.orders||x.total.data));
+  const sheetNamesList=sheetNames(people.map(x=>x.staff),['Tổng hợp','Zalo','Web']);
+  const adsSheets=people.map((x,i)=>staffSheet(x,sheetNamesList[i]));
+  const zs=zaloSheet(zalo,names),ws=webSheet(web,names);
+  const summary=teamSheet(r.month,team,new Map(people.map((x,i)=>[x.staff,adsSheets[i]])),zalo,zs,web,ws);
+  downloadBlob(workbookBlob([summary,...adsSheets,zs,ws]),`BC-Sale-Online_${monthFileTag(r.month)}.xlsx`)
 }
 async function copyReportTable(){
-  const g=await exportGuard(true);if(!g)return;
-  const rep=buildStaffReport(g.staff,g.rows,g.r);
-  const line=a=>a.map(v=>v==null?'':String(v)).join('\t');
-  const text=[line(['Ngày','Thứ','Data Ads','Đơn','Doanh số','SP','CR'])]
-    .concat(rep.days.map(d=>line([fullDate(d.day),d.weekday,d.data,d.orders,d.revenue,d.qty,d.past&&d.data?pct((d.orders||0)/d.data):''])))
-    .concat([line(['TỔNG THÁNG','',rep.total.data,rep.total.orders,rep.total.revenue,rep.total.qty,rep.total.cr==null?'':pct(rep.total.cr)])]).join('\n');
+  const kind=reportKind;
+  const g=await exportGuard({needStaff:kind==='ads',needOrders:kind!=='web'});if(!g)return;
+  const r=g.r,line=a=>a.map(v=>v==null?'':String(v)).join('\t'),ratio=v=>v==null?'':v.toFixed(2).replace('.',',');
+  let lines;
+  if(kind==='ads'){
+    const rep=buildStaffReport(g.staff,channelRows(ADS_CHANNEL,r),r),t=rep.total;
+    lines=[line(['Ngày','Thứ','Data Ads','Đơn','Doanh số','SP','CR'])]
+      .concat(rep.days.map(d=>line([fullDate(d.day),d.weekday,d.data,d.orders,d.revenue,d.qty,d.past&&d.data?pct((d.orders||0)/d.data):''])))
+      .concat([line(['TỔNG THÁNG','',t.data,t.orders,t.revenue,t.qty,t.cr==null?'':pct(t.cr)])])
+  }else if(kind==='zalo'){
+    const rep=buildZaloReport(channelRows(ZALO_CHANNEL,r),r),t=rep.total;
+    lines=[line(['Ngày','Nhân viên','Bài đăng','KH quan tâm','Đơn','CR Zalo','Doanh số','SP','AOV'])]
+      .concat(rep.days.map(d=>line([fullDate(d.day),d.staff,d.posts,d.interested,d.orders,d.cr==null?'':pct(d.cr),d.revenue,d.qty,d.aov==null?'':Math.round(d.aov)])))
+      .concat([line(['TỔNG THÁNG','',t.posts,t.interested,t.orders,t.cr==null?'':pct(t.cr),t.revenue,t.qty,t.aov==null?'':Math.round(t.aov)])])
+  }else{
+    const rep=buildWebReport(r),t=rep.total;
+    lines=[line(['Ngày','NV trực','Đơn Web','Doanh số Web','SP','AOV','UPT','Ghi chú'])]
+      .concat(rep.days.map(d=>line([fullDate(d.day),d.staff,d.orders,d.revenue,d.qty,d.aov==null?'':Math.round(d.aov),ratio(d.upt),d.note])))
+      .concat([line(['TỔNG THÁNG','',t.orders,t.revenue,t.qty,t.aov==null?'':Math.round(t.aov),ratio(t.upt),''])])
+  }
+  const text=lines.join('\n');
   let copied=false;
   try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);copied=true}}catch{}
   if(!copied){
@@ -2037,8 +2372,8 @@ async function copyReportTable(){
   else showError('Trình duyệt chưa cho phép sao chép tự động.')
 }
 function focusTodayInput(){
-  if(window.innerWidth<=720)return;
-  const inp=document.querySelector(`#reportRows .reportDataInput[data-day="${vnDate()}"]:not([disabled])`);
+  if(window.innerWidth<=720||reportKind!=='ads')return;
+  const inp=document.querySelector(`#reportRows input.reportInput[data-kind="ads"][data-day="${vnDate()}"]:not([disabled])`);
   if(inp){inp.scrollIntoView({block:'center',behavior:'smooth'});inp.focus({preventScroll:true})}
 }
 function bindReportEvents(){
@@ -2047,37 +2382,52 @@ function bindReportEvents(){
   $('reportMonth').max=vnDate().slice(0,7);
   $('reportMonth').onchange=()=>{reportRowState.clear();renderReport();ensureReportData()};
   $('reportStaff').onchange=()=>{storageSet(REPORT_STAFF_KEY,$('reportStaff').value);renderReport();focusTodayInput()};
+  document.querySelectorAll('[data-report-kind]').forEach(b=>b.onclick=()=>{
+    reportKind=b.dataset.reportKind;storageSet(REPORT_KIND_KEY,reportKind);renderReport();ensureReportData()
+  });
   tbody.addEventListener('keydown',e=>{
-    const inp=e.target.closest('.reportDataInput');if(!inp)return;
+    const inp=e.target.closest('input.reportInput');if(!inp)return;
     if(e.key==='Enter'){
       e.preventDefault();
-      const day=inp.dataset.day,list=[...tbody.querySelectorAll('.reportDataInput:not([disabled])')];
-      const nextDay=list[list.indexOf(inp)+1]?.dataset.day;
-      queueReportSave(inp.dataset.staff,day,inp.value,inp);
-      // Saving re-renders the table, so look the inputs up again by day.
-      const cur=tbody.querySelector(`.reportDataInput[data-day="${day}"]`);
+      const {kind,day,field}=inp.dataset,sel=`input.reportInput[data-kind="${kind}"][data-field="${field}"]`;
+      const list=[...tbody.querySelectorAll(sel+':not([disabled])')],nextDay=list[list.indexOf(inp)+1]?.dataset.day;
+      commitReportInput(inp);
+      // Saving re-renders the table, so look the cells up again by day.
+      const cur=tbody.querySelector(`${sel}[data-day="${day}"]`);
       if(!cur||cur.classList.contains('invalid'))return;
-      const next=nextDay&&tbody.querySelector(`.reportDataInput[data-day="${nextDay}"]:not([disabled])`);
+      const next=nextDay&&tbody.querySelector(`${sel}[data-day="${nextDay}"]:not([disabled])`);
       if(next){next.focus();next.select()}else cur.blur()
     }else if(e.key==='Escape'){
-      inp.value=saleValue(inp.dataset.staff,inp.dataset.day)??'';inp.classList.remove('invalid');inp.blur()
+      inp.value=shownValue(inp);inp.classList.remove('invalid');inp.blur()
     }
   });
   tbody.addEventListener('focusout',e=>{
-    const inp=e.target.closest('.reportDataInput');
-    if(inp&&!reportRendering&&!inp.disabled&&inp.isConnected)queueReportSave(inp.dataset.staff,inp.dataset.day,inp.value,inp)
+    const inp=e.target.closest('input.reportInput');
+    if(inp&&!reportRendering&&!inp.disabled&&inp.isConnected)commitReportInput(inp)
   });
-  tbody.addEventListener('input',e=>{const inp=e.target.closest('.reportDataInput');if(inp)inp.classList.remove('invalid')});
+  tbody.addEventListener('change',e=>{
+    const sel=e.target.closest('select.reportInput');
+    if(sel&&!reportRendering)commitReportInput(sel)
+  });
+  tbody.addEventListener('input',e=>{const inp=e.target.closest('.reportInput');if(inp)inp.classList.remove('invalid')});
   tbody.addEventListener('click',e=>{
     const btn=e.target.closest('[data-report-drill]');if(!btn)return;
-    const staff=$('reportStaff').value,day=btn.dataset.reportDrill;
-    openOrderDrill('report',day,`Đơn Ads · ${staff} · ${fullDate(day)}`,{rows:reportDayRows(staff,day),metaText:`${fullDate(day)} · Kênh Ads · ${staff} · không tính đơn huỷ, CSKH, đơn đổi`})
+    const day=btn.dataset.reportDrill,r=reportRange();
+    if(btn.dataset.drillKind==='zalo'){
+      const rows=(channelRows(ZALO_CHANNEL,r)||[]).filter(o=>orderDate(o)===day);
+      openOrderDrill('report',day,`Đơn Zalo · ${fullDate(day)}`,{rows,metaText:`${fullDate(day)} · Kênh Zalo · không tính đơn huỷ, CSKH, đơn đổi`});
+      return
+    }
+    const staff=$('reportStaff').value,k=staffKey(staff);
+    const rows=(channelRows(ADS_CHANNEL,r)||[]).filter(o=>staffKey(o.salesStaff||'Chưa gán')===k&&orderDate(o)===day);
+    openOrderDrill('report',day,`Đơn Ads · ${staff} · ${fullDate(day)}`,{rows,metaText:`${fullDate(day)} · Kênh Ads · ${staff} · không tính đơn huỷ, CSKH, đơn đổi`})
   });
   $('reportTeamRows').addEventListener('click',e=>{
+    if(reportKind!=='ads')return;
     const tr=e.target.closest('[data-report-staff]');if(!tr)return;
-    const name=tr.dataset.reportStaff,el=$('reportStaff');
+    const name=tr.dataset.reportStaff,el=$('reportStaff'),r=reportRange();
     if(name==='Chưa gán'){
-      const r=reportRange(),rows=(reportAdsRows(r)||[]).filter(o=>(o.salesStaff||'Chưa gán')==='Chưa gán');
+      const rows=(channelRows(ADS_CHANNEL,r)||[]).filter(o=>staffKey(o.salesStaff||'Chưa gán')===staffKey('Chưa gán'));
       openOrderDrill('report','',`Đơn Ads chưa gán Sale · ${monthLabel(r.month)}`,{rows,metaText:`${fullDate(r.from)} → ${fullDate(r.to)} · Kênh Ads`});
       return
     }
@@ -2085,7 +2435,7 @@ function bindReportEvents(){
     el.value=name;renderReport();
     $('reportTitle').scrollIntoView({block:'start',behavior:'smooth'})
   });
-  $('reportExportBtn').onclick=exportStaffReport;
+  $('reportExportBtn').onclick=exportCurrentReport;
   $('reportExportTeamBtn').onclick=exportTeamReport;
   $('reportCopyBtn').onclick=copyReportTable
 }

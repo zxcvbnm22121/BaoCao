@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=salereport-20261101-1" />
+  <link rel="stylesheet" href="./styles.css?v=salereport-20261101-2" />
 </head>
 <body>
   <aside class="sidebar">
@@ -306,15 +306,20 @@
     <section id="view-report" class="view">
       <div class="sectionHead">
         <div>
-          <span class="sectionEyebrow">SALE DAILY REPORT · KÊNH ADS</span>
+          <span class="sectionEyebrow" id="reportEyebrow">SALE DAILY REPORT · ADS · ZALO · WEBSITE</span>
           <h2>Báo cáo ngày của Sale</h2>
-          <p>Chọn tên, nhập Data Ads từng ngày. Đơn, Doanh số, SP tự lấy từ Pancake · CR = Đơn / Data Ads</p>
+          <p id="reportIntro">Chọn kênh và tên của bạn rồi nhập số trong ô vàng. Các cột còn lại tự tính.</p>
         </div>
         <div class="summaryChip" id="reportSaveState">—</div>
       </div>
 
-      <section class="productToolbar reportToolbar" aria-label="Chọn Sale và tháng báo cáo">
-        <label class="reportStaffField"><span>Tên Sale</span><select id="reportStaff"><option value="">— Chọn tên —</option></select></label>
+      <section class="productToolbar reportToolbar" aria-label="Chọn kênh, Sale và tháng báo cáo">
+        <div class="productPeriodGroup reportKindGroup" role="tablist" aria-label="Kênh báo cáo">
+          <button type="button" class="productPeriodBtn active" data-report-kind="ads">Ads</button>
+          <button type="button" class="productPeriodBtn" data-report-kind="zalo">Zalo</button>
+          <button type="button" class="productPeriodBtn" data-report-kind="web">Website</button>
+        </div>
+        <label class="reportStaffField"><span id="reportStaffLabel">Tên Sale</span><select id="reportStaff"><option value="">— Chọn tên —</option></select></label>
         <label><span>Tháng</span><input type="month" id="reportMonth" placeholder="YYYY-MM" pattern="[0-9]{4}-[0-9]{2}" /></label>
         <div class="reportActions">
           <button type="button" class="miniBtn" id="reportCopyBtn">⧉ Sao chép bảng</button>
@@ -328,12 +333,12 @@
 
       <article class="panel tablePanel reportPanel">
         <div class="panelHead">
-          <div><h3 id="reportTitle">Nhập liệu kênh Ads</h3><p>Ô vàng = Sale nhập Data · Enter để lưu · có thể gõ 107+50 · bấm số Đơn để xem danh sách đơn</p></div>
+          <div><h3 id="reportTitle">Nhập liệu kênh Ads</h3><p id="reportSub">Ô vàng = Sale nhập · Enter để lưu</p></div>
           <div class="summaryChip" id="reportRangeChip">—</div>
         </div>
         <div class="scroll">
-          <table class="reportTable">
-            <thead><tr><th>Ngày</th><th class="rWeekCol">Thứ</th><th>Data Ads</th><th>Đơn</th><th>Doanh số</th><th>SP</th><th>CR</th></tr></thead>
+          <table class="reportTable kind-ads" id="reportTable">
+            <thead id="reportHead"></thead>
             <tbody id="reportRows"></tbody>
             <tfoot id="reportFoot"></tfoot>
           </table>
@@ -341,10 +346,10 @@
       </article>
 
       <article class="panel tablePanel">
-        <div class="panelHead"><div><h3>Tổng hợp tháng theo Sale</h3><p>Kênh Ads · bấm một dòng để mở báo cáo của Sale đó</p></div></div>
+        <div class="panelHead"><div><h3 id="reportTeamTitle">Tổng hợp tháng theo Sale</h3><p id="reportTeamSub">Kênh Ads · bấm một dòng để mở báo cáo của Sale đó</p></div></div>
         <div class="scroll">
           <table class="reportTeamTable">
-            <thead><tr><th>Nhân viên</th><th>Data Ads</th><th>Đơn</th><th>Doanh số</th><th>SP</th><th>CR</th><th>AOV</th><th>Ngày đã nhập Data</th></tr></thead>
+            <thead id="reportTeamHead"></thead>
             <tbody id="reportTeamRows"></tbody>
             <tfoot id="reportTeamFoot"></tfoot>
           </table>
@@ -471,6 +476,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=salereport-20261101-1"></script>
+  <script src="./app.js?v=salereport-20261101-2"></script>
 </body>
 </html>

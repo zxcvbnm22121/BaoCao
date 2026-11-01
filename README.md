@@ -40,12 +40,17 @@ Cấu hình các giá trị thực trong Environment Variables của Vercel. Kh�
 
 ## Báo cáo ngày của Sale (tab "Báo cáo Sale")
 
-- Sale chọn tên mình và tháng, rồi nhập **Data Ads** từng ngày. Ô nhập chấp nhận cả dạng `107+50`.
-- **Đơn, Doanh số, SP** lấy tự động từ Pancake: kênh Facebook Ads, tính theo ngày tạo đơn giờ Việt Nam, không tính đơn huỷ, CSKH, đơn đổi. **CR = Đơn / Data Ads**.
-- Nút **Xuất báo cáo** tạo file `.xlsx` theo mẫu sheet "NHẬP LIỆU KÊNH ADS" (Ngày · Thứ · Data Ads · Đơn · Doanh số · SP · CR, có dòng TỔNG THÁNG và công thức CR). Nút **Excel cả team** tạo thêm sheet "Tổng hợp", mỗi Sale một sheet riêng. File được tạo ngay trên trình duyệt, không dùng thư viện ngoài.
-- Số Data được lưu chung trên server qua `POST /api/pancake` với `action: "saleReport"` (đọc theo tháng) và `action: "saleReportSave"` (lưu một ngày). Hai action này cũng yêu cầu mật khẩu dashboard.
-- Nơi lưu: **Vercel Blob store ở chế độ private**, gắn vào project. Khi gắn store, Vercel tự thêm `BLOB_READ_WRITE_TOKEN`, hoặc `BLOB_STORE_ID` nếu dùng OIDC. Mỗi tháng là một file `sale-report/v1/YYYY-MM.json`. Khi đọc, API bỏ qua cache CDN. Khi ghi, API chỉ ghi nếu ETag còn khớp, nên hai Sale lưu cùng lúc không ghi đè số của nhau.
-- Thư viện `@vercel/blob` được khai báo trong `vercel-pancake-backend/package.json`, và Vercel tự cài khi deploy. Nếu chưa gắn Blob store, tab vẫn hiện số đơn, còn phần lưu Data báo lỗi "Chưa cấu hình kho lưu Data".
+Tab có 3 kênh: **Ads**, **Zalo**, **Website**. Danh sách tên luôn có Diễm SOL, Hương SOL, Thu SOL, Linh Live, cộng thêm những tên khác có đơn trên Pancake. Tên được so khớp bỏ qua dấu cách và gạch nối, nên "Thu - SOL" trên Pancake được tính là "Thu SOL".
+
+- **Ads**: mỗi Sale chọn tên mình rồi nhập **Data Ads** từng ngày. Ô nhập nhận cả dạng `107+50`. Đơn, Doanh số, SP lấy từ Pancake: kênh Facebook Ads, tính theo ngày tạo đơn giờ Việt Nam, không tính đơn huỷ, CSKH, đơn đổi. CR = Đơn / Data Ads.
+- **Zalo**: mỗi ngày một dòng. Người trực chọn tên mình, nhập **Bài đăng** và **KH quan tâm**. Đơn, Doanh số, SP là toàn bộ đơn Pancake kênh Zalo trong ngày. CR Zalo = Đơn / KH quan tâm, AOV = Doanh số / SP (giống sheet BC-SOL).
+- **Website**: mỗi ngày một dòng. Pancake chưa gắn nguồn Website cho đơn web, nên NV trực tự nhập **Đơn Web, Doanh số Web, SP, Ghi chú**. AOV = Doanh số / SP, UPT = SP / Đơn.
+- Ở dòng chưa có tên, khi Sale nhập số thì tên đang chọn ở đầu trang được điền vào.
+- CR của cả tháng chỉ tính những ngày đã nhập Data (với Zalo là KH quan tâm), để ngày chưa nhập không làm CR bị cao lên. Dòng TỔNG THÁNG trong Excel dùng cùng quy tắc này (`SUMIFS(...,"<>")`).
+- **Xuất báo cáo** tải file `.xlsx` của kênh đang xem, theo mẫu BC-SOL: "NHẬP LIỆU KÊNH ADS — <TÊN>", "ZALO — CHI TIẾT THEO NGÀY", "WEBSITE — CHI TIẾT THEO NGÀY". Cột tên có danh sách chọn. **Excel cả team** gồm sheet Tổng hợp (Data/Đơn/DS Ads, DS Zalo, DS Web, Tổng DS theo từng người), mỗi Sale một sheet Ads, thêm sheet Zalo và sheet Web. File được tạo ngay trên trình duyệt, không dùng thư viện ngoài.
+- Số Sale nhập được lưu chung trên server qua `POST /api/pancake`. Action `saleReport` đọc theo tháng. Action `saleReportSave` lưu một ô, với `kind: "ads"` (`staff`, `date`, `value`), `"zalo"` hoặc `"web"` (`date`, `row`). Cả hai action đều yêu cầu mật khẩu dashboard.
+- Nơi lưu là **Vercel Blob store `sevenam-sale-report` ở chế độ private**. Mỗi tháng là một file `sale-report/v1/YYYY-MM.json`, chứa `entries` (Ads), `zalo` và `web`. Khi đọc, API bỏ qua cache CDN. Khi ghi, API chỉ ghi nếu ETag còn khớp, nên hai người lưu cùng lúc không ghi đè số của nhau. Trình duyệt chỉ đọc lại số này khi mở tab, đổi tháng, bấm ↻, hoặc tối đa vài phút một lần, để giữ số lượt thao tác Blob ở mức thấp.
+- Thư viện `@vercel/blob` được khai báo trong `vercel-pancake-backend/package.json`, Vercel tự cài khi deploy. Nếu chưa gắn Blob store, tab vẫn hiện số đơn, còn phần lưu báo lỗi "Chưa cấu hình kho lưu Data".
 
 ## Đồng bộ dữ liệu và GitHub Pages
 

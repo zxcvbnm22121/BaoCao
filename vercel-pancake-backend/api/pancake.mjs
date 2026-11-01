@@ -584,16 +584,24 @@ function secureEqual(a,b){
   return diff===0;
 }
 
-// ---------- Sale daily report: the Data Ads number each Sale types in ----------
+// ---------- Sale daily report: numbers the Sales type in ----------
 // Stored in a private Vercel Blob store, one JSON document per month:
-//   sale-report/v1/2026-11.json → {version,month,updatedAt,entries:{[staff]:{[date]:{data,at}}}}
+//   sale-report/v1/2026-11.json → {version,month,updatedAt,
+//     entries:{[staff]:{[date]:{data,at}}},            Ads: Data Ads per Sale
+//     zalo:{[date]:{staff,posts,interested,at}},        Zalo: one row per day
+//     web:{[date]:{staff,orders,revenue,qty,note,at}}}  Website: one row per day
 // Reads skip the CDN cache (useCache:false) so every device sees the newest
 // numbers, and each write is conditional on the ETag read just before it
 // (ifMatch). Two Sales saving at the same moment retry instead of one
 // silently overwriting the other.
 const SALE_REPORT_PREFIX='sale-report/v1/';
-const SALE_NAME_MAX=60,SALE_DATA_MAX=1000000,SALE_STAFF_MAX=40;
+const SALE_NAME_MAX=60,SALE_DATA_MAX=1000000,SALE_STAFF_MAX=40,SALE_NOTE_MAX=200;
 const SALE_CACHE_MS=8000;
+// Typed fields of the one-row-per-day reports: [min,max] for integers.
+const SALE_ROW_FIELDS={
+  zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm']},
+  web:{staff:'staff',orders:[0,10000,'Đơn Web'],revenue:[0,100000000000,'Doanh số Web'],qty:[0,100000,'SP'],note:'text'}
+};
 const saleMonthCache=new Map();
 let blobModulePromise=null;
 function blobApi(){
@@ -614,7 +622,24 @@ function cleanStaffName(v){
   const s=String(v??'').replace(/[\u0000-\u001f\u007f]/g,'').replace(/\s+/g,' ').trim();
   return s.length&&s.length<=SALE_NAME_MAX?s:''
 }
-function emptySaleDoc(month){return {version:1,month,updatedAt:null,entries:{}}}
+// "Thu - SOL" and "Thu SOL" are the same Sale; accents still count (Thu ≠ Thư).
+function staffKey(v){return String(v??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'')}
+// One day of the Zalo / Website report. strict=true rejects bad numbers
+// (a save); strict=false drops them (reading what is already stored).
+function cleanSaleRow(kind,row,strict){
+  const spec=SALE_ROW_FIELDS[kind],out={};
+  for(const [field,rule] of Object.entries(spec)){
+    const v=row?.[field];
+    if(rule==='staff'){const s=cleanStaffName(v);if(s)out[field]=s;continue}
+    if(rule==='text'){const s=String(v??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,SALE_NOTE_MAX);if(s)out[field]=s;continue}
+    if(v===null||v===undefined||String(v).trim()==='')continue;
+    const n=Number(v);
+    if(Number.isInteger(n)&&n>=rule[0]&&n<=rule[1])out[field]=n;
+    else if(strict)throw saleError(400,`${rule[2]} phải là số nguyên từ ${rule[0]} đến ${rule[1]}`);
+  }
+  return out
+}
+function emptySaleDoc(month){return {version:1,month,updatedAt:null,entries:{},zalo:{},web:{}}}
 // Keep only well-formed entries of this month, whatever the stored file holds.
 function cleanSaleDoc(doc,month){
   const out=emptySaleDoc(month);
@@ -627,6 +652,13 @@ function cleanSaleDoc(doc,month){
       const n=Number(v?.data);
       if(!validDay(day)||!day.startsWith(month)||!Number.isInteger(n)||n<0||n>SALE_DATA_MAX)continue;
       (out.entries[staff]??={})[day]={data:n,at:typeof v.at==='string'?v.at:null};
+    }
+  }
+  for(const kind of ['zalo','web']){
+    for(const [day,row] of Object.entries(doc[kind]||{})){
+      if(!validDay(day)||!day.startsWith(month))continue;
+      const clean=cleanSaleRow(kind,row,false);
+      if(Object.keys(clean).length)out[kind][day]={...clean,at:typeof row?.at==='string'?row.at:null};
     }
   }
   return out
@@ -656,15 +688,12 @@ async function loadSaleMonth(month,{fresh=false}={}){
 function isWriteConflict(e){
   return e?.constructor?.name==='BlobPreconditionFailedError'||/precondition|already exists/i.test(String(e?.message||''))
 }
-async function saveSaleEntry({staff,date,value}){
-  const month=date.slice(0,7);
+// Read → change → write, retried when someone else wrote in between.
+async function updateSaleMonth(month,change){
   const {put}=await blobApi();
   for(let attempt=1;attempt<=5;attempt++){
     const {doc,etag}=await readSaleMonth(month);
-    const days=doc.entries[staff]??={};
-    if(value===null)delete days[date];
-    else days[date]={data:value,at:new Date().toISOString()};
-    if(!Object.keys(days).length)delete doc.entries[staff];
+    change(doc);
     if(Object.keys(doc.entries).length>SALE_STAFF_MAX)throw saleError(400,'Quá nhiều tên Sale trong tháng này');
     doc.updatedAt=new Date().toISOString();
     try{
@@ -683,6 +712,20 @@ async function saveSaleEntry({staff,date,value}){
     }
   }
 }
+function setAdsEntry(doc,staff,date,value){
+  // One number per Sale per day, whichever spelling of the name it was saved under.
+  const key=staffKey(staff);
+  for(const name of Object.keys(doc.entries)){
+    if(staffKey(name)!==key)continue;
+    delete doc.entries[name][date];
+    if(!Object.keys(doc.entries[name]).length)delete doc.entries[name]
+  }
+  if(value!==null)(doc.entries[staff]??={})[date]={data:value,at:new Date().toISOString()}
+}
+function setDayRow(doc,kind,date,row){
+  if(Object.keys(row).length)doc[kind][date]={...row,at:new Date().toISOString()};
+  else delete doc[kind][date]
+}
 function parseSaleValue(v){
   if(v===null||v===undefined||String(v).trim()==='')return null;
   const n=Number(v);
@@ -695,16 +738,24 @@ async function handleSaleReport(action,body,res,startedAt){
       const month=String(body?.month||'').trim();
       if(!validMonth(month))return res.status(400).json({error:'Tháng không hợp lệ'});
       const doc=await loadSaleMonth(month,{fresh:Boolean(body?.fresh)});
-      console.log(`[sale-report] read ${month} staff=${Object.keys(doc.entries).length} ${Date.now()-startedAt}ms`);
+      console.log(`[sale-report] read ${month} staff=${Object.keys(doc.entries).length} zalo=${Object.keys(doc.zalo).length} web=${Object.keys(doc.web).length} ${Date.now()-startedAt}ms`);
       return res.status(200).json(doc)
     }
+    const kind=String(body?.kind||'ads');
     const date=String(body?.date||'').trim();
-    const staff=cleanStaffName(body?.staff);
     if(!validDay(date))return res.status(400).json({error:'Ngày không hợp lệ'});
-    if(!staff)return res.status(400).json({error:'Chưa chọn tên Sale'});
-    const value=parseSaleValue(body?.value);
-    const doc=await saveSaleEntry({staff,date,value});
-    console.log(`[sale-report] save ${date} staff=${JSON.stringify(staff)} value=${value??'(xoá)'} ${Date.now()-startedAt}ms`);
+    let doc;
+    if(kind==='ads'){
+      const staff=cleanStaffName(body?.staff);
+      if(!staff)return res.status(400).json({error:'Chưa chọn tên Sale'});
+      const value=parseSaleValue(body?.value);
+      doc=await updateSaleMonth(date.slice(0,7),d=>setAdsEntry(d,staff,date,value));
+      console.log(`[sale-report] save ads ${date} staff=${JSON.stringify(staff)} value=${value??'(xoá)'} ${Date.now()-startedAt}ms`);
+    }else if(kind==='zalo'||kind==='web'){
+      const row=cleanSaleRow(kind,body?.row,true);
+      doc=await updateSaleMonth(date.slice(0,7),d=>setDayRow(d,kind,date,row));
+      console.log(`[sale-report] save ${kind} ${date} ${JSON.stringify(row)} ${Date.now()-startedAt}ms`);
+    }else return res.status(400).json({error:'Loại báo cáo không hợp lệ'});
     return res.status(200).json(doc)
   }catch(e){
     if(e?.saleStatus)return res.status(e.saleStatus).json({error:e.message});

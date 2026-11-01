@@ -369,7 +369,8 @@ td.good,.good{color:var(--good-text)}
 
 /* ---------- Sale daily report ---------- */
 body.reportMode .filterBar,body.reportMode .mobileCommandBar{display:none}
-.reportToolbar select{min-width:210px}
+.reportToolbar #reportStaff{min-width:200px}
+.reportKindGroup .productPeriodBtn{min-width:72px}
 .reportActions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
 .reportActions .miniBtn,.reportActions .primaryBtn{height:36px;padding:0 14px;font-size:13px}
 .reportNote{display:none;margin:0 0 12px;padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface-2);font-size:13px;line-height:1.55;color:var(--ink-2)}
@@ -377,14 +378,19 @@ body.reportMode .filterBar,body.reportMode .mobileCommandBar{display:none}
 .reportNote.bad{background:var(--critical-wash);color:var(--critical-text);border:1px solid color-mix(in srgb,var(--critical) 30%,transparent)}
 .reportTable th,.reportTable td,.reportTeamTable th,.reportTeamTable td{text-align:right}
 .reportTable th:nth-child(-n+2),.reportTable td:nth-child(-n+2),.reportTeamTable th:first-child,.reportTeamTable td:first-child{text-align:left}
+.reportTable.kind-zalo th:nth-child(3),.reportTable.kind-zalo td:nth-child(3),.reportTable.kind-web th:nth-child(3),.reportTable.kind-web td:nth-child(3),.reportTable.kind-web th:last-child,.reportTable.kind-web td:last-child{text-align:left}
 .reportTable td{padding:5px 12px;height:42px}
-.reportDataCell{width:120px}
-.reportDataInput{width:100px;height:32px;border:1px solid color-mix(in srgb,var(--warn) 60%,var(--border));background:color-mix(in srgb,var(--warn) 16%,var(--surface));border-radius:8px;padding:0 9px;text-align:right;font-weight:650;font-variant-numeric:tabular-nums;transition:opacity .15s}
-.reportDataInput::placeholder{color:var(--muted);font-weight:500}
-.reportDataInput:focus{outline:2px solid var(--ads);outline-offset:1px;background:var(--surface)}
-.reportDataInput:disabled{background:transparent;border-color:transparent;color:var(--ink);cursor:default}
-.reportDataInput.saving{opacity:.55}
-.reportDataInput.invalid{border-color:var(--critical);background:var(--critical-wash);color:var(--critical-text)}
+.reportInput{width:100px;height:32px;border:1px solid color-mix(in srgb,var(--warn) 60%,var(--border));background:color-mix(in srgb,var(--warn) 16%,var(--surface));border-radius:8px;padding:0 9px;text-align:right;font-weight:650;font-variant-numeric:tabular-nums;transition:opacity .15s}
+.reportInput::placeholder{color:var(--muted);font-weight:500}
+.reportInput:focus{outline:2px solid var(--ads);outline-offset:1px;background:var(--surface)}
+.reportInput:disabled{background:transparent;border-color:transparent;color:var(--ink);cursor:default;opacity:1}
+.reportInput.saving{opacity:.55}
+.reportInput.invalid{border-color:var(--critical);background:var(--critical-wash);color:var(--critical-text)}
+.reportSmallInput{width:72px}
+.reportMoneyInput{width:124px}
+.reportNoteInput{width:220px;text-align:left;font-weight:500}
+select.reportStaffPick{width:132px;text-align:left;padding:0 6px;font-weight:600}
+select.reportStaffPick:disabled{appearance:none;-webkit-appearance:none;padding:0}
 .reportTable tr.todayRow td{background:color-mix(in srgb,var(--ads) 9%,var(--surface))}
 .reportTable tr.todayRow td:first-child{box-shadow:inset 3px 0 0 var(--ads);font-weight:650}
 .reportTable tr.futureRow td{color:var(--muted)}
@@ -497,11 +503,20 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .tablePanel table.reportTeamTable{min-width:620px}
   .tablePanel table.reportTable{min-width:0}
   .reportTable th,.reportTable td{padding:5px 7px}
-  .reportTable .rWeekCol,.reportTable .rYear,.reportTable .rFull{display:none}
-  .reportTable .rShort{display:inline}
+  .reportTable .rWeekCol,.reportTable .rYear{display:none}
+  .reportTable.kind-ads .rFull{display:none}
+  .reportTable.kind-ads .rShort{display:inline}
   .reportTable .rWeek{display:block;font-size:11px;color:var(--muted);line-height:1.2}
-  .reportDataCell{width:auto}
-  .reportDataInput{width:74px;height:36px;font-size:16px;padding:0 7px}
+  .reportInput{height:36px;font-size:16px;padding:0 7px}
+  .reportDataInput{width:74px}
+  .reportSmallInput{width:64px}
+  .reportMoneyInput{width:118px}
+  .reportNoteInput{width:180px}
+  select.reportStaffPick{width:118px}
+  .tablePanel table.reportTable.kind-zalo{min-width:760px}
+  .tablePanel table.reportTable.kind-web{min-width:820px}
+  .reportTable.kind-zalo .rWeekCol,.reportTable.kind-web .rWeekCol{display:none}
+  .reportKindGroup{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr)}
   .mobileBottomNav{position:fixed;left:0;right:0;bottom:0;z-index:75;display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .mobileNavBtn{border:0;background:transparent;color:var(--muted);border-radius:10px;min-height:52px;display:grid;place-items:center;align-content:center;gap:2px;padding:4px 2px}
   .mobileNavBtn span{font-size:15px;line-height:1}
