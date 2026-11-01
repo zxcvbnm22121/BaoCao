@@ -367,6 +367,32 @@ td.good,.good{color:var(--good-text)}
 .saleRankMeta span{display:block;font-size:11px;color:var(--muted)}
 .saleRankMeta b{display:block;font-size:13px}
 
+/* ---------- Sale daily report ---------- */
+body.reportMode .filterBar,body.reportMode .mobileCommandBar{display:none}
+.reportToolbar select{min-width:210px}
+.reportActions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.reportActions .miniBtn,.reportActions .primaryBtn{height:36px;padding:0 14px;font-size:13px}
+.reportNote{display:none;margin:0 0 12px;padding:10px 14px;border-radius:var(--radius-sm);background:var(--surface-2);font-size:13px;line-height:1.55;color:var(--ink-2)}
+.reportNote.warn{background:var(--warn-wash);color:var(--ink);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)}
+.reportNote.bad{background:var(--critical-wash);color:var(--critical-text);border:1px solid color-mix(in srgb,var(--critical) 30%,transparent)}
+.reportTable th,.reportTable td,.reportTeamTable th,.reportTeamTable td{text-align:right}
+.reportTable th:nth-child(-n+2),.reportTable td:nth-child(-n+2),.reportTeamTable th:first-child,.reportTeamTable td:first-child{text-align:left}
+.reportTable td{padding:5px 12px;height:42px}
+.reportDataCell{width:120px}
+.reportDataInput{width:100px;height:32px;border:1px solid color-mix(in srgb,var(--warn) 60%,var(--border));background:color-mix(in srgb,var(--warn) 16%,var(--surface));border-radius:8px;padding:0 9px;text-align:right;font-weight:650;font-variant-numeric:tabular-nums;transition:opacity .15s}
+.reportDataInput::placeholder{color:var(--muted);font-weight:500}
+.reportDataInput:focus{outline:2px solid var(--ads);outline-offset:1px;background:var(--surface)}
+.reportDataInput:disabled{background:transparent;border-color:transparent;color:var(--ink);cursor:default}
+.reportDataInput.saving{opacity:.55}
+.reportDataInput.invalid{border-color:var(--critical);background:var(--critical-wash);color:var(--critical-text)}
+.reportTable tr.todayRow td{background:color-mix(in srgb,var(--ads) 9%,var(--surface))}
+.reportTable tr.todayRow td:first-child{box-shadow:inset 3px 0 0 var(--ads);font-weight:650}
+.reportTable tr.futureRow td{color:var(--muted)}
+.tablePanel .reportTable tfoot td,.tablePanel .reportTeamTable tfoot td{font-weight:700;border-top:1px solid var(--border-strong);background:var(--surface-2)}
+.reportTeamTable tr.selected td{background:color-mix(in srgb,var(--ads) 9%,var(--surface));font-weight:650}
+.rWeek,.rShort{display:none}
+.linkBtn{border:0;background:transparent;padding:2px 0;font:inherit;font-weight:650;color:var(--ads);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+
 footer{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px;padding:18px 2px 0}
 
 /* ---------- Dialogs ---------- */
@@ -462,7 +488,21 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .quickExactRow input,.quickExactRow strong{text-align:left}
   footer{flex-direction:column}
   dialog{position:fixed;inset:auto 8px calc(8px + env(safe-area-inset-bottom)) 8px!important;width:auto!important;max-width:none!important;max-height:80dvh!important;margin:0!important;overflow:auto!important;overscroll-behavior:contain}
-  .mobileBottomNav{position:fixed;left:0;right:0;bottom:0;z-index:75;display:grid;grid-template-columns:repeat(6,1fr);background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .reportToolbar{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .reportToolbar label{min-width:0}
+  .reportToolbar select,.reportToolbar input{width:100%;min-width:0;font-size:16px}
+  .reportActions{grid-column:1/-1;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .reportActions .primaryBtn{grid-column:1/-1;order:-1;height:44px}
+  .reportActions .miniBtn{height:40px}
+  .tablePanel table.reportTeamTable{min-width:620px}
+  .tablePanel table.reportTable{min-width:0}
+  .reportTable th,.reportTable td{padding:5px 7px}
+  .reportTable .rWeekCol,.reportTable .rYear,.reportTable .rFull{display:none}
+  .reportTable .rShort{display:inline}
+  .reportTable .rWeek{display:block;font-size:11px;color:var(--muted);line-height:1.2}
+  .reportDataCell{width:auto}
+  .reportDataInput{width:74px;height:36px;font-size:16px;padding:0 7px}
+  .mobileBottomNav{position:fixed;left:0;right:0;bottom:0;z-index:75;display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .mobileNavBtn{border:0;background:transparent;color:var(--muted);border-radius:10px;min-height:52px;display:grid;place-items:center;align-content:center;gap:2px;padding:4px 2px}
   .mobileNavBtn span{font-size:15px;line-height:1}
   .mobileNavBtn b{font-size:10px;font-weight:600}

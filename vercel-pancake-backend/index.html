@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=products-20261010-1" />
+  <link rel="stylesheet" href="./styles.css?v=salereport-20261101-1" />
 </head>
 <body>
   <aside class="sidebar">
@@ -24,6 +24,7 @@
       <button class="navBtn" data-view="pages"><span>▤</span><b>Theo Page</b></button>
       <button class="navBtn" data-view="products"><span>◆</span><b>Sản phẩm</b></button>
       <button class="navBtn" data-view="sales"><span>◎</span><b>Sale Online</b></button>
+      <button class="navBtn" data-view="report"><span>▥</span><b>Báo cáo Sale</b></button>
       <button class="navBtn" data-view="monthly"><span>◒</span><b>Tiến độ tháng</b></button>
     </nav>
 
@@ -302,6 +303,55 @@
       </article>
     </section>
 
+    <section id="view-report" class="view">
+      <div class="sectionHead">
+        <div>
+          <span class="sectionEyebrow">SALE DAILY REPORT · KÊNH ADS</span>
+          <h2>Báo cáo ngày của Sale</h2>
+          <p>Chọn tên, nhập Data Ads từng ngày. Đơn, Doanh số, SP tự lấy từ Pancake · CR = Đơn / Data Ads</p>
+        </div>
+        <div class="summaryChip" id="reportSaveState">—</div>
+      </div>
+
+      <section class="productToolbar reportToolbar" aria-label="Chọn Sale và tháng báo cáo">
+        <label class="reportStaffField"><span>Tên Sale</span><select id="reportStaff"><option value="">— Chọn tên —</option></select></label>
+        <label><span>Tháng</span><input type="month" id="reportMonth" placeholder="YYYY-MM" pattern="[0-9]{4}-[0-9]{2}" /></label>
+        <div class="reportActions">
+          <button type="button" class="miniBtn" id="reportCopyBtn">⧉ Sao chép bảng</button>
+          <button type="button" class="miniBtn" id="reportExportTeamBtn">↓ Excel cả team</button>
+          <button type="button" class="primaryBtn" id="reportExportBtn">↓ Xuất báo cáo</button>
+        </div>
+      </section>
+
+      <div class="reportNote" id="reportNote"></div>
+      <section class="miniKpiGrid" id="reportKpis"></section>
+
+      <article class="panel tablePanel reportPanel">
+        <div class="panelHead">
+          <div><h3 id="reportTitle">Nhập liệu kênh Ads</h3><p>Ô vàng = Sale nhập Data · Enter để lưu · có thể gõ 107+50 · bấm số Đơn để xem danh sách đơn</p></div>
+          <div class="summaryChip" id="reportRangeChip">—</div>
+        </div>
+        <div class="scroll">
+          <table class="reportTable">
+            <thead><tr><th>Ngày</th><th class="rWeekCol">Thứ</th><th>Data Ads</th><th>Đơn</th><th>Doanh số</th><th>SP</th><th>CR</th></tr></thead>
+            <tbody id="reportRows"></tbody>
+            <tfoot id="reportFoot"></tfoot>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel tablePanel">
+        <div class="panelHead"><div><h3>Tổng hợp tháng theo Sale</h3><p>Kênh Ads · bấm một dòng để mở báo cáo của Sale đó</p></div></div>
+        <div class="scroll">
+          <table class="reportTeamTable">
+            <thead><tr><th>Nhân viên</th><th>Data Ads</th><th>Đơn</th><th>Doanh số</th><th>SP</th><th>CR</th><th>AOV</th><th>Ngày đã nhập Data</th></tr></thead>
+            <tbody id="reportTeamRows"></tbody>
+            <tfoot id="reportTeamFoot"></tfoot>
+          </table>
+        </div>
+      </article>
+    </section>
+
     <section id="view-monthly" class="view">
       <div class="sectionHead">
         <div><span class="sectionEyebrow">MONTHLY PACING</span><h2>Tiến độ tháng</h2><p>Nhìn ngay nhịp doanh thu, target và gap từng ngày</p></div>
@@ -338,6 +388,7 @@
     <button type="button" class="mobileNavBtn" data-mobile-view="pages"><span>▤</span><b>Page</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="products"><span>◆</span><b>Sản phẩm</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="sales"><span>◎</span><b>Sale</b></button>
+    <button type="button" class="mobileNavBtn" data-mobile-view="report"><span>▥</span><b>Báo cáo</b></button>
     <button type="button" class="mobileNavBtn" data-mobile-view="monthly"><span>◒</span><b>Tháng</b></button>
   </nav>
 
@@ -420,6 +471,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=products-20261010-1"></script>
+  <script src="./app.js?v=salereport-20261101-1"></script>
 </body>
 </html>
