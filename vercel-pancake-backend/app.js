@@ -2548,9 +2548,16 @@ async function buildDailyDashboard(date){
   return {date,prevDate:prev,generatedAt:new Date().toISOString(),
     day:dashboardDay(date,orders,docs[date.slice(0,7)]),prev:dashboardDay(prev,orders,docs[prev.slice(0,7)])}
 }
+// Website is not in Pancake, so its target stays out of targetMonth() (the
+// Pancake pages) and is only added for the daily report, which counts the
+// Website revenue the NV trực typed.
+function webTargetMonth(){
+  return hasChannelTargets()?Math.max(0,Number((settings.channelTargets||{}).web)||0):0
+}
 function dashboardTargetDefaults(day){
-  const month=String(day||vnDate()).slice(0,7),m=Math.max(0,Number(targetMonth('Tất cả'))||0);
-  return {month:m,day:m?Math.round(m/daysInMonth(month)):0}
+  const month=String(day||vnDate()).slice(0,7),days=daysInMonth(month);
+  const web=webTargetMonth(),m=Math.max(0,Number(targetMonth('Tất cả'))||0)+web;
+  return {month:m,day:m?Math.round(m/days):0,web,webDay:web?Math.round(web/days):0}
 }
 window.sevenamDailyDashboard={build:buildDailyDashboard,targets:dashboardTargetDefaults};
 function openDailyDashboard(){
@@ -2646,7 +2653,7 @@ function switchView(view){
 
 function setMobileFilter(open){document.body.classList.toggle('mobileFilterOpen',!!open)}
 function updateTargetTotalPreview(){
-  const ids=['targetAdsInput','targetLiveInput','targetZaloInput'];
+  const ids=['targetAdsInput','targetLiveInput','targetZaloInput','targetWebInput'];
   const total=ids.reduce((n,id)=>n+Math.max(0,Number($(id)?.value)||0),0);
   if($('targetTotalInput'))$('targetTotalInput').value=money(total)
 }
@@ -2655,6 +2662,7 @@ function openSettings(){
   $('targetAdsInput').value=Math.round(Number(cfg.ads)||0);
   $('targetLiveInput').value=Math.round(Number(cfg.live)||0);
   $('targetZaloInput').value=Math.round(Number(cfg.zalo)||0);
+  $('targetWebInput').value=Math.round(Number(cfg.web)||0);
   updateTargetTotalPreview();
   $('settingsDialog').showModal()
 }
@@ -2764,13 +2772,14 @@ $('quickTotalData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQ
 $('quickAdsData').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();updateQuickAdsDataFromInput();$('quickAdsData').blur()}};
 $('quickAdsData').onblur=()=>{updateQuickAdsDataFromInput();renderAll()};
 $('copyQuickReportBtn').onclick=copyQuickReport;
-['targetAdsInput','targetLiveInput','targetZaloInput'].forEach(id=>$(id).oninput=updateTargetTotalPreview);
+['targetAdsInput','targetLiveInput','targetZaloInput','targetWebInput'].forEach(id=>$(id).oninput=updateTargetTotalPreview);
 $('settingsForm').onsubmit=e=>{
   e.preventDefault();
   settings.channelTargets={
     ads:Math.max(0,Number($('targetAdsInput').value)||0),
     live:Math.max(0,Number($('targetLiveInput').value)||0),
-    zalo:Math.max(0,Number($('targetZaloInput').value)||0)
+    zalo:Math.max(0,Number($('targetZaloInput').value)||0),
+    web:Math.max(0,Number($('targetWebInput').value)||0)
   };
   settings.channelTargetsConfigured=true;
   delete settings.targetDay;

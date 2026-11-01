@@ -9,7 +9,7 @@
   <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
   <title>Seven.AM · Revenue Command Center</title>
-  <link rel="stylesheet" href="./styles.css?v=salereport-20261101-3" />
+  <link rel="stylesheet" href="./styles.css?v=salereport-20261101-4" />
 </head>
 <body>
   <aside class="sidebar">
@@ -434,10 +434,12 @@
         <label class="field"><span>Facebook Ads</span><input id="targetAdsInput" type="number" min="0" step="1000000" /></label>
         <label class="field"><span>Livestream</span><input id="targetLiveInput" type="number" min="0" step="1000000" /></label>
         <label class="field"><span>Zalo</span><input id="targetZaloInput" type="number" min="0" step="1000000" /></label>
+        <label class="field"><span>Website</span><input id="targetWebInput" type="number" min="0" step="1000000" /></label>
         <label class="field targetTotalField"><span>Target tổng tháng</span><input id="targetTotalInput" type="text" readonly /></label>
       </div>
       <div class="settingsHint">
-        <b>Target tổng = Ads + Live + Zalo.</b>
+        <b>Target tổng = Ads + Live + Zalo + Website.</b>
+        <span>Đơn Website không có trên Pancake, nên tiến độ ở các trang này so với Ads + Live + Zalo. Target Website được tính trong Báo cáo ngày (bấm Xuất báo cáo), so với số NV trực nhập.</span>
         <span>GAP tự tính = Target phải đạt theo tiến độ − Doanh thu thực đạt.</span>
       </div>
       <div class="dialogActions"><button type="button" data-close-dialog="settingsDialog">Đóng</button><button type="submit" value="default" class="primaryBtn">Lưu & áp dụng</button></div>
@@ -478,6 +480,6 @@
     </form>
   </dialog>
 
-  <script src="./app.js?v=salereport-20261101-3"></script>
+  <script src="./app.js?v=salereport-20261101-4"></script>
 </body>
 </html>
