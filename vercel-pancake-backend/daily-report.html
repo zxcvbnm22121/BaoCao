@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Báo cáo ngày · Seven.AM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Roboto+Condensed:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,600&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+/* Layout and look of the "báo cáo ngày" dashboard (1536 × 1024, exported as PNG). */
+:root{--navy:#07346b;--navy2:#061e4c;--blue:#075de9;--red:#ec1515;--green:#07863d;--orange:#ff7200;--purple:#6638d6;--ink:#10233f;--line:#c9d9ee;--soft:#f6f9fd;--warn:#fff2c7}
+*{box-sizing:border-box} body{margin:0;background:#eef3f8;font-family:'Segoe UI',Arial,Helvetica,sans-serif;color:var(--ink)}
+.toolbar{position:sticky;top:0;z-index:20;background:#0b2448;color:white;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;box-shadow:0 2px 10px #0003}
+.toolbar .brand-mini{display:none}.toolbar label{font-size:12px}.toolbar input[type=file]{display:none}.btn{border:1px solid #ffffff44;border-radius:8px;padding:8px 12px;background:#123f75;color:white;font-weight:700;cursor:pointer}.btn:hover{background:#1b579a}.btn.alt{background:white;color:#123f75}.field{background:#fff;color:#123f75;border-radius:7px;border:0;padding:7px 9px;font-weight:700}.tog{display:flex;gap:6px;align-items:center;font-size:12px}
+#app{padding:14px}.dashboard{max-width:1536px;margin:auto;background:white;border:4px solid #0b356a;border-radius:4px;box-shadow:0 6px 24px #17406c22;overflow:hidden}
+.head{height:64px;background:linear-gradient(90deg,#0a3d78,#062c60);color:#fff;display:grid;grid-template-columns:220px 1fr 220px;align-items:center;padding:0 18px;font-family:'Segoe UI',Arial,Helvetica,sans-serif}
+.logo{visibility:hidden;font-size:0}.logo small{display:none}.title{text-align:center;font-size:28px;font-weight:900;line-height:1.05}.title small{font-size:13px;color:#ffe400;display:block;margin-top:3px}.tag{text-align:right;font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-style:italic;font-size:18px;font-weight:600;color:#f7d791}
+.main{padding:4px 6px 10px;display:grid;grid-template-columns:410px 1fr 440px;gap:6px;background:#fff}
+.panel{border:1px solid #b9cfea;border-radius:5px;overflow:hidden;background:white}.ph{background:linear-gradient(#0b3a75,#082f62);color:white;font-weight:900;padding:7px 12px;font-size:16px}.ph.blue{color:#fff}.pbody{padding:10px}.kpi-big{font-size:48px;color:#063f1c;font-weight:900;letter-spacing:1px;text-align:center}.kpi-label{text-align:center;color:#0b2aff;font-weight:800;font-size:15px}.delta{text-align:center;font-weight:800;margin:4px 0}.up{color:#0a8a42}.down{color:#e51616}.progress{height:20px;border-radius:12px;background:#dce2e8;overflow:hidden;margin:9px 6px}.progress>i{display:block;height:100%;background:linear-gradient(90deg,#0ca33c,#08712f)}.targetline{display:flex;justify-content:space-between;align-items:center;font-weight:900;font-size:16px}.targetline b{font-size:28px;color:#0b5f2f}.danger{color:#ed1d19;font-weight:900}.good{color:#118038;font-weight:900}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}.mini{border:1px solid #d2e0f2;border-radius:6px;min-height:82px;padding:10px;display:flex;align-items:center;gap:10px}.ico{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:white;font-size:23px;font-weight:900}.ico.orange{background:#ff6817}.ico.green{background:#07893d}.ico.blue{background:#1264e5}.ico.purple{background:#673ee2}.mini .v{font-size:26px;color:#1133d8;font-weight:900}.mini .l{font-size:12px;color:#17319e;font-weight:800}
+.stats{margin-top:6px;border:1px solid #d3e1f3;border-radius:5px;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}.stats div{padding:5px 10px;border-bottom:1px solid #e1e9f5;font-size:12px;display:flex;justify-content:space-between;gap:6px}.stats div:nth-child(odd){border-right:1px solid #e1e9f5}.stats b{color:#0b2cd4}
+table{border-collapse:collapse;width:100%;font-size:13px}th{background:#07356d;color:white;padding:7px 5px;border-right:1px solid #ffffff55;font-weight:800}td{padding:7px 6px;border:1px solid #cbd9ea;text-align:center;font-weight:700}td:first-child{text-align:left}.totalrow td{background:#082f62;color:white;font-weight:900}.fb{color:#064fe2}.live{color:#ef1212}.zalo{color:#087e38}.web{color:#ff6500}.unalloc td{background:#fff0be;color:#4d4d4d;font-style:italic}
+.channel-table td{height:54px;font-size:14px}.source{display:flex;align-items:center;gap:8px;font-weight:900}.badge{width:33px;height:33px;border-radius:50%;display:inline-grid;place-items:center;color:white;font-weight:900}.bfb{background:#1564e8}.blive{background:#f01d19}.bz{background:#087d38}.bw{background:#ff6a00}
+.donutbox{display:flex;gap:24px;align-items:center;justify-content:center;padding:18px}.donut{width:255px;height:255px;border-radius:50%;position:relative;flex:0 0 auto}.donut:after{content:"";position:absolute;inset:64px;background:white;border-radius:50%}.donutcenter{position:absolute;z-index:2;inset:0;display:grid;place-items:center;text-align:center;font-size:18px;font-weight:900;color:#0928c7;pointer-events:none}.legend{font-size:14px;line-height:1.5;min-width:160px}.leg{margin:11px 0;font-weight:800}.dot{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:8px;vertical-align:-2px}
+.row2{grid-column:1/4;display:grid;grid-template-columns:410px 1fr 1.4fr;gap:6px}.row3{grid-column:1/4;display:grid;grid-template-columns:470px 1fr 1.15fr;gap:6px}.row4{grid-column:1/4;display:grid;grid-template-columns:480px 1fr;gap:6px}.employee td{font-size:12px}.detailwrap{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px}.detail{border:1px solid #cadcf1;border-radius:7px;padding:10px;font-size:12px;min-height:215px}.detail h3{margin:0 0 10px;font-size:15px}.detail p{display:flex;justify-content:space-between;margin:8px 0;gap:8px}.detail strong{font-size:13px}.dlive{border-color:#ffb7b7}.dz{border-color:#a8d5b8}.dweb{border-color:#ffc993}.dfb{border-color:#b7cdf8}
+.statuses{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px}.status{border:1px solid #cbdaf1;border-radius:7px;text-align:center;padding:10px 5px;min-height:145px}.status .si{font-size:30px}.status .sn{font-weight:900;font-size:12px}.status .sv{font-weight:900;font-size:20px;margin-top:6px}.status .sm{font-size:12px;font-weight:800;margin-top:5px}.status-total{margin:0 8px 8px;background:#082f62;color:#fff;display:flex;justify-content:space-around;padding:9px;font-weight:900;border-radius:5px}
+.note{background:linear-gradient(90deg,#fff1bd,#fff9e7);padding:10px 16px;font-size:13px;min-height:112px}.note h3{margin:0 0 6px}.note ul{margin:3px 0 0;padding-left:20px}.note li{margin:4px 0}.footer{grid-column:1/4;display:grid;grid-template-columns:1fr 1.15fr 1fr;align-items:center;border-top:1px solid #c9d9ea;padding:12px 18px 5px}.motto{text-align:center;font-family:'Times New Roman',Times,serif;color:#153363;font-size:22px;line-height:1.35;font-weight:400;letter-spacing:0;word-spacing:0}.month{text-align:center;font-weight:900}.datebox{text-align:right;font-weight:900}.small{font-size:11px;font-weight:600}.compare th,.compare td{font-size:11px;padding:6px 4px}.diffpos{color:#058a37}.diffneg{color:#ed1b24}.hidden{display:none!important}
+
+button,input,select,textarea{font-family:'Segoe UI',Arial,Helvetica,sans-serif}
+@media(max-width:1100px){.main{grid-template-columns:1fr}.row2,.row3,.row4,.footer{grid-column:1;grid-template-columns:1fr}.panel{grid-column:auto}.head{grid-template-columns:1fr}.logo,.tag{display:none}.title{font-size:22px}.donutbox{flex-wrap:wrap}.detailwrap{grid-template-columns:1fr 1fr}.statuses{grid-template-columns:1fr 1fr}.dashboard{border-width:2px}.toolbar{position:static}}
+@media print{.toolbar{display:none}.dashboard{box-shadow:none;border:0}.main{padding:0}}
+
+/* ===== Reference-locked layout: 1536 × 1024 ===== */
+html,body{min-width:100%;background:#edf2f7}
+body{font-family:Arial,'Segoe UI',sans-serif}
+#app{padding:10px 8px 16px;overflow:auto}
+.dashboard{width:1536px;height:1024px;max-width:none;margin:0 auto;background:#fff;border:0;border-radius:0;box-shadow:0 3px 18px #0b2d561c;overflow:hidden}
+.head{height:64px;grid-template-columns:210px 1fr 210px;padding:0 18px;background:linear-gradient(90deg,#063b71 0%,#082b5b 52%,#053768 100%);font-family:Arial,'Segoe UI',sans-serif}
+.logo{display:block;visibility:hidden;width:190px;height:46px}
+.title{font-family:Arial,'Segoe UI',sans-serif;font-size:31px;font-weight:900;letter-spacing:.1px;line-height:1.04;white-space:nowrap}
+.title small{font-family:Arial,'Segoe UI',sans-serif;font-size:14px;color:#fff;margin-top:3px;letter-spacing:.25px}
+.tag{font-family:'Segoe Script','Brush Script MT',cursive;font-size:19px;line-height:1.05;color:#f0cf82;padding-right:8px}
+.main{height:960px;padding:4px 7px 8px;display:grid;grid-template-columns:410px 650px 1fr;grid-template-rows:326px 266px 226px 112px;gap:6px;background:#fff;align-content:start}
+.row2,.row3,.row4{display:contents}
+#overview{grid-column:1;grid-row:1 / span 2}
+#channelsPanel{grid-column:2;grid-row:1}
+#donutPanel{grid-column:3;grid-row:1}
+#adsPanel{grid-column:2;grid-row:2}
+#detailPanel{grid-column:3;grid-row:2}
+#employeePanel{grid-column:1;grid-row:3}
+#statusPanel{grid-column:2;grid-row:3}
+#comparePanel{grid-column:3;grid-row:3}
+#notePanel{grid-column:1;grid-row:4}
+#footerPanel{grid-column:2 / 4;grid-row:4}
+.panel{border:1px solid #b7cce8;border-radius:5px;overflow:hidden;background:white;min-width:0}
+.ph{height:34px;padding:6px 12px;background:linear-gradient(#0a3a74,#082d61);font-family:Arial,'Segoe UI',sans-serif;font-size:16px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbody{padding:9px 10px}
+.kpi-big{font-family:Arial,'Segoe UI',sans-serif;font-size:48px;line-height:1.02;margin:4px 0 2px}
+.kpi-label{font-family:Arial,'Segoe UI',sans-serif;font-size:14px}
+.delta{font-size:14px;margin:4px 0 10px}
+.progress{height:18px;margin:8px 6px 6px}
+.targetline{font-size:15px}.targetline b{font-size:26px}
+.kpi-grid{gap:6px;margin-top:8px}.mini{height:84px;min-height:84px;padding:8px 10px}.ico{width:44px;height:44px;font-size:22px}.mini .v{font-size:26px}.mini .l{font-size:12px}
+.stats{margin-top:7px}.stats div{height:35px;padding:6px 9px;font-size:12px}
+table{font-family:Arial,'Segoe UI',sans-serif;font-size:12px;table-layout:fixed}th{height:31px;padding:6px 4px;font-size:11px}td{height:31px;padding:5px 5px;font-size:12px}
+.channel-table th{font-size:11px}.channel-table td{height:50px;font-size:13px}.source{gap:6px}.badge{width:32px;height:32px;font-size:11px}.blive{font-size:9px}
+#channelsPanel .pbody{height:292px}.donutbox{height:292px;padding:16px 18px;gap:18px}.donut{width:245px;height:245px}.donut:after{inset:62px}.donutcenter{font-size:17px}.legend{font-size:13px;min-width:175px}.leg{margin:10px 0}
+.ads-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-bottom:1px solid #cbd9ea;background:#fff;height:52px}
+.ads-summary .as{display:flex;flex-direction:column;align-items:center;justify-content:center;border-right:1px solid #cbd9ea}.ads-summary .as:last-child{border-right:0}.ads-summary .al{font-size:10px;color:#1533b9;font-weight:800}.ads-summary .av{font-size:18px;color:#1236ce;font-weight:900;margin-top:2px}
+#adsPanel table th,#adsPanel table td{height:29px}.employee td{font-size:11.5px}
+#unallocatedNote{height:24px;padding:4px 9px!important;font-size:11px!important;line-height:16px}
+.detailwrap{height:232px;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px}.detail{min-height:216px;height:216px;padding:9px 9px;font-size:11px}.detail h3{font-size:14px;margin:0 0 8px}.detail p{margin:6px 0}.detail strong{font-size:11.5px}
+#employeePanel table th,#employeePanel table td{height:31px}.statuses{height:160px;grid-template-columns:repeat(5,1fr);gap:3px;padding:7px}.status{min-height:146px;height:146px;padding:7px 3px}.status .si{font-size:25px}.status .sn{font-size:10px}.status .sv{font-size:17px}.status .sm{font-size:11px}.status-total{height:30px;margin:0 7px 6px;padding:6px 8px;font-size:12px}
+.compare th,.compare td{font-size:9.5px;padding:4px 3px;height:30px}.compare th{line-height:1.05}
+.note{height:110px;min-height:110px;padding:8px 13px;font-size:11.5px}.note h3{font-size:15px}.note li{margin:3px 0}
+#footerPanel .footer{height:110px;grid-template-columns:1.2fr .95fr .65fr;padding:10px 18px 8px;border-top:0}.motto{font-family:'Times New Roman',Times,serif;font-size:21px;line-height:1.35;letter-spacing:0;word-spacing:0}.month{font-size:13px}.datebox{font-size:13px}.rdate{font-weight:900}
+.toolbar{font-family:Arial,'Segoe UI',sans-serif}
+button,input,select,textarea{font-family:Arial,'Segoe UI',sans-serif!important}
+@media(max-width:1550px){#app{padding-left:0;padding-right:0}.dashboard{transform-origin:top left}}
+
+
+/* ===== Visual polish v3 — locked to supplied dashboard reference ===== */
+:root{
+  --navy:#07356f; --navy-deep:#062b5e; --blue:#064fe2; --red:#ef1717;
+  --green:#087f39; --orange:#ff6b00; --purple:#6038e8; --ink:#0f1f36;
+  --line:#bfd2eb; --line-soft:#dce6f2; --surface:#ffffff; --pale:#f7fbff;
+}
+html,body,button,input,select,textarea{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}
+body{color:#0e1d31;background:#eaf0f6;font-weight:500}
+.toolbar{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;background:#092c59;padding:8px 12px;gap:8px;box-shadow:0 3px 12px #00152f2e}
+.toolbar .btn,.toolbar .field{font-size:13px;font-weight:700;border-radius:6px}
+.dashboard{background:#fff}
+.head{background:linear-gradient(90deg,#07396e 0%,#062f61 52%,#07396e 100%);font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}
+.title{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;letter-spacing:.15px;font-stretch:condensed}
+.title small{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:700;letter-spacing:.35px;color:#fff}
+.tag{font-family:'Great Vibes','Segoe Script','Brush Script MT',cursive!important;font-weight:400;font-size:23px;line-height:.92;color:#f2d08c;transform:rotate(-2deg);padding-right:8px}
+.panel{border-color:#b9cee8;border-radius:7px;box-shadow:inset 0 0 0 1px #eef4fa;}
+.ph{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;letter-spacing:.15px;background:linear-gradient(180deg,#0b3d79 0%,#062f63 100%);font-size:16px;border-bottom:1px solid #b8cdea}
+.pbody{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}
+.kpi-label{font-weight:800;letter-spacing:.12px;color:#0633d7}
+.kpi-big{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;letter-spacing:.2px;color:#063f1e;font-variant-numeric:tabular-nums lining-nums}
+.delta,.targetline,.danger,.good{font-weight:700}
+.progress{box-shadow:inset 0 1px 2px #62758a38;background:#dce2e8}
+.progress>i{background:linear-gradient(90deg,#0baa3d,#087130)}
+.mini{background:#fff;border-color:#d7e3f1;box-shadow:0 1px 2px #092b5610;padding:8px 9px}
+.ico{width:43px;height:43px;min-width:43px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 -1px 0 #0000001a}
+.ico svg{width:25px;height:25px;stroke:#fff;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.mini .l{font-weight:800;letter-spacing:.15px;color:#1438c0}
+.mini .v{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;letter-spacing:.1px;color:#1534d2;font-variant-numeric:tabular-nums}
+.stats{border-color:#d8e3ef;background:#fff}
+.stats div{font-weight:600;color:#0e2c7f}.stats b{font-weight:800;color:#0b37d0;font-variant-numeric:tabular-nums}
+table{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-variant-numeric:tabular-nums lining-nums;color:#101d2d}
+th{font-weight:800;letter-spacing:.05px;background:#07356d;border-right:1px solid #ffffff5c}
+td{font-weight:650;border-color:#cbd9ea;background:#fff}
+.totalrow td{background:#07356d;color:#fff;font-weight:800}
+.channel-table td{font-weight:700}.channel-table td:not(:first-child){font-size:14px}
+.source{font-weight:800}
+.badge{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;box-shadow:0 1px 2px #00000012}
+.bfb{font-family:Arial,sans-serif!important;font-size:22px;text-transform:lowercase}.blive{font-size:9px;line-height:.9}.bz{font-size:13px}.bw{font-size:19px}
+.donut{box-shadow:0 0 0 1px #e6edf5;background:transparent!important}.donut:after{content:none!important;display:none!important}
+.donut canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;border-radius:50%}
+.donut .donutcenter{top:0;left:0;right:0;bottom:0}
+.donutcenter{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;font-variant-numeric:tabular-nums}
+.legend{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:650}.leg{font-weight:700}
+.ads-summary{background:#fbfdff;border-color:#cbd9ea}.ads-summary .as{border-color:#d8e3ef}.ads-summary .al{font-weight:800;letter-spacing:.05px}.ads-summary .av{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;font-variant-numeric:tabular-nums}
+.employee td{font-weight:650}.employee td:first-child{font-weight:800}.unalloc td{font-weight:650;background:#fff4c9;color:#3f3f3f}
+.detail{background:#fff;box-shadow:0 1px 2px #0a315812}.detail h3{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;letter-spacing:.08px}.detail p{font-weight:550}.detail strong{font-weight:800;font-variant-numeric:tabular-nums}
+.status{position:relative;background:#fff;box-shadow:0 1px 2px #0b325b0f;border-width:1px}.status .si{height:38px;display:grid;place-items:center}.status .sn{font-weight:800;letter-spacing:.1px}.status .sv{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800;font-variant-numeric:tabular-nums}.status .sm{font-weight:650;font-variant-numeric:tabular-nums}
+.status-glyph{position:relative;display:inline-block;width:31px;height:31px;color:currentColor}
+.status-glyph:before,.status-glyph:after{content:"";position:absolute;box-sizing:border-box}
+.s-box{color:#ff5b00;border-color:#ffb58d}.s-box .status-glyph:before{left:5px;top:6px;width:21px;height:19px;border:2px solid currentColor;border-radius:2px}.s-box .status-glyph:after{left:5px;top:6px;width:21px;height:10px;border-top:2px solid currentColor;transform:skewY(-26deg);transform-origin:left top}
+.s-transfer{color:#0b8a3b;border-color:#9dd8b5}.s-transfer .status-glyph:before{left:2px;top:10px;width:21px;height:12px;border:2px solid currentColor;border-radius:2px}.s-transfer .status-glyph:after{right:1px;top:13px;width:10px;height:9px;border:2px solid currentColor;border-left:0;border-radius:0 2px 2px 0;box-shadow:-17px 10px 0 -3px currentColor,-2px 10px 0 -3px currentColor}
+.s-check{color:#1769e8;border-color:#9bc0f5}.s-check .status-glyph:before{left:3px;top:3px;width:25px;height:25px;border:2px solid currentColor;border-radius:50%}.s-check .status-glyph:after{left:9px;top:10px;width:12px;height:7px;border-left:3px solid currentColor;border-bottom:3px solid currentColor;transform:rotate(-45deg)}
+.s-truck{color:#5d35e6;border-color:#b7a7ef}.s-truck .status-glyph:before{left:2px;top:9px;width:18px;height:13px;border:2px solid currentColor;border-radius:2px}.s-truck .status-glyph:after{right:0;top:12px;width:11px;height:10px;border:2px solid currentColor;border-left:0;border-radius:0 2px 2px 0;box-shadow:-19px 11px 0 -4px currentColor,-2px 11px 0 -4px currentColor}
+.s-new{color:#ef2b8f;border-color:#f4aed0}.s-new .status-glyph:before{left:6px;top:3px;width:20px;height:26px;border:2px solid currentColor;border-radius:2px}.s-new .status-glyph:after{content:"NEW";left:7px;top:11px;width:auto;height:auto;font:800 8px 'Roboto Condensed',sans-serif;color:currentColor}
+.s-return{color:#6a37df;border-color:#bcaaf0}.s-return .status-glyph:before{left:5px;top:8px;width:21px;height:17px;border:2px solid currentColor;border-radius:50%}.s-return .status-glyph:after{left:2px;top:5px;width:9px;height:9px;border-left:3px solid currentColor;border-top:3px solid currentColor;transform:rotate(-45deg)}
+.s-cancel{color:#e71f3c;border-color:#f2a7b2}.s-cancel .status-glyph:before,.s-cancel .status-glyph:after{left:14px;top:4px;width:3px;height:24px;background:currentColor;border-radius:2px}.s-cancel .status-glyph:before{transform:rotate(45deg)}.s-cancel .status-glyph:after{transform:rotate(-45deg)}
+.status-total{font-weight:800;background:#07356d;border-radius:4px}
+.compare th,.compare td{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-variant-numeric:tabular-nums}.compare td{font-weight:700}
+.note{background:linear-gradient(90deg,#fff3c9 0%,#fff9e8 100%);font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}.note h3{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:800}.note li{font-weight:550}
+.footer{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}.motto{font-family:'Times New Roman',Times,serif!important;font-weight:400;letter-spacing:0!important;word-spacing:0!important;color:#183764;text-rendering:optimizeLegibility;font-kerning:normal}.month,.datebox{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important;font-weight:700;color:#16315c}.month span,.datebox span{font-variant-numeric:tabular-nums}
+.footer-icon{display:inline-block;width:24px;height:24px;margin-right:7px;vertical-align:-6px;position:relative}
+.footer-target{border:4px solid #e73232;border-radius:50%;box-shadow:inset 0 0 0 4px #fff,inset 0 0 0 8px #1b74d9}.footer-target:after{content:"";position:absolute;width:13px;height:3px;background:#f2a118;right:-8px;top:1px;transform:rotate(-45deg);border-radius:2px}
+.footer-calendar{border:3px solid #12396a;border-radius:3px}.footer-calendar:before{content:"";position:absolute;left:2px;right:2px;top:5px;border-top:3px solid #12396a}.footer-calendar:after{content:"";position:absolute;width:3px;height:3px;background:#12396a;left:4px;top:11px;box-shadow:6px 0 #12396a,12px 0 #12396a,0 6px #12396a,6px 6px #12396a,12px 6px #12396a}
+.small{font-family:'Roboto Condensed','Arial Narrow',Arial,sans-serif!important}
+
+.file-status{font-size:12px;font-weight:700;padding:6px 9px;border-radius:7px;background:#ffffff18;border:1px solid #ffffff33;color:#dfefff;white-space:nowrap;max-width:245px;overflow:hidden;text-overflow:ellipsis}
+.file-status.ok{background:#0b7d3b;color:#fff;border-color:#36c97a}
+.file-status.err{background:#9e1b1b;color:#fff;border-color:#ff7c7c}
+.file-status.loading{background:#8b6500;color:#fff;border-color:#ffd45c}
+
+@media(max-width:1550px){.dashboard{transform-origin:top left}}
+
+
+/* ===== Revenue Command integration ===== */
+.toolbar a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.btn:disabled{opacity:.6;cursor:wait}
+#dataStatus{max-width:560px}
+#fit{position:relative;margin:0 auto}
+#fit .dashboard{margin:0;transform-origin:top left}
+.dashboard.isLoading{opacity:.55;transition:opacity .2s}
+@media(max-width:720px){.toolbar{position:static}.toolbar label{display:flex;align-items:center;gap:6px}#dataStatus{max-width:100%;white-space:normal}}
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <a class="btn" id="backBtn" href="./">← Dashboard</a>
+  <label>Ngày <input id="reportDate" class="field" type="date"></label>
+  <label>Target ngày <input id="dayTarget" class="field" style="width:130px" type="number" min="0" step="1000000" placeholder="VD 100000000"></label>
+  <label>Target tháng <input id="monthTarget" class="field" style="width:150px" type="number" min="0" step="1000000" placeholder="VD 3200000000"></label>
+  <span id="targetStatus" class="file-status" title="Target được lưu trong trình duyệt này theo từng tháng">💾 Target tự lưu</span>
+  <button class="btn" id="reloadBtn" type="button">↻ Làm mới</button>
+  <button class="btn alt" id="exportBtn" type="button">⬇ Xuất PNG</button>
+  <span id="dataStatus" class="file-status">Đang chờ số liệu…</span>
+</div>
+<div id="app">
+<div id="fit">
+<div class="dashboard" id="dashboard">
+  <header class="head">
+    <div class="logo" aria-hidden="true"></div>
+    <div class="title">BÁO CÁO KINH DOANH SALE ONLINE – NGÀY <span id="hdrDate">—</span><small>THAY ĐỔI TƯ DUY – THAY ĐỔI KẾT QUẢ</small></div>
+    <div class="tag">Good Things<br>Take Time ♡</div>
+  </header>
+  <main class="main">
+    <section class="panel" id="overview"><div class="ph">1. TỔNG QUAN NGÀY <span class="rdate">—</span></div><div class="pbody">
+      <div class="kpi-label">DOANH THU THỰC TẾ</div><div class="kpi-big" id="revenue">—</div>
+      <div class="delta" id="revDelta"></div>
+      <div class="kpi-label" style="text-align:left;margin-top:12px">HOÀN THÀNH TARGET NGÀY</div><div class="progress"><i id="progressBar" style="width:0%"></i></div>
+      <div class="targetline"><span id="targetFormula">—</span><b id="targetPct">—</b></div><div id="targetGap">&nbsp;</div>
+      <div class="kpi-grid">
+        <div class="mini"><span class="ico orange"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.1 9.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.5L21 7H6"/><circle cx="10" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/></svg></span><div><div class="l">SỐ ĐƠN</div><div class="v" id="ordersCount">—</div><div class="small" id="orderDelta"></div></div></div>
+        <div class="mini"><span class="ico green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1.5 12h-15L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><div class="l">AOV TOÀN KÊNH</div><div class="v" id="aov">—</div><div class="small" id="aovDelta"></div></div></div>
+        <div class="mini"><span class="ico blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v6A3.5 3.5 0 0 1 16.5 15H11l-4.5 4v-4H7.5A3.5 3.5 0 0 1 4 11.5v-6Z"/><path d="M8 8h.01M12 8h.01M16 8h.01"/></svg></span><div><div class="l">TỔNG DATA / MESS</div><div class="v" id="mess">—</div><div class="small" id="messBreak"></div></div></div>
+        <div class="mini"><span class="ico purple"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12 21 3M17 3h4v4"/></svg></span><div><div class="l">TỶ LỆ CHỐT</div><div class="v" id="overallCR">—</div><div class="small" id="overallCRFormula"></div></div></div>
+      </div>
+      <div class="stats" id="overviewStats"></div>
+    </div></section>
+
+    <section class="panel" id="channelsPanel"><div class="ph">2. KẾT QUẢ THEO KÊNH</div><div class="pbody" style="padding:0"><table class="channel-table"><thead><tr><th>KÊNH</th><th>DATA / KH</th><th>SỐ ĐƠN</th><th>DOANH THU</th><th>CR</th><th>AOV</th><th>CƠ CẤU DT</th></tr></thead><tbody id="channelRows"></tbody></table></div></section>
+
+    <section class="panel" id="donutPanel"><div class="ph">3. CƠ CẤU DOANH THU THEO KÊNH</div><div class="donutbox"><div class="donut" id="donut"><canvas id="donutCanvas" width="735" height="735" aria-hidden="true"></canvas><div class="donutcenter"><span><b id="donutRevenue">—</b><br>100%</span></div></div><div class="legend" id="legend"></div></div></section>
+
+    <div class="row2">
+      <section class="panel" id="adsPanel"><div class="ph">4. FACEBOOK ADS – HIỆU SUẤT THEO NHÂN VIÊN</div><div class="pbody" style="padding:0"><div class="ads-summary" id="adsSummary"></div><table class="employee"><thead><tr><th>NHÂN VIÊN</th><th>DATA ADS</th><th>SỐ ĐƠN</th><th>DOANH THU</th><th>CR CHỐT</th><th>AOV</th></tr></thead><tbody id="adsEmployeeRows"></tbody></table><div id="unallocatedNote" class="small" style="color:red;padding:7px 10px;font-weight:800"></div></div></section>
+      <section class="panel" id="detailPanel"><div class="ph">5. KẾT QUẢ THEO KÊNH CHI TIẾT</div><div class="detailwrap" id="detailCards"></div></section>
+    </div>
+
+    <div class="row3">
+      <section class="panel" id="employeePanel"><div class="ph">6. HIỆU SUẤT NHÂN VIÊN (TỔNG HỢP)</div><div class="pbody" style="padding:0"><table class="employee"><thead><tr><th>NHÂN VIÊN</th><th>TỔNG DATA</th><th>TỔNG ĐƠN</th><th>DOANH THU</th><th>AOV</th><th>CR CHỐT</th></tr></thead><tbody id="employeeRows"></tbody></table></div></section>
+      <section class="panel" id="statusPanel"><div class="ph">7. TÌNH TRẠNG ĐƠN HÀNG <span class="small">(THEO PANCAKE – <span id="statusHeaderCount">0</span> ĐƠN)</span></div><div class="statuses" id="statusCards"></div><div class="status-total"><span>TỔNG <b id="statusCount">0</b> đơn</span><span id="statusRevenue">—</span><span>100%</span></div></section>
+      <section class="panel" id="comparePanel"><div class="ph">8. <span id="compareTitle">SO SÁNH VỚI NGÀY TRƯỚC</span></div><div class="pbody" style="padding:0"><table class="compare"><thead><tr><th>KÊNH</th><th>DT NGÀY TRƯỚC</th><th>DT HIỆN TẠI</th><th>+/- (Đ)</th><th>+/- (%)</th><th>ĐƠN TRƯỚC</th><th>ĐƠN HIỆN TẠI</th><th>+/- ĐƠN</th></tr></thead><tbody id="compareRows"></tbody></table></div></section>
+    </div>
+
+    <div class="row4">
+      <section class="panel" id="notePanel"><div class="note"><h3>⚠️ GHI CHÚ:</h3><ul id="notes"></ul></div></section>
+      <section class="panel" id="footerPanel"><div class="footer"><div class="motto">Kỷ luật hôm nay<br>Tạo nên kết quả ngày mai</div><div class="month"><span class="footer-icon footer-target" aria-hidden="true"></span>MỤC TIÊU THÁNG <span id="monthLabel">—</span><br><span style="font-size:18px">TỐI THIỂU <span id="monthTargetLabel">—</span></span></div><div class="datebox"><span class="footer-icon footer-calendar" aria-hidden="true"></span>NGÀY BÁO CÁO:<br><span class="rdate">—</span></div></div></section>
+    </div>
+  </main>
+</div>
+</div>
+</div>
+<script>
+// Seven.AM · Báo cáo ngày. Layout and styling follow the "báo cáo ngày.html"
+// dashboard; the numbers come from the Revenue Command dashboard that opened
+// this tab (window.opener.sevenamDailyDashboard), not from uploaded files.
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(Number(n||0)).toLocaleString('vi-VN')+'đ';
+const pct=n=>(Number(n||0)*100).toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';
+const num=x=>{const v=Number(x);return Number.isFinite(v)?v:0};
+const key=s=>String(s??'').trim().toLowerCase().replace(/[đĐ]/g,'d').normalize('NFD').replace(/[̀-ͯ]/g,'');
+const staffKey=s=>String(s??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const displayDate=s=>{if(!s)return '';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`};
+const vnToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const colors={'Facebook Ads':'#075de9','Livestream':'#e51111','Zalo':'#07833b','Website':'#ff7100'};
+const classMap={'Facebook Ads':'fb','Livestream':'live','Zalo':'zalo','Website':'web'};
+const iconMap={'Facebook Ads':'f','Livestream':'LIVE','Zalo':'Z','Website':'◎'};
+const CHANNELS=['Facebook Ads','Livestream','Zalo','Website'];
+const ADS_ORDER=['Hương SOL','Diễm SOL','Thu SOL'];
+const EMP_ORDER=['Hương SOL','Diễm SOL','Thu SOL','Linh Live'];
+let MODEL=null,loadSeq=0;
+
+function provider(){
+  try{if(window.opener&&!window.opener.closed&&window.opener.sevenamDailyDashboard)return window.opener.sevenamDailyDashboard}catch{}
+  try{if(window.parent!==window&&window.parent.sevenamDailyDashboard)return window.parent.sevenamDailyDashboard}catch{}
+  return null
+}
+function setStatus(text,state=''){const el=$('dataStatus');el.textContent=text;el.title=text;el.className='file-status'+(state?' '+state:'')}
+
+/* ===== Target ngày / tháng: lưu trong trình duyệt theo từng tháng ===== */
+const TARGET_KEY='sevenam_bc_targets_v1';
+function loadTargetStore(){try{const s=JSON.parse(localStorage.getItem(TARGET_KEY)||'{}');return s&&typeof s==='object'?s:{}}catch{return {}}}
+function saveTargetStore(s){try{localStorage.setItem(TARGET_KEY,JSON.stringify(s));return true}catch{return false}}
+let targetFlash=null,targetMonth='';
+function saveTargets(){
+  const day=num($('dayTarget').value),month=num($('monthTarget').value);
+  if(day<=0&&month<=0)return;
+  const s=loadTargetStore(),mk=$('reportDate').value.slice(0,7),t={day,month};
+  s.last=t;if(mk){s.byMonth=s.byMonth||{};s.byMonth[mk]=t}
+  const ok=saveTargetStore(s),el=$('targetStatus');
+  el.textContent=ok?`✓ Đã lưu target${mk?' tháng '+mk.slice(5,7)+'/'+mk.slice(0,4):''}`:'⚠ Trình duyệt chặn lưu target';
+  el.className='file-status '+(ok?'ok':'err');
+  clearTimeout(targetFlash);targetFlash=setTimeout(()=>{el.textContent='💾 Target tự lưu';el.className='file-status'},2200)
+}
+// Saved targets of that month first, else the last ones typed, else the
+// monthly target configured on the main dashboard (÷ days for the day target).
+function syncTargets(dk){
+  const mk=String(dk||'').slice(0,7);if(!mk||mk===targetMonth)return;
+  targetMonth=mk;
+  const s=loadTargetStore(),t=(s.byMonth&&s.byMonth[mk])||s.last;
+  let day=num(t?.day),month=num(t?.month);
+  if(!day||!month){try{const d=provider()?.targets?.(dk);if(!day)day=num(d?.day);if(!month)month=num(d?.month)}catch{}}
+  if(day)$('dayTarget').value=day;
+  if(month)$('monthTarget').value=month
+}
+
+/* ===== Biểu đồ tròn vẽ bằng canvas (html2canvas không hỗ trợ conic-gradient) ===== */
+function drawDonut(channels){
+  const cv=$('donutCanvas');if(!cv||!cv.getContext)return;
+  const css=(cv.parentElement&&cv.parentElement.clientWidth)||245,S=3,size=Math.round(css*S);
+  if(cv.width!==size){cv.width=size;cv.height=size}
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,size,size);
+  const c=size/2,R=size/2,r=R*(1-62/122.5),TAU=Math.PI*2;
+  const ring=(a0,a1,color)=>{ctx.beginPath();ctx.arc(c,c,R,a0,a1);ctx.arc(c,c,r,a1,a0,true);ctx.closePath();ctx.fillStyle=color;ctx.fill()};
+  ring(0,TAU,'#dde4ee');
+  const segs=channels.filter(x=>x.share>0);let a=-Math.PI/2;
+  segs.forEach((x,i)=>{const end=a+Math.min(x.share,1)*TAU;ring(a,i<segs.length-1?end+0.004:end,colors[x.name]);a=end});
+  ctx.beginPath();ctx.arc(c,c,r,0,TAU);ctx.lineWidth=S;ctx.strokeStyle='#edf2f7';ctx.stroke()
+}
+const byOrder=(list,order)=>order.map(n=>list.find(x=>staffKey(x.name)===staffKey(n))||{name:n,data:null,orders:0,revenue:0,cr:null});
+const crText=v=>v==null?'–':pct(v);
+const delta=(cur,prev,money)=>{
+  const diff=cur-prev,up=diff>=0,rate=prev?(cur/prev-1)*100:null;
+  return `<span class="${up?'up':'down'}">${money?`${up?'▲':'▼'} ${up?'+':''}${fmt(diff)}`:`${up?'+':''}${diff} đơn`}${money?` (${rate==null?'–':(rate>=0?'+':'')+rate.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2})+'%'})`:''}</span>`
+};
+
+function render(){
+  const m=MODEL;if(!m)return;
+  const d=m.date,dd=displayDate(d),cur=m.day,prev=m.prev,ps=displayDate(prev.date).slice(0,5);
+  const dayTarget=num($('dayTarget').value),monthTarget=num($('monthTarget').value);
+  document.querySelectorAll('.rdate').forEach(x=>x.textContent=dd);
+  $('hdrDate').textContent=dd;$('monthLabel').textContent=d.slice(5,7)+'/'+d.slice(0,4);
+  $('monthTargetLabel').textContent=monthTarget?fmt(monthTarget):'—';
+  document.title=`Báo cáo ngày ${dd} · Seven.AM`;
+
+  // 1. Tổng quan
+  const total=cur.total.revenue,orders=cur.total.orders,aov=orders?total/orders:0,targetPct=dayTarget?total/dayTarget:0;
+  $('revenue').textContent=fmt(total);
+  $('ordersCount').innerHTML=orders.toLocaleString('vi-VN')+' <span class="small">đơn</span>';
+  $('aov').textContent=fmt(aov);
+  $('progressBar').style.width=Math.min(targetPct*100,100)+'%';
+  $('targetPct').textContent=dayTarget?pct(targetPct):'–';
+  $('targetFormula').textContent=fmt(total)+' / '+(dayTarget?fmt(dayTarget):'chưa nhập target');
+  const gap=total-dayTarget,tg=$('targetGap');
+  if(!dayTarget){tg.className='';tg.textContent='Nhập Target ngày ở thanh trên cùng'}
+  else{tg.className=gap>=0?'good':'danger';tg.textContent=gap>=0?'VƯỢT: +'+fmt(gap):'CÒN THIẾU: '+fmt(-gap)}
+  const dataAds=num(cur.data.ads),dataLive=num(cur.data.live),mess=dataAds+dataLive;
+  $('mess').innerHTML=mess.toLocaleString('vi-VN')+' <span class="small">Mess</span>';
+  $('messBreak').textContent=`(${dataAds.toLocaleString('vi-VN')} Ads + ${dataLive.toLocaleString('vi-VN')} Live)`;
+  $('overallCR').textContent=mess?pct(orders/mess):'–';
+  $('overallCRFormula').textContent=`${orders} / ${mess} Data`;
+  const pv=prev.total,pa=pv.orders?pv.revenue/pv.orders:0;
+  $('revDelta').innerHTML=`vs ${ps}: ${delta(total,pv.revenue,true)}`;
+  $('orderDelta').innerHTML=`vs ${ps}: ${delta(orders,pv.orders,false)}`;
+  $('aovDelta').innerHTML=`vs ${ps}: ${delta(aov,pa,true)}`;
+
+  // 2. Kết quả theo kênh · 3. Cơ cấu doanh thu
+  const crOf={'Facebook Ads':cur.cr.ads,'Livestream':cur.cr.live,'Zalo':cur.cr.zalo,'Website':null};
+  const dataOf={'Facebook Ads':dataAds,'Livestream':dataLive,'Zalo':num(cur.data.zalo),'Website':0};
+  const channels=CHANNELS.map(n=>{const o=cur.channels[n]||{orders:0,revenue:0};return {name:n,orders:o.orders,revenue:o.revenue,data:dataOf[n],cr:crOf[n],aov:o.orders?o.revenue/o.orders:0,share:total?o.revenue/total:0}});
+  $('channelRows').innerHTML=channels.map(c=>`<tr><td><span class="source ${classMap[c.name]}"><span class="badge ${c.name==='Facebook Ads'?'bfb':c.name==='Livestream'?'blive':c.name==='Zalo'?'bz':'bw'}">${iconMap[c.name]}</span>${c.name}</span></td><td>${c.data?c.data.toLocaleString('vi-VN'):'–'}</td><td>${c.orders}</td><td class="${classMap[c.name]}">${fmt(c.revenue)}</td><td>${crText(c.cr)}</td><td>${c.aov?fmt(c.aov):'–'}</td><td>${pct(c.share)}</td></tr>`).join('')
+    +`<tr class="totalrow"><td>TỔNG</td><td>${mess.toLocaleString('vi-VN')}</td><td>${orders}</td><td>${fmt(total)}</td><td>–</td><td>${fmt(aov)}</td><td>100%</td></tr>`;
+  drawDonut(channels);
+  $('donutRevenue').textContent=fmt(total);
+  $('legend').innerHTML=channels.map(c=>`<div class="leg"><span class="dot" style="background:${colors[c.name]}"></span><span class="${classMap[c.name]}">${c.name}</span><br><span style="margin-left:22px">${fmt(c.revenue)} (${pct(c.share)})</span></div>`).join('');
+  $('overviewStats').innerHTML=`<div>Data Facebook Ads <b>${dataAds}</b></div><div>CR Ads <b>${crText(cur.cr.ads)}</b></div><div>Data Livestream <b>${dataLive}</b></div><div>CR Live <b>${crText(cur.cr.live)}</b></div><div>KH QT Zalo <b>${num(cur.data.zalo)}</b></div><div>CR Zalo <b>${crText(cur.cr.zalo)}</b></div><div>Số đơn Website <b>${channels[3].orders}</b></div><div>AOV toàn kênh <b>${fmt(aov)}</b></div>`;
+
+  // 4. Facebook Ads theo nhân viên
+  const ads=channels[0],sales=byOrder(cur.adsStaff,ADS_ORDER);
+  const rest=cur.adsStaff.filter(x=>!ADS_ORDER.some(n=>staffKey(n)===staffKey(x.name)));
+  const restData=rest.reduce((s,x)=>s+num(x.data),0),restOrders=rest.reduce((s,x)=>s+num(x.orders),0),restRev=rest.reduce((s,x)=>s+num(x.revenue),0);
+  $('adsEmployeeRows').innerHTML=sales.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td>${e.data==null?'–':num(e.data)}</td><td>${num(e.orders)}</td><td>${fmt(e.revenue)}</td><td>${crText(e.cr)}</td><td>${e.orders?fmt(e.revenue/e.orders):'–'}</td></tr>`).join('')
+    +`<tr class="unalloc"><td>Khác / chưa gán</td><td>${restData||'–'}</td><td>${restOrders||'–'}</td><td>${restRev?fmt(restRev):'–'}</td><td>–</td><td>–</td></tr>`
+    +`<tr class="totalrow"><td>TỔNG</td><td>${dataAds}</td><td>${ads.orders}</td><td>${fmt(ads.revenue)}</td><td>${crText(cur.cr.ads)}</td><td>${ads.aov?fmt(ads.aov):'–'}</td></tr>`;
+  const missingAds=cur.missing.find(x=>x.startsWith('Data Ads'));
+  const un=$('unallocatedNote');
+  un.textContent=missingAds?`* Chưa nhập ${missingAds}.`:'* Data Ads do từng Sale nhập · CR = Đơn Ads / Data Ads.';
+  un.style.color=missingAds?'red':'#16315c';
+  $('adsSummary').innerHTML=`<div class="as"><span class="al">DATA ADS</span><span class="av">${dataAds}</span></div><div class="as"><span class="al">SỐ ĐƠN ADS</span><span class="av">${ads.orders}</span></div><div class="as"><span class="al">DOANH THU ADS</span><span class="av">${fmt(ads.revenue)}</span></div><div class="as"><span class="al">CR ADS TOÀN KÊNH</span><span class="av">${crText(cur.cr.ads)}</span></div><div class="as"><span class="al">AOV ADS</span><span class="av">${ads.aov?fmt(ads.aov):'–'}</span></div>`;
+
+  // 5. Chi tiết kênh
+  const detail=(c,title,cls,lines)=>`<div class="detail ${cls}"><h3 class="${c}">${title}</h3>${lines.map(([k,v,cl])=>`<p><span>${k}</span><strong class="${cl||''}">${v}</strong></p>`).join('')}</div>`;
+  $('detailCards').innerHTML=
+    detail('live','🎥 LIVESTREAM','dlive',[['Data Live:',cur.data.live==null?'–':dataLive,'live'],['Số đơn:',channels[1].orders,'live'],['Doanh thu:',fmt(channels[1].revenue),'live'],['CR:',crText(cur.cr.live),'live'],['AOV chuẩn:',fmt(channels[1].aov),'live']])
+    +detail('zalo','ⓩ ZALO','dz',[['Người trực:',esc(cur.zalo.staff||'–'),'zalo'],['KH quan tâm:',cur.data.zalo==null?'–':num(cur.data.zalo),'zalo'],['Số đơn:',channels[2].orders,'zalo'],['Doanh thu:',fmt(channels[2].revenue),'zalo'],['CR:',crText(cur.cr.zalo),'zalo'],['AOV:',fmt(channels[2].aov),'zalo']])
+    +detail('web','🌐 WEBSITE','dweb',[['NV trực:',esc(cur.web.staff||'–'),'web'],['Số đơn:',channels[3].orders,'web'],['Doanh thu:',fmt(channels[3].revenue),'web'],['AOV chuẩn:',fmt(channels[3].aov),'web']])
+    +detail('fb','ⓕ FACEBOOK ADS','dfb',[['Data Ads:',dataAds,'fb'],['Số đơn:',channels[0].orders,'fb'],['Doanh thu:',fmt(channels[0].revenue),'fb'],['CR:',crText(cur.cr.ads),'fb'],['AOV chuẩn:',fmt(channels[0].aov),'fb']]);
+
+  // 6. Hiệu suất nhân viên (tổng hợp mọi kênh)
+  $('employeeRows').innerHTML=byOrder(cur.employees,EMP_ORDER).map(e=>{
+    const isLive=staffKey(e.name)===staffKey('Linh Live');
+    return `<tr><td class="${isLive?'live':staffKey(e.name)===staffKey('Hương SOL')?'fb':''}"><b>${esc(e.name)}</b></td><td>${e.data==null?'–':num(e.data)}</td><td>${num(e.orders)}</td><td>${fmt(e.revenue)}</td><td>${e.orders?fmt(e.revenue/e.orders):'–'}</td><td>${crText(e.cr)}</td></tr>`
+  }).join('')+`<tr class="totalrow"><td>TỔNG</td><td>${mess}</td><td>${orders}</td><td>${fmt(total)}</td><td>${fmt(aov)}</td><td>${mess?pct(orders/mess):'–'}</td></tr>`;
+
+  // 7. Tình trạng đơn (Pancake)
+  const statusIconClass=s=>{const k=key(s);return k.includes('cho hang')?'s-box':k.includes('chuyen')?'s-transfer':k.includes('xac nhan')||k.includes('da nhan')||k.includes('thu tien')?'s-check':k.includes('gui hang')?'s-truck':k.includes('moi')?'s-new':k.includes('huy')?'s-cancel':'s-return'};
+  const ptot=cur.pancake.revenue;
+  $('statusCards').innerHTML=cur.statuses.length?cur.statuses.slice(0,5).map(([s,e])=>`<div class="status ${statusIconClass(s)}"><div class="si"><span class="status-glyph" aria-hidden="true"></span></div><div class="sn">${esc(s.toUpperCase())}</div><div class="sv">${e.orders} đơn</div><div class="sm">${fmt(e.revenue)}<br>(${ptot?pct(e.revenue/ptot):'–'})</div></div>`).join('')
+    :`<div style="grid-column:1/-1;text-align:center;padding:34px 10px;color:#6d7d91;font-weight:700">Chưa có đơn Pancake trong ngày</div>`;
+  $('statusHeaderCount').textContent=cur.pancake.orders;$('statusCount').textContent=cur.pancake.orders;$('statusRevenue').textContent=fmt(ptot);
+
+  // 8. So sánh với ngày trước
+  $('compareTitle').textContent=`SO SÁNH VỚI NGÀY ${ps}`;
+  $('compareRows').innerHTML=CHANNELS.map(n=>{
+    const p=prev.channels[n]||{orders:0,revenue:0},c=cur.channels[n]||{orders:0,revenue:0},diff=c.revenue-p.revenue,rate=p.revenue?diff/p.revenue:0;
+    return `<tr><td class="${classMap[n]}">${n}</td><td>${fmt(p.revenue)}</td><td>${fmt(c.revenue)}</td><td class="${diff>=0?'diffpos':'diffneg'}">${diff>=0?'+':''}${fmt(diff)}</td><td class="${diff>=0?'diffpos':'diffneg'}">${p.revenue?(rate>=0?'+':'')+pct(rate):'–'}</td><td>${p.orders||'–'}</td><td>${c.orders||'–'}</td><td>${p.orders?c.orders-p.orders:'–'}</td></tr>`
+  }).join('')+`<tr class="totalrow"><td>TỔNG</td><td>${fmt(pv.revenue)}</td><td>${fmt(total)}</td><td>${fmt(total-pv.revenue)}</td><td>${pv.revenue?pct((total-pv.revenue)/pv.revenue):'–'}</td><td>${pv.orders}</td><td>${orders}</td><td>${orders-pv.orders}</td></tr>`;
+
+  // 9. Ghi chú
+  const notes=[
+    `Pancake POS (sau chiết khấu, bỏ đơn huỷ / CSKH / đơn đổi): <b>${cur.pancake.orders} đơn – ${fmt(cur.pancake.revenue)}</b> · Website (NV trực nhập): <b>${cur.web.orders} đơn – ${fmt(cur.web.revenue)}</b>.`,
+    cur.missing.length?`<span style="color:#d10f0f">Còn thiếu: <b>${esc(cur.missing.join(' · '))}</b>.</span>`:'Đã nhập đủ Data Ads, Data Live, Zalo và Website.'
+  ];
+  const oth=cur.others.filter(x=>x.orders);
+  if(oth.length)notes.push(`Đơn của người khác: <b>${oth.map(x=>`${esc(x.name)} ${x.orders} đơn`).join(', ')}</b>.`);
+  else notes.push('CR Sale = Đơn Ads / Data Ads · CR Live = Đơn Live / Data Live · CR Zalo = Đơn / KH quan tâm.');
+  $('notes').innerHTML=notes.map(x=>`<li>${x}</li>`).join('')
+}
+
+async function load(date){
+  const p=provider(),seq=++loadSeq;
+  syncTargets(date);
+  if(!p){
+    setStatus('Không thấy trang dashboard chính. Mở lại từ nút "Xuất báo cáo" trong tab Báo cáo Sale.','err');
+    return
+  }
+  setStatus('Đang lấy số liệu ngày '+displayDate(date)+'…','loading');
+  $('dashboard').classList.add('isLoading');
+  try{
+    const model=await p.build(date);
+    if(seq!==loadSeq)return;
+    MODEL=model;
+    render();
+    const miss=model.day.missing;
+    setStatus(miss.length?'⚠ Còn thiếu: '+miss.join(' · '):'✓ Đủ số liệu ngày '+displayDate(date),miss.length?'err':'ok')
+  }catch(e){
+    if(seq!==loadSeq)return;
+    setStatus('Không lấy được số liệu: '+(e?.message||e),'err')
+  }finally{
+    if(seq===loadSeq)$('dashboard').classList.remove('isLoading')
+  }
+}
+
+// Fit the 1536 × 1024 board to the window for viewing; PNG export uses full size.
+function fit(){
+  const wrap=$('fit'),board=$('dashboard'),s=Math.min(1,(document.documentElement.clientWidth-16)/1536);
+  wrap.style.width=Math.round(1536*s)+'px';wrap.style.height=Math.round(1024*s)+'px';
+  board.style.transform=s<1?`scale(${s})`:''
+}
+let h2cPromise=null;
+function loadHtml2canvas(){
+  if(window.html2canvas)return Promise.resolve();
+  if(!h2cPromise)h2cPromise=new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+    sc.onload=()=>resolve();sc.onerror=()=>{h2cPromise=null;reject(new Error('Không tải được thư viện xuất ảnh, kiểm tra kết nối mạng.'))};
+    document.head.appendChild(sc)
+  });
+  return h2cPromise
+}
+async function exportPng(){
+  if(!MODEL){setStatus('Chưa có số liệu để xuất.','err');return}
+  const btn=$('exportBtn'),old=btn.textContent;
+  btn.disabled=true;btn.textContent='Đang xuất…';
+  const wrap=$('fit'),board=$('dashboard');
+  try{
+    await loadHtml2canvas();
+    try{if(document.fonts&&document.fonts.ready)await document.fonts.ready}catch{}
+    render();
+    board.style.transform='';wrap.style.width='1536px';wrap.style.height='1024px';
+    const canvas=await window.html2canvas(board,{scale:2,backgroundColor:'#ffffff',useCORS:true,windowWidth:Math.max(1600,document.documentElement.scrollWidth)});
+    const a=document.createElement('a');
+    a.download=`SevenAM_BC_${MODEL.date}.png`;a.href=canvas.toDataURL('image/png');
+    document.body.appendChild(a);a.click();a.remove()
+  }catch(e){setStatus('Xuất PNG lỗi: '+(e?.message||e),'err')}
+  finally{fit();btn.disabled=false;btn.textContent=old}
+}
+
+const params=new URLSearchParams(location.search);
+const today=vnToday();
+let start=params.get('date')||today;
+if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||start>today)start=today;
+$('reportDate').max=today;
+$('reportDate').value=start;
+$('reportDate').addEventListener('change',e=>{const v=e.target.value;if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v<=today)load(v)});
+['dayTarget','monthTarget'].forEach(id=>{const el=$(id);el.addEventListener('input',()=>{saveTargets();render()});el.addEventListener('change',()=>{saveTargets();render()})});
+$('reloadBtn').onclick=()=>load($('reportDate').value);
+$('exportBtn').onclick=exportPng;
+$('backBtn').onclick=e=>{
+  try{if(window.opener&&!window.opener.closed){e.preventDefault();window.opener.focus();window.close()}}catch{}
+};
+window.addEventListener('resize',fit);
+fit();
+load(start);
+
+</script>
+</body>
+</html>

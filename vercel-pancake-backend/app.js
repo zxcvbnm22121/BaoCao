@@ -1528,6 +1528,8 @@ async function copyQuickReport(){
 // Zalo: one row per day. The Sale on duty picks their name and types Bài
 //   đăng + KH quan tâm; Đơn / Doanh số / SP are that day's Pancake Zalo
 //   orders. CR Zalo = Đơn / KH quan tâm, AOV = Doanh số / SP (as in BC-SOL).
+// Live: one row per day; Data Live is typed, Đơn / Doanh số / SP are that
+//   day's Pancake Livestream orders. CR Live = Đơn / Data Live.
 // Website: one row per day. Pancake does not tag web orders yet, so the Sale
 //   on duty types Đơn / Doanh số / SP. AOV = Doanh số / SP, UPT = SP / Đơn.
 // Everything typed is kept by the backend (private Vercel Blob, one JSON per
@@ -1538,12 +1540,13 @@ const REPORT_KIND_KEY='sevenam_report_kind_v1';
 // as the BC-SOL dropdowns). Pancake spellings such as "Thu - SOL" are matched
 // to these through staffKey().
 const REPORT_ROSTER=['Diễm SOL','Hương SOL','Thu SOL','Linh Live'];
-const REPORT_KIND_LABEL={ads:'Ads',zalo:'Zalo',web:'Website'};
-const ADS_CHANNEL='Facebook Ads',ZALO_CHANNEL='Zalo';
+const REPORT_KIND_LABEL={ads:'Ads',live:'Live',zalo:'Zalo',web:'Website'};
+const ADS_CHANNEL='Facebook Ads',LIVE_CHANNEL='Livestream',ZALO_CHANNEL='Zalo';
 const REPORT_ORDERS_REFRESH_MS=45000,REPORT_DATA_REFRESH_MS=180000;
 const WEEKDAY_VI=['CN','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
 // Fields typed in the one-row-per-day reports; limits match the backend.
 const ROW_FIELDS={
+  live:{data:{type:'int',max:1000000,label:'Data Live'}},
   zalo:{staff:{type:'staff'},posts:{type:'int',max:10000,label:'Bài đăng'},interested:{type:'int',max:1000000,label:'KH quan tâm'}},
   web:{staff:{type:'staff'},orders:{type:'int',max:10000,label:'Đơn Web'},revenue:{type:'money',max:100000000000,label:'Doanh số Web'},qty:{type:'int',max:100000,label:'SP'},note:{type:'text'}}
 };
@@ -1605,8 +1608,8 @@ function channelRows(channel,r=reportRange()){
 
 // ----- the stored month document (with not-yet-confirmed local edits) -----
 function ensureLocalDoc(month){
-  if(!saleDoc||saleDocMonth!==month){saleDoc={version:1,month,updatedAt:null,entries:{},zalo:{},web:{}};saleDocMonth=month}
-  saleDoc.entries??={};saleDoc.zalo??={};saleDoc.web??={};
+  if(!saleDoc||saleDocMonth!==month){saleDoc={version:1,month,updatedAt:null,entries:{},live:{},zalo:{},web:{}};saleDocMonth=month}
+  saleDoc.entries??={};saleDoc.live??={};saleDoc.zalo??={};saleDoc.web??={};
   return saleDoc
 }
 function docForMonth(month){return saleDoc&&saleDocMonth===month?saleDoc:null}
@@ -1673,6 +1676,20 @@ function buildZaloReport(rows,r=reportRange()){
     crOrders:sum(days.filter(d=>d.interested!=null),d=>d.orders)};
   t.cr=t.interested?t.crOrders/t.interested:null;t.aov=t.qty?t.revenue/t.qty:null;
   return {kind:'zalo',days,total:t,missingItems:(rows||[]).filter(o=>!Array.isArray(o.products)||!o.products.length).length}
+}
+function buildLiveReport(rows,r=reportRange()){
+  const today=vnDate(),byDay=group(rows||[],o=>orderDate(o));
+  const days=r.days.map(day=>{
+    const rec=dayRecord('live',day)||{},list=byDay[day]||[],past=day<=today,data=numOrNull(rec.data);
+    const orders=past?list.length:null,revenue=past?sum(list,orderRevenue):null,qty=past?sum(list,orderQty):null;
+    return {day,weekday:weekdayVi(day),past,isToday:day===today,data,orders,revenue,qty,rows:list,savedAt:rec.at||null,
+      cr:data?(orders||0)/data:null,aov:qty?revenue/qty:null}
+  });
+  const t={data:sum(days,d=>d.data),orders:sum(days,d=>d.orders),revenue:sum(days,d=>d.revenue),qty:sum(days,d=>d.qty),
+    filledDays:days.filter(d=>d.past&&d.data!=null).length,elapsedDays:days.filter(d=>d.past).length,
+    crOrders:sum(days.filter(d=>d.data!=null),d=>d.orders)};
+  t.cr=t.data?t.crOrders/t.data:null;t.aov=t.qty?t.revenue/t.qty:null;
+  return {kind:'live',days,total:t,rows:rows||[],missingItems:(rows||[]).filter(o=>!Array.isArray(o.products)||!o.products.length).length}
 }
 function buildWebReport(r=reportRange()){
   const today=vnDate();
@@ -1810,6 +1827,7 @@ function renderReport(){
   }
   const ctx={r,locked,names,notes,ordersPending,me:$('reportStaff').value,docReady:saleDocMonth===r.month&&!saleDocLoadingMonth,today:vnDate()};
   if(kind==='ads')renderAdsReport(ctx,adsRows);
+  else if(kind==='live')renderLiveReport(ctx,locked?null:channelRows(LIVE_CHANNEL,r));
   else if(kind==='zalo')renderZaloReport(ctx,locked?null:channelRows(ZALO_CHANNEL,r));
   else renderWebReport(ctx);
   setReportNote(notes)
@@ -1866,6 +1884,42 @@ function renderAdsReport(ctx,rows){
     const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),crOrders:sum(team,x=>x.total.crOrders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty)};
     $('reportTeamFoot').innerHTML=`<tr><td data-label="Nhân viên">TEAM</td><td data-label="Data Ads">${numFmt(tt.data)}</td><td data-label="Đơn">${numFmt(tt.orders)}</td><td data-label="Doanh số">${money(tt.revenue)}</td><td data-label="SP">${numFmt(tt.qty)}</td><td data-label="CR" class="${tt.data&&tt.crOrders/tt.data<.1?'bad':''}">${tt.data?pct(tt.crOrders/tt.data):'—'}</td><td data-label="AOV">${tt.orders?compact(tt.revenue/tt.orders):'—'}</td><td></td></tr>`
   }else $('reportTeamFoot').innerHTML=''
+}
+function renderLiveReport(ctx,rows){
+  const {r,locked,notes,today}=ctx,loading=ctx.ordersPending;
+  const rep=buildLiveReport(rows,r),t=rep.total;
+  if(!locked&&r.to===today&&ctx.docReady&&rep.days.find(x=>x.isToday)?.data==null)notes.push({level:'warn',html:`Hôm nay (${fullDate(today)}) chưa nhập Data Live.`});
+  if(rep.missingItems)notes.push({level:'',html:`${numFmt(rep.missingItems)} đơn Live chưa có chi tiết sản phẩm từ Pancake nên cột SP có thể thiếu.`});
+  $('reportKpis').innerHTML=[
+    mini('Data Live',numFmt(t.data)),mini('Đơn Live',loading?'…':numFmt(t.orders)),
+    mini('CR Live',loading?'…':t.cr==null?'—':pct(t.cr)),mini('Doanh số Live',loading?'…':money(t.revenue)),
+    mini('Sản phẩm',loading?'…':numFmt(t.qty))
+  ].join('');
+  $('reportTitle').textContent='Livestream — chi tiết theo ngày';
+  $('reportSub').textContent='Nhập Data Live mỗi ngày · Đơn, Doanh số, SP lấy từ Pancake nguồn Livestream · CR Live = Đơn / Data Live (CR tháng chỉ tính những ngày đã nhập Data) · AOV = Doanh số / SP';
+  $('reportRangeChip').textContent=locked?'Chưa mở LIVE':r.future?monthLabel(r.month):`${fullDate(r.from)} → ${fullDate(r.to)}${rows?` · ${numFmt(rows.length)} đơn Live`:''}`;
+  const body=rep.days.map(d=>{
+    const editable=d.past&&!locked,show=d.past&&!locked,auto=(v,fmt)=>!show?'':loading?'…':fmt(v);
+    return `<tr class="${rowClass(d)}">${dateCells(d)}
+      ${inputCell('Data Live',{kind:'live',day:d.day,field:'data',value:d.data,editable,title:savedTitle(d.savedAt),cls:'reportDataInput'})}
+      <td data-label="Đơn Live">${auto(d.orders,v=>drillLink('live',d,v))}</td>
+      <td data-label="CR Live">${!show?'':loading?'…':d.cr==null?'—':pct(d.cr)}</td>
+      ${!show||loading?`<td data-label="Doanh số Live">${show?'…':''}</td>`:moneyCell('Doanh số Live',d.revenue)}
+      <td data-label="SP">${auto(d.qty,numFmt)}</td>
+      <td data-label="AOV">${!show?'':loading?'…':d.aov==null?'—':money(d.aov)}</td>
+    </tr>`
+  }).join('');
+  const foot=locked?'':`<tr><td data-label="Ngày">TỔNG<span class="rYear"> THÁNG</span></td><td class="rWeekCol"></td>
+      <td data-label="Data Live">${numFmt(t.data)}</td><td data-label="Đơn Live">${loading?'…':numFmt(t.orders)}</td>
+      <td data-label="CR Live">${loading?'…':t.cr==null?'—':pct(t.cr)}</td>${loading?'<td>…</td>':moneyCell('Doanh số Live',t.revenue)}
+      <td data-label="SP">${loading?'…':numFmt(t.qty)}</td><td data-label="AOV">${loading?'…':t.aov==null?'—':money(t.aov)}</td></tr>`;
+  replaceReportTable('live',th(['Ngày',{t:'Thứ',cls:'rWeekCol'},'Data Live','Đơn Live','CR Live','Doanh số Live','SP','AOV']),body,foot);
+  $('reportTeamTitle').textContent='Đơn Live theo nhân viên';
+  $('reportTeamSub').textContent='Đơn Pancake nguồn Livestream trong tháng, theo Sale được gán';
+  $('reportTeamHead').innerHTML=th(['Nhân viên','Đơn','Doanh số','SP','AOV (Doanh số / SP)']);
+  const g=Object.entries(group(rep.rows,o=>canonicalStaff(o.salesStaff)||'Chưa gán')).map(([name,list])=>({name,orders:list.length,revenue:sum(list,orderRevenue),qty:sum(list,orderQty)})).sort((a,b)=>b.revenue-a.revenue);
+  $('reportTeamRows').innerHTML=locked||loading?`<tr><td colspan="5">${locked?'Chưa mở dữ liệu LIVE.':'Đang tải…'}</td></tr>`:g.map(x=>`<tr><td data-label="Nhân viên">${esc(x.name)}</td><td data-label="Đơn">${numFmt(x.orders)}</td><td data-label="Doanh số">${money(x.revenue)}</td><td data-label="SP">${numFmt(x.qty)}</td><td data-label="AOV">${x.qty?money(x.revenue/x.qty):'—'}</td></tr>`).join('')||'<tr><td colspan="5">Chưa có đơn Live trong tháng này.</td></tr>';
+  $('reportTeamFoot').innerHTML=!locked&&!loading&&g.length?`<tr><td>TEAM</td><td>${numFmt(t.orders)}</td><td>${money(t.revenue)}</td><td>${numFmt(t.qty)}</td><td>${t.aov==null?'—':money(t.aov)}</td></tr>`:''
 }
 function renderZaloReport(ctx,rows){
   const {r,locked,notes,names,today}=ctx,loading=ctx.ordersPending;
@@ -1975,7 +2029,7 @@ async function loadReportOrders(force=false){
   }
 }
 function applySaleDoc(doc,month){
-  saleDoc={...doc,entries:doc.entries||{},zalo:doc.zalo||{},web:doc.web||{}};
+  saleDoc={...doc,entries:doc.entries||{},live:doc.live||{},zalo:doc.zalo||{},web:doc.web||{}};
   saleDocMonth=month;saleDocAt=Date.now();saleDocError=''
 }
 async function loadSaleDoc({fresh=false}={}){
@@ -2212,6 +2266,29 @@ function nameListForExcel(names){
   for(const n of names){const v=String(n).replace(/[",]/g,' ').trim();if(!v||len+v.length+1>250)continue;out.push(v);len+=v.length+1}
   return out
 }
+function liveSheet(rep){
+  const first=DUTY_FIRST_ROW,last=first+rep.days.length-1,tr=last+1,t=rep.total;
+  const rows=[
+    [{v:'LIVESTREAM — CHI TIẾT THEO NGÀY',s:XS.title}],
+    [{v:`Ô vàng = nhập tay  •  Đơn / Doanh số / SP lấy từ Pancake POS (nguồn Livestream, ngày tạo đơn, không tính đơn huỷ, CSKH, đơn đổi)  •  CR Live = Đơn / Data Live  •  AOV = Doanh số / SP  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
+    ['Ngày','Data Live','Đơn Live','CR Live','Doanh số Live','Sản phẩm','AOV'].map(v=>({v,s:XS.head}))
+  ];
+  rep.days.forEach((d,i)=>{
+    const r=first+i;
+    rows.push([
+      {v:excelSerial(d.day),s:XS.date},{v:d.data,s:XS.input},{v:d.orders,s:XS.int},
+      {f:`IFERROR(C${r}/B${r},0)`,v:d.data?(d.orders||0)/d.data:0,s:XS.pct},
+      {v:d.revenue,s:XS.int},{v:d.qty,s:XS.int},{f:`IFERROR(E${r}/F${r},0)`,v:d.qty?(d.revenue||0)/d.qty:0,s:XS.int}
+    ])
+  });
+  const sub=(c,v)=>({f:`SUBTOTAL(109,${c}${first}:${c}${last})`,v,s:XS.totInt});
+  rows.push([
+    {v:'TỔNG THÁNG',s:XS.totLabel},sub('B',t.data),sub('C',t.orders),
+    {f:`IFERROR(SUMIFS(C${first}:C${last},B${first}:B${last},"<>")/B${tr},0)`,v:t.cr||0,s:XS.totPct},
+    sub('E',t.revenue),sub('F',t.qty),{f:`IFERROR(E${tr}/F${tr},0)`,v:t.qty?t.revenue/t.qty:0,s:XS.totInt}
+  ]);
+  return {name:'Live',cols:[12,11,10,10,15,10,12],rows,merges:['A1:G1','A2:G2'],freezeRow:3,heights:{0:22},first,last,totalRow:tr}
+}
 function zaloSheet(rep,names){
   const first=DUTY_FIRST_ROW,last=first+rep.days.length-1,tr=last+1,t=rep.total;
   const rows=[
@@ -2263,52 +2340,55 @@ function webSheet(rep,names){
     validations:[{sqref:`B${first}:B${last}`,list:nameListForExcel(names)}],first,last,totalRow:tr}
 }
 // Tổng hợp = section 02 of the BC-SOL Dashboard: Ads per Sale from each
-// Sale's sheet, DS Zalo / DS Web summed from the Zalo / Web sheets by name.
-function teamSheet(month,team,sheetByStaff,zalo,zs,web,ws){
+// Sale's sheet, DS Live from Pancake by assigned Sale, DS Zalo / DS Web summed
+// from the Zalo / Web sheets by the name of the Sale on duty.
+function teamSheet(month,team,sheetByStaff,live,zalo,zs,web,ws){
   const people=new Map(),add=n=>{if(n&&!people.has(staffKey(n)))people.set(staffKey(n),n)};
   team.forEach(x=>add(x.staff));
+  live.rows.forEach(o=>add(canonicalStaff(o.salesStaff)||'Chưa gán'));
   zalo.days.forEach(d=>add(d.staff));web.days.forEach(d=>add(d.staff));
   const adsBy=new Map(team.map(x=>[staffKey(x.staff),x]));
   const dutySum=(rep,field,name)=>sum(rep.days.filter(d=>name===''?!d.staff:staffKey(d.staff)===staffKey(name)),d=>d[field]);
+  const liveSum=name=>name===''?0:sum(live.rows.filter(o=>staffKey(canonicalStaff(o.salesStaff)||'Chưa gán')===staffKey(name)),orderRevenue);
   const rows=[
     [{v:`BÁO CÁO SALE ONLINE THEO NHÂN VIÊN — THÁNG ${monthLabel(month)}`,s:XS.title}],
-    [{v:`Ads: Data do Sale nhập, Đơn / Doanh số / SP từ Pancake POS  •  DS Zalo, DS Web cộng từ sheet Zalo, Web theo tên người trực  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
+    [{v:`Ads: Data do Sale nhập, Đơn / Doanh số / SP từ Pancake POS  •  DS Live: đơn Pancake nguồn Livestream theo Sale được gán  •  DS Zalo, DS Web cộng từ sheet Zalo, Web theo tên người trực  •  Xuất lúc ${exportStamp()}`,s:XS.sub}],
     [],
-    ['NHÂN VIÊN','DATA ADS','ĐƠN ADS','DS ADS','TỔNG SP ADS','CR ADS','AOV ADS','UPT ADS','DS ZALO','DS WEB','TỔNG DS','NGÀY ĐÃ NHẬP DATA ADS'].map(v=>({v,s:XS.head}))
+    ['NHÂN VIÊN','DATA ADS','ĐƠN ADS','DS ADS','TỔNG SP ADS','CR ADS','AOV ADS','UPT ADS','DS LIVE','DS ZALO','DS WEB','TỔNG DS','NGÀY ĐÃ NHẬP DATA ADS'].map(v=>({v,s:XS.head}))
   ];
   const first=REPORT_FIRST_ROW,zr=`'Zalo'!$B$${zs.first}:$B$${zs.last}`,zg=`'Zalo'!$G$${zs.first}:$G$${zs.last}`,wr=`'Web'!$B$${ws.first}:$B$${ws.last}`,wd=`'Web'!$D$${ws.first}:$D$${ws.last}`;
   const list=[...people.values()];
-  const unassigned=dutySum(zalo,'revenue','')+dutySum(web,'revenue','');
-  if(unassigned)list.push('');
+  if(dutySum(zalo,'revenue','')+dutySum(web,'revenue',''))list.push('');
   list.forEach((name,i)=>{
     const r=first+i,x=adsBy.get(staffKey(name)),t=x?.total||{data:0,orders:0,revenue:0,qty:0,enteredDays:0,elapsedDays:0},sheet=x&&sheetByStaff.get(x.staff);
     const ref=c=>sheet?{f:`'${sheet.name.replace(/'/g,"''")}'!${c}${sheet.totalRow}`}:{};
     const crit=name===''?'""':`A${r}`;
-    const dz=dutySum(zalo,'revenue',name),dw=dutySum(web,'revenue',name);
+    const dl=liveSum(name),dz=dutySum(zalo,'revenue',name),dw=dutySum(web,'revenue',name);
     rows.push([
       {v:name===''?'Chưa chọn NV (Zalo/Web)':name,s:XS.text},
       {...ref('C'),v:t.data,s:XS.int},{...ref('D'),v:t.orders,s:XS.int},{...ref('E'),v:t.revenue,s:XS.int},{...ref('F'),v:t.qty,s:XS.int},
       sheet?{f:`'${sheet.name.replace(/'/g,"''")}'!G${sheet.totalRow}`,v:t.cr||0,s:XS.pct}:{f:`IFERROR(C${r}/B${r},0)`,v:t.data?t.orders/t.data:0,s:XS.pct},
       {f:`IFERROR(D${r}/C${r},0)`,v:t.orders?t.revenue/t.orders:0,s:XS.int},
       {f:`IFERROR(E${r}/C${r},0)`,v:t.orders?t.qty/t.orders:0,s:XS.dec},
+      {v:dl,s:XS.int},
       {f:`SUMIF(${zr},${crit},${zg})`,v:dz,s:XS.int},
       {f:`SUMIF(${wr},${crit},${wd})`,v:dw,s:XS.int},
-      {f:`D${r}+I${r}+J${r}`,v:t.revenue+dz+dw,s:XS.int},
+      {f:`D${r}+I${r}+J${r}+K${r}`,v:t.revenue+dl+dz+dw,s:XS.int},
       {v:!x||x.staff==='Chưa gán'||name===''?'—':`${t.enteredDays}/${t.elapsedDays}`,s:XS.text}
     ])
   });
   const last=first+list.length-1,tr=last+1,col=c=>({f:`SUM(${c}${first}:${c}${last})`,s:XS.totInt});
-  const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),crOrders:sum(team,x=>x.total.crOrders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty),zalo:zalo.total.revenue,web:web.total.revenue};
+  const tt={data:sum(team,x=>x.total.data),orders:sum(team,x=>x.total.orders),crOrders:sum(team,x=>x.total.crOrders),revenue:sum(team,x=>x.total.revenue),qty:sum(team,x=>x.total.qty),live:live.total.revenue,zalo:zalo.total.revenue,web:web.total.revenue};
   rows.push([
     {v:'TEAM',s:XS.totLabel},
     {...col('B'),v:tt.data},{...col('C'),v:tt.orders},{...col('D'),v:tt.revenue},{...col('E'),v:tt.qty},
     {f:`IFERROR(SUMPRODUCT(F${first}:F${last},B${first}:B${last})/B${tr},0)`,v:tt.data?tt.crOrders/tt.data:0,s:XS.totPct},
     {f:`IFERROR(D${tr}/C${tr},0)`,v:tt.orders?tt.revenue/tt.orders:0,s:XS.totInt},
     {f:`IFERROR(E${tr}/C${tr},0)`,v:tt.orders?tt.qty/tt.orders:0,s:XS.totDec},
-    {...col('I'),v:tt.zalo},{...col('J'),v:tt.web},{...col('K'),v:tt.revenue+tt.zalo+tt.web},
+    {...col('I'),v:tt.live},{...col('J'),v:tt.zalo},{...col('K'),v:tt.web},{...col('L'),v:tt.revenue+tt.live+tt.zalo+tt.web},
     {v:null,s:XS.totLabel}
   ]);
-  return {name:'Tổng hợp',cols:[24,11,10,16,11,9,13,8,14,14,16,14],rows,merges:['A1:L1','A2:L2'],freezeRow:4,heights:{0:22,3:30},landscape:true}
+  return {name:'Tổng hợp',cols:[24,11,10,16,11,9,13,8,15,14,14,16,14],rows,merges:['A1:M1','A2:M2'],freezeRow:4,heights:{0:22,3:30},landscape:true}
 }
 function asciiSlug(s){return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-+|-+$/g,'')||'Sale'}
 function downloadBlob(blob,filename){
@@ -2324,6 +2404,8 @@ async function exportCurrentReport(){
   if(kind==='ads'){
     const rep=buildStaffReport(g.staff,adsRows,r),[name]=sheetNames([g.staff]);
     downloadBlob(workbookBlob([staffSheet(rep,name)]),`BC-Ads_${asciiSlug(g.staff)}_${monthFileTag(r.month)}.xlsx`)
+  }else if(kind==='live'){
+    downloadBlob(workbookBlob([liveSheet(buildLiveReport(channelRows(LIVE_CHANNEL,r),r))]),`BC-Live_${monthFileTag(r.month)}.xlsx`)
   }else if(kind==='zalo'){
     downloadBlob(workbookBlob([zaloSheet(buildZaloReport(channelRows(ZALO_CHANNEL,r),r),names)]),`BC-Zalo_${monthFileTag(r.month)}.xlsx`)
   }else{
@@ -2333,13 +2415,13 @@ async function exportCurrentReport(){
 async function exportTeamReport(){
   const g=await exportGuard({needOrders:true});if(!g)return;
   const r=g.r,adsRows=channelRows(ADS_CHANNEL,r)||[],team=reportTeam(adsRows,r),names=reportStaffNames(adsRows);
-  const zalo=buildZaloReport(channelRows(ZALO_CHANNEL,r),r),web=buildWebReport(r);
+  const live=buildLiveReport(channelRows(LIVE_CHANNEL,r),r),zalo=buildZaloReport(channelRows(ZALO_CHANNEL,r),r),web=buildWebReport(r);
   const people=team.filter(x=>x.staff!=='Chưa gán'&&(x.total.orders||x.total.data));
-  const sheetNamesList=sheetNames(people.map(x=>x.staff),['Tổng hợp','Zalo','Web']);
+  const sheetNamesList=sheetNames(people.map(x=>x.staff),['Tổng hợp','Live','Zalo','Web']);
   const adsSheets=people.map((x,i)=>staffSheet(x,sheetNamesList[i]));
-  const zs=zaloSheet(zalo,names),ws=webSheet(web,names);
-  const summary=teamSheet(r.month,team,new Map(people.map((x,i)=>[x.staff,adsSheets[i]])),zalo,zs,web,ws);
-  downloadBlob(workbookBlob([summary,...adsSheets,zs,ws]),`BC-Sale-Online_${monthFileTag(r.month)}.xlsx`)
+  const ls=liveSheet(live),zs=zaloSheet(zalo,names),ws=webSheet(web,names);
+  const summary=teamSheet(r.month,team,new Map(people.map((x,i)=>[x.staff,adsSheets[i]])),live,zalo,zs,web,ws);
+  downloadBlob(workbookBlob([summary,...adsSheets,ls,zs,ws]),`BC-Sale-Online_${monthFileTag(r.month)}.xlsx`)
 }
 async function copyReportTable(){
   const kind=reportKind;
@@ -2351,6 +2433,11 @@ async function copyReportTable(){
     lines=[line(['Ngày','Thứ','Data Ads','Đơn','Doanh số','SP','CR'])]
       .concat(rep.days.map(d=>line([fullDate(d.day),d.weekday,d.data,d.orders,d.revenue,d.qty,d.past&&d.data?pct((d.orders||0)/d.data):''])))
       .concat([line(['TỔNG THÁNG','',t.data,t.orders,t.revenue,t.qty,t.cr==null?'':pct(t.cr)])])
+  }else if(kind==='live'){
+    const rep=buildLiveReport(channelRows(LIVE_CHANNEL,r),r),t=rep.total;
+    lines=[line(['Ngày','Data Live','Đơn Live','CR Live','Doanh số Live','Sản phẩm','AOV'])]
+      .concat(rep.days.map(d=>line([fullDate(d.day),d.data,d.orders,d.cr==null?'':pct(d.cr),d.revenue,d.qty,d.aov==null?'':Math.round(d.aov)])))
+      .concat([line(['TỔNG THÁNG',t.data,t.orders,t.cr==null?'':pct(t.cr),t.revenue,t.qty,t.aov==null?'':Math.round(t.aov)])])
   }else if(kind==='zalo'){
     const rep=buildZaloReport(channelRows(ZALO_CHANNEL,r),r),t=rep.total;
     lines=[line(['Ngày','Nhân viên','Bài đăng','KH quan tâm','Đơn','CR Zalo','Doanh số','SP','AOV'])]
@@ -2370,6 +2457,109 @@ async function copyReportTable(){
   }
   if(copied){const btn=$('reportCopyBtn'),old=btn.textContent;btn.textContent='✓ Đã sao chép';btn.classList.add('copyDone');setTimeout(()=>{btn.textContent=old;btn.classList.remove('copyDone')},1400)}
   else showError('Trình duyệt chưa cho phép sao chép tự động.')
+}
+// ---------- "Xuất báo cáo": the one-page daily dashboard (daily-report.html) ----------
+// The dashboard page asks this window for the numbers of one day through
+// window.sevenamDailyDashboard.build(date): Pancake orders of that day and the
+// day before (cancelled / CSKH / Đơn đổi left out, Ads · Live · Zalo), plus
+// everything the Sales typed (Data Ads, Data Live, Zalo, Website).
+const PANCAKE_STATUS_VI={0:'Mới',17:'Chờ xác nhận',1:'Đã xác nhận',20:'Đã đặt hàng',11:'Chờ hàng',12:'Chờ in',13:'Đã in',8:'Đang đóng hàng',9:'Chờ chuyển hàng',2:'Đã gửi hàng',3:'Đã nhận',16:'Đã thu tiền',4:'Đang hoàn',5:'Đã hoàn',15:'Hoàn 1 phần',6:'Đã hủy',7:'Đã xóa'};
+const REPORT_ADS_ROSTER=REPORT_ROSTER.filter(n=>n!=='Linh Live');
+function num0(v){return numOrNull(v)||0}
+function adsDataForDay(doc,day){
+  const by=new Map();
+  for(const [name,days] of Object.entries(doc?.entries||{})){
+    const e=days?.[day],n=numOrNull(e?.data);if(n==null)continue;
+    const k=staffKey(name),cur=by.get(k);
+    if(!cur||String(e.at||'')>String(cur.at||''))by.set(k,{name:canonicalStaff(name),data:n,at:e.at||''})
+  }
+  return by
+}
+function dashboardDay(day,orders,doc){
+  const rows=orders.filter(o=>orderDate(o)===day),pick=c=>rows.filter(o=>o.channel===c);
+  const agg=list=>({orders:list.length,revenue:sum(list,orderRevenue),qty:sum(list,orderQty)});
+  const ads=pick(ADS_CHANNEL),live=pick(LIVE_CHANNEL),zalo=pick(ZALO_CHANNEL);
+  const liveRec=doc?.live?.[day]||{},zaloRec=doc?.zalo?.[day]||{},webRec=doc?.web?.[day]||null;
+  const web={staff:canonicalStaff(webRec?.staff),orders:num0(webRec?.orders),revenue:num0(webRec?.revenue),qty:num0(webRec?.qty),entered:Boolean(webRec&&(webRec.orders!=null||webRec.revenue!=null))};
+  // Ads by Sale: the three Ads Sales always, then anyone else with Ads orders or Data.
+  const adsData=adsDataForDay(doc,day),adsBy=group(ads,o=>staffKey(canonicalStaff(o.salesStaff)||'Chưa gán'));
+  const keys=[...new Set([...REPORT_ADS_ROSTER.map(staffKey),...Object.keys(adsBy),...adsData.keys()])];
+  const adsStaff=keys.map(k=>{
+    const list=adsBy[k]||[],d=adsData.get(k),a=agg(list);
+    const name=REPORT_ROSTER.find(n=>staffKey(n)===k)||d?.name||canonicalStaff(list[0]?.salesStaff)||'Chưa gán';
+    return {name,data:d?d.data:null,...a,cr:d&&d.data?a.orders/d.data:null,roster:REPORT_ADS_ROSTER.some(n=>staffKey(n)===k)}
+  });
+  const dataAds=sum(adsStaff,x=>x.data);
+  const missingAds=adsStaff.filter(x=>x.data==null&&x.orders>0&&x.name!=='Chưa gán');
+  // A Sale who has orders but no Data yet must not inflate the Ads CR.
+  const adsCrOrders=ads.length-sum(missingAds,x=>x.orders);
+  const dataLive=numOrNull(liveRec.data),leads=numOrNull(zaloRec.interested);
+  // Every channel by Sale; the Website orders go to that day's NV trực.
+  const emp=new Map(),addEmp=(name,o,r)=>{const k=staffKey(name),x=emp.get(k)||{name,orders:0,revenue:0};x.orders+=o;x.revenue+=r;emp.set(k,x)};
+  rows.forEach(o=>addEmp(canonicalStaff(o.salesStaff)||'Chưa gán',1,orderRevenue(o)));
+  if(web.orders||web.revenue)addEmp(web.staff||'Chưa chọn NV',web.orders,web.revenue);
+  const employees=REPORT_ROSTER.map(n=>{
+    const x=emp.get(staffKey(n))||{orders:0,revenue:0},isLive=n==='Linh Live',ad=adsStaff.find(a=>staffKey(a.name)===staffKey(n));
+    return {name:n,orders:x.orders,revenue:x.revenue,data:isLive?dataLive:(ad?.data??null),cr:isLive?(dataLive?live.length/dataLive:null):(ad?.cr??null)}
+  });
+  const others=[...emp.entries()].filter(([k])=>!REPORT_ROSTER.some(n=>staffKey(n)===k)).map(([,x])=>x);
+  const statusBy=new Map();
+  for(const o of rows){
+    const label=PANCAKE_STATUS_VI[Number(o.statusCode)]||String(o.statusName||'').trim()||statusLabels[o.status]||'Khác';
+    const x=statusBy.get(label)||{orders:0,revenue:0};x.orders++;x.revenue+=orderRevenue(o);statusBy.set(label,x)
+  }
+  const missing=[];
+  if(missingAds.length)missing.push('Data Ads '+missingAds.map(x=>x.name).join(', '));
+  else if(!dataAds&&ads.length)missing.push('Data Ads');
+  if(dataLive==null&&live.length)missing.push('Data Live');
+  if(zalo.length&&(leads==null||!zaloRec.staff))missing.push('Zalo ('+[!zaloRec.staff&&'người trực',leads==null&&'KH quan tâm'].filter(Boolean).join(', ')+')');
+  if(!web.entered)missing.push('Website');
+  return {
+    date:day,
+    total:{orders:rows.length+web.orders,revenue:sum(rows,orderRevenue)+web.revenue},
+    pancake:{orders:rows.length,revenue:sum(rows,orderRevenue)},
+    channels:{'Facebook Ads':agg(ads),'Livestream':agg(live),'Zalo':agg(zalo),'Website':{orders:web.orders,revenue:web.revenue,qty:web.qty}},
+    data:{ads:dataAds,live:dataLive,zalo:leads},
+    cr:{ads:dataAds?adsCrOrders/dataAds:null,live:dataLive?live.length/dataLive:null,zalo:leads?zalo.length/leads:null},
+    adsStaff,employees,others,
+    live:{data:dataLive,...agg(live)},
+    zalo:{staff:canonicalStaff(zaloRec.staff),posts:numOrNull(zaloRec.posts),leads,...agg(zalo)},
+    web,
+    statuses:[...statusBy.entries()].sort((a,b)=>b[1].orders-a[1].orders),
+    missing
+  }
+}
+async function buildDailyDashboard(date){
+  const pwd=sessionGet('sevenam_dashboard_password');
+  if(meta.source!=='PANCAKE'||!pwd)throw new Error('Dashboard chưa mở dữ liệu LIVE (bấm 🔒 ở trang chính)');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date))||date>vnDate())throw new Error('Ngày không hợp lệ');
+  if([...reportRowState.values()].includes('saving'))await reportSaveChain;
+  const prev=shiftIsoDay(date,-1);
+  const payloads=await fetchRangeChunks(pwd,prev,date);
+  const orders=payloads.flatMap(p=>p.orders||[]).filter(o=>isKpiChannel(o.channel)&&!isDefaultExcluded(o));
+  const docs={};
+  // Always re-read what was typed, so numbers entered on other devices count.
+  for(const m of new Set([prev.slice(0,7),date.slice(0,7)])){
+    const doc=await callPancakeBackend(pwd,'saleReport',20000,{month:m,fresh:true});
+    if(!doc||doc.month!==m||typeof doc.entries!=='object')throw new Error('Không đọc được số đã nhập tháng '+monthLabel(m));
+    docs[m]=doc;
+    if(m===reportMonth()&&!reportPending.size){applySaleDoc(doc,m);renderReport()}
+  }
+  return {date,prevDate:prev,generatedAt:new Date().toISOString(),
+    day:dashboardDay(date,orders,docs[date.slice(0,7)]),prev:dashboardDay(prev,orders,docs[prev.slice(0,7)])}
+}
+function dashboardTargetDefaults(day){
+  const month=String(day||vnDate()).slice(0,7),m=Math.max(0,Number(targetMonth('Tất cả'))||0);
+  return {month:m,day:m?Math.round(m/daysInMonth(month)):0}
+}
+window.sevenamDailyDashboard={build:buildDailyDashboard,targets:dashboardTargetDefaults};
+function openDailyDashboard(){
+  if(meta.source!=='PANCAKE'){showError('Bấm 🔒 mở dữ liệu LIVE trước khi xuất báo cáo.');return}
+  const r=reportRange(),today=vnDate(),last=r.days[r.days.length-1];
+  const date=r.future?r.days[0]:last<today?last:today;
+  // Opened without noopener: the page reads the numbers from this window.
+  const w=window.open('daily-report.html?date='+date,'_blank');
+  if(!w)showError('Trình duyệt chặn mở tab mới. Cho phép cửa sổ bật lên cho trang này rồi bấm lại.')
 }
 function focusTodayInput(){
   if(window.innerWidth<=720||reportKind!=='ads')return;
@@ -2413,9 +2603,10 @@ function bindReportEvents(){
   tbody.addEventListener('click',e=>{
     const btn=e.target.closest('[data-report-drill]');if(!btn)return;
     const day=btn.dataset.reportDrill,r=reportRange();
-    if(btn.dataset.drillKind==='zalo'){
-      const rows=(channelRows(ZALO_CHANNEL,r)||[]).filter(o=>orderDate(o)===day);
-      openOrderDrill('report',day,`Đơn Zalo · ${fullDate(day)}`,{rows,metaText:`${fullDate(day)} · Kênh Zalo · không tính đơn huỷ, CSKH, đơn đổi`});
+    if(btn.dataset.drillKind==='zalo'||btn.dataset.drillKind==='live'){
+      const live=btn.dataset.drillKind==='live',label=live?'Livestream':'Zalo';
+      const rows=(channelRows(live?LIVE_CHANNEL:ZALO_CHANNEL,r)||[]).filter(o=>orderDate(o)===day);
+      openOrderDrill('report',day,`Đơn ${label} · ${fullDate(day)}`,{rows,metaText:`${fullDate(day)} · Kênh ${label} · không tính đơn huỷ, CSKH, đơn đổi`});
       return
     }
     const staff=$('reportStaff').value,k=staffKey(staff);
@@ -2436,6 +2627,7 @@ function bindReportEvents(){
     $('reportTitle').scrollIntoView({block:'start',behavior:'smooth'})
   });
   $('reportExportBtn').onclick=exportCurrentReport;
+  $('reportDashboardBtn').onclick=openDailyDashboard;
   $('reportExportTeamBtn').onclick=exportTeamReport;
   $('reportCopyBtn').onclick=copyReportTable
 }

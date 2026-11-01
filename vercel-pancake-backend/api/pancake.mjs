@@ -588,6 +588,7 @@ function secureEqual(a,b){
 // Stored in a private Vercel Blob store, one JSON document per month:
 //   sale-report/v1/2026-11.json → {version,month,updatedAt,
 //     entries:{[staff]:{[date]:{data,at}}},            Ads: Data Ads per Sale
+//     live:{[date]:{data,at}},                          Live: Data Live per day
 //     zalo:{[date]:{staff,posts,interested,at}},        Zalo: one row per day
 //     web:{[date]:{staff,orders,revenue,qty,note,at}}}  Website: one row per day
 // Reads skip the CDN cache (useCache:false) so every device sees the newest
@@ -599,6 +600,7 @@ const SALE_NAME_MAX=60,SALE_DATA_MAX=1000000,SALE_STAFF_MAX=40,SALE_NOTE_MAX=200
 const SALE_CACHE_MS=8000;
 // Typed fields of the one-row-per-day reports: [min,max] for integers.
 const SALE_ROW_FIELDS={
+  live:{data:[0,1000000,'Data Live']},
   zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm']},
   web:{staff:'staff',orders:[0,10000,'Đơn Web'],revenue:[0,100000000000,'Doanh số Web'],qty:[0,100000,'SP'],note:'text'}
 };
@@ -639,7 +641,7 @@ function cleanSaleRow(kind,row,strict){
   }
   return out
 }
-function emptySaleDoc(month){return {version:1,month,updatedAt:null,entries:{},zalo:{},web:{}}}
+function emptySaleDoc(month){return {version:1,month,updatedAt:null,entries:{},live:{},zalo:{},web:{}}}
 // Keep only well-formed entries of this month, whatever the stored file holds.
 function cleanSaleDoc(doc,month){
   const out=emptySaleDoc(month);
@@ -654,7 +656,7 @@ function cleanSaleDoc(doc,month){
       (out.entries[staff]??={})[day]={data:n,at:typeof v.at==='string'?v.at:null};
     }
   }
-  for(const kind of ['zalo','web']){
+  for(const kind of Object.keys(SALE_ROW_FIELDS)){
     for(const [day,row] of Object.entries(doc[kind]||{})){
       if(!validDay(day)||!day.startsWith(month))continue;
       const clean=cleanSaleRow(kind,row,false);
@@ -738,7 +740,7 @@ async function handleSaleReport(action,body,res,startedAt){
       const month=String(body?.month||'').trim();
       if(!validMonth(month))return res.status(400).json({error:'Tháng không hợp lệ'});
       const doc=await loadSaleMonth(month,{fresh:Boolean(body?.fresh)});
-      console.log(`[sale-report] read ${month} staff=${Object.keys(doc.entries).length} zalo=${Object.keys(doc.zalo).length} web=${Object.keys(doc.web).length} ${Date.now()-startedAt}ms`);
+      console.log(`[sale-report] read ${month} staff=${Object.keys(doc.entries).length} live=${Object.keys(doc.live).length} zalo=${Object.keys(doc.zalo).length} web=${Object.keys(doc.web).length} ${Date.now()-startedAt}ms`);
       return res.status(200).json(doc)
     }
     const kind=String(body?.kind||'ads');
@@ -751,7 +753,7 @@ async function handleSaleReport(action,body,res,startedAt){
       const value=parseSaleValue(body?.value);
       doc=await updateSaleMonth(date.slice(0,7),d=>setAdsEntry(d,staff,date,value));
       console.log(`[sale-report] save ads ${date} staff=${JSON.stringify(staff)} value=${value??'(xoá)'} ${Date.now()-startedAt}ms`);
-    }else if(kind==='zalo'||kind==='web'){
+    }else if(Object.hasOwn(SALE_ROW_FIELDS,kind)){
       const row=cleanSaleRow(kind,body?.row,true);
       doc=await updateSaleMonth(date.slice(0,7),d=>setDayRow(d,kind,date,row));
       console.log(`[sale-report] save ${kind} ${date} ${JSON.stringify(row)} ${Date.now()-startedAt}ms`);
