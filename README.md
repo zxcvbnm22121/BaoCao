@@ -32,10 +32,27 @@ Biến môi trường được API sử dụng:
 | `PANCAKE_API_KEY` | Khoá truy cập Pancake. |
 | `PANCAKE_SHOP_ID` | ID shop Pancake. |
 | `DASHBOARD_PASSWORD` | Mật khẩu mở dashboard. |
+| `BLOB_READ_WRITE_TOKEN` | Vercel tự thêm khi gắn Blob store; dùng để lưu Data Ads của tab Báo cáo Sale. |
 | `MONTHLY_TARGET` | Mục tiêu doanh thu tháng; có giá trị mặc định trong source. |
 | `ALLOWED_ORIGIN` | Origin được phép gọi API; mặc định là GitHub Pages của repo. |
 
 Cấu hình các giá trị thực trong Environment Variables của Vercel. Không đưa khoá API hoặc mật khẩu vào source.
+
+## Báo cáo ngày của Sale (tab "Báo cáo Sale")
+
+Tab có 4 kênh: **Ads**, **Live**, **Zalo**, **Website**. Danh sách tên luôn có Diễm SOL, Hương SOL, Thu SOL, Linh Live, cộng thêm những tên khác có đơn trên Pancake. Tên được so khớp bỏ qua dấu cách và gạch nối, nên "Thu - SOL" trên Pancake được tính là "Thu SOL".
+
+- **Ads**: mỗi Sale chọn tên mình rồi nhập **Data Ads** từng ngày. Ô nhập nhận cả dạng `107+50`. Đơn, Doanh số, SP lấy từ Pancake: kênh Facebook Ads, tính theo ngày tạo đơn giờ Việt Nam, không tính đơn huỷ, CSKH, đơn đổi. CR = Đơn / Data Ads.
+- **Live**: mỗi ngày một dòng. Nhập **Data Live**. Đơn, Doanh số, SP lấy từ đơn Pancake nguồn Livestream. CR Live = Đơn / Data Live, AOV = Doanh số / SP.
+- **Zalo**: mỗi ngày một dòng. Người trực chọn tên mình, nhập **Bài đăng** và **KH quan tâm**. Đơn, Doanh số, SP là toàn bộ đơn Pancake kênh Zalo trong ngày. CR Zalo = Đơn / KH quan tâm, AOV = Doanh số / SP (giống sheet BC-SOL).
+- **Website**: mỗi ngày một dòng. Pancake chưa gắn nguồn Website cho đơn web, nên NV trực tự nhập **Đơn Web, Doanh số Web, SP, Ghi chú**. AOV = Doanh số / SP, UPT = SP / Đơn.
+- Ở dòng chưa có tên, khi Sale nhập số thì tên đang chọn ở đầu trang được điền vào.
+- CR của cả tháng chỉ tính những ngày đã nhập Data (với Zalo là KH quan tâm), để ngày chưa nhập không làm CR bị cao lên. Dòng TỔNG THÁNG trong Excel dùng cùng quy tắc này (`SUMIFS(...,"<>")`).
+- **Xuất báo cáo** mở `daily-report.html` ở tab mới. Đây là dashboard một trang 1536 × 1024, cùng bố cục với file "báo cáo ngày": tổng quan, kết quả theo kênh, cơ cấu doanh thu, Ads theo Sale, chi tiết kênh, hiệu suất nhân viên, tình trạng đơn, so sánh với ngày trước, ghi chú. Trang này lấy số của ngày được chọn từ tab dashboard đã mở nó (`window.opener.sevenamDailyDashboard.build(date)`), gồm đơn Pancake ngày đó và ngày trước, cộng số Sale đã nhập (đọc mới từ server). Target ngày/tháng lưu trong trình duyệt theo từng tháng. Nút **Xuất PNG** dùng html2canvas để lưu ảnh 3072 × 2048. Dashboard ghi ra các phần còn thiếu, ví dụ "Data Ads Thu SOL" hay "Website". Trang chỉ có trên bản Vercel, vì workflow GitHub Pages chưa sao chép file này.
+- **↓ Excel** tải file `.xlsx` của kênh đang xem, theo mẫu BC-SOL: "NHẬP LIỆU KÊNH ADS — <TÊN>", "ZALO — CHI TIẾT THEO NGÀY", "WEBSITE — CHI TIẾT THEO NGÀY". Cột tên có danh sách chọn. **Excel cả team** gồm sheet Tổng hợp (Data/Đơn/DS Ads, DS Live, DS Zalo, DS Web, Tổng DS theo từng người), mỗi Sale một sheet Ads, thêm các sheet Live, Zalo, Web. File được tạo ngay trên trình duyệt, không dùng thư viện ngoài.
+- Số Sale nhập được lưu chung trên server qua `POST /api/pancake`. Action `saleReport` đọc theo tháng. Action `saleReportSave` lưu một ô, với `kind: "ads"` (`staff`, `date`, `value`), `"live"`, `"zalo"` hoặc `"web"` (`date`, `row`). Cả hai action đều yêu cầu mật khẩu dashboard.
+- Nơi lưu là **Vercel Blob store `sevenam-sale-report` ở chế độ private**. Mỗi tháng là một file `sale-report/v1/YYYY-MM.json`, chứa `entries` (Ads), `live`, `zalo` và `web`. Khi đọc, API bỏ qua cache CDN. Khi ghi, API chỉ ghi nếu ETag còn khớp, nên hai người lưu cùng lúc không ghi đè số của nhau. Trình duyệt chỉ đọc lại số này khi mở tab, đổi tháng, bấm ↻, hoặc tối đa vài phút một lần, để giữ số lượt thao tác Blob ở mức thấp.
+- Thư viện `@vercel/blob` được khai báo trong `vercel-pancake-backend/package.json`, Vercel tự cài khi deploy. Nếu chưa gắn Blob store, tab vẫn hiện số đơn, còn phần lưu báo lỗi "Chưa cấu hình kho lưu Data".
 
 ## Đồng bộ dữ liệu và GitHub Pages
 

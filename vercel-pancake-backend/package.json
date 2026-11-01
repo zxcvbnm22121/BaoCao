@@ -2,5 +2,13 @@
   "name": "sevenam-pancake-live-backend",
   "private": true,
   "type": "module",
-  "engines": { "node": "24.x" }
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.8.2"
+  },
+  "overrides": {
+    "zod": "4.6.7"
+  }
 }

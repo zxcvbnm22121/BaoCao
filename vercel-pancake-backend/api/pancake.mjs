@@ -584,6 +584,193 @@ function secureEqual(a,b){
   return diff===0;
 }
 
+// ---------- Sale daily report: numbers the Sales type in ----------
+// Stored in a private Vercel Blob store, one JSON document per month:
+//   sale-report/v1/2026-11.json → {version,month,updatedAt,
+//     entries:{[staff]:{[date]:{data,at}}},            Ads: Data Ads per Sale
+//     live:{[date]:{data,at}},                          Live: Data Live per day
+//     zalo:{[date]:{staff,posts,interested,at}},        Zalo: one row per day
+//     web:{[date]:{staff,orders,revenue,qty,note,at}}}  Website: one row per day
+// Reads skip the CDN cache (useCache:false) so every device sees the newest
+// numbers, and each write is conditional on the ETag read just before it
+// (ifMatch). Two Sales saving at the same moment retry instead of one
+// silently overwriting the other.
+const SALE_REPORT_PREFIX='sale-report/v1/';
+const SALE_NAME_MAX=60,SALE_DATA_MAX=1000000,SALE_STAFF_MAX=40,SALE_NOTE_MAX=200;
+const SALE_CACHE_MS=8000;
+// Typed fields of the one-row-per-day reports: [min,max] for integers.
+const SALE_ROW_FIELDS={
+  live:{data:[0,1000000,'Data Live']},
+  zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm']},
+  web:{staff:'staff',orders:[0,10000,'Đơn Web'],revenue:[0,100000000000,'Doanh số Web'],qty:[0,100000,'SP'],note:'text'}
+};
+const saleMonthCache=new Map();
+let blobModulePromise=null;
+function blobApi(){
+  // Loaded on demand: a missing or broken Blob package must only affect the
+  // Sale report, never the Pancake revenue actions.
+  if(!blobModulePromise)blobModulePromise=import('@vercel/blob').catch(e=>{blobModulePromise=null;throw e});
+  return blobModulePromise
+}
+function saleError(status,message){return Object.assign(new Error(message),{saleStatus:status})}
+function validMonth(v){return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(v||''))}
+function validDay(v){
+  const s=String(v||'');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+  const d=new Date(s+'T00:00:00Z');
+  return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s
+}
+function cleanStaffName(v){
+  const s=String(v??'').replace(/[\u0000-\u001f\u007f]/g,'').replace(/\s+/g,' ').trim();
+  return s.length&&s.length<=SALE_NAME_MAX?s:''
+}
+// "Thu - SOL" and "Thu SOL" are the same Sale; accents still count (Thu ≠ Thư).
+function staffKey(v){return String(v??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'')}
+// One day of the Zalo / Website report. strict=true rejects bad numbers
+// (a save); strict=false drops them (reading what is already stored).
+function cleanSaleRow(kind,row,strict){
+  const spec=SALE_ROW_FIELDS[kind],out={};
+  for(const [field,rule] of Object.entries(spec)){
+    const v=row?.[field];
+    if(rule==='staff'){const s=cleanStaffName(v);if(s)out[field]=s;continue}
+    if(rule==='text'){const s=String(v??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,SALE_NOTE_MAX);if(s)out[field]=s;continue}
+    if(v===null||v===undefined||String(v).trim()==='')continue;
+    const n=Number(v);
+    if(Number.isInteger(n)&&n>=rule[0]&&n<=rule[1])out[field]=n;
+    else if(strict)throw saleError(400,`${rule[2]} phải là số nguyên từ ${rule[0]} đến ${rule[1]}`);
+  }
+  return out
+}
+function emptySaleDoc(month){return {version:1,month,updatedAt:null,entries:{},live:{},zalo:{},web:{}}}
+// Keep only well-formed entries of this month, whatever the stored file holds.
+function cleanSaleDoc(doc,month){
+  const out=emptySaleDoc(month);
+  if(!doc||typeof doc!=='object')return out;
+  out.updatedAt=typeof doc.updatedAt==='string'?doc.updatedAt:null;
+  for(const [rawStaff,days] of Object.entries(doc.entries||{})){
+    const staff=cleanStaffName(rawStaff);
+    if(!staff||!days||typeof days!=='object')continue;
+    for(const [day,v] of Object.entries(days)){
+      const n=Number(v?.data);
+      if(!validDay(day)||!day.startsWith(month)||!Number.isInteger(n)||n<0||n>SALE_DATA_MAX)continue;
+      (out.entries[staff]??={})[day]={data:n,at:typeof v.at==='string'?v.at:null};
+    }
+  }
+  for(const kind of Object.keys(SALE_ROW_FIELDS)){
+    for(const [day,row] of Object.entries(doc[kind]||{})){
+      if(!validDay(day)||!day.startsWith(month))continue;
+      const clean=cleanSaleRow(kind,row,false);
+      if(Object.keys(clean).length)out[kind][day]={...clean,at:typeof row?.at==='string'?row.at:null};
+    }
+  }
+  return out
+}
+function salePath(month){return SALE_REPORT_PREFIX+month+'.json'}
+async function readSaleMonth(month){
+  const {get}=await blobApi();
+  let res=null;
+  try{
+    res=await get(salePath(month),{access:'private',useCache:false,abortSignal:AbortSignal.timeout(10000)});
+  }catch(e){
+    if(e?.constructor?.name==='BlobNotFoundError')res=null;else throw e
+  }
+  if(!res||res.statusCode!==200||!res.stream)return {doc:emptySaleDoc(month),etag:null};
+  const text=await new Response(res.stream).text();
+  let parsed=null;
+  try{parsed=JSON.parse(text)}catch{console.warn('[sale-report] stored month is not valid JSON:',month)}
+  return {doc:cleanSaleDoc(parsed,month),etag:res.blob?.etag||null}
+}
+async function loadSaleMonth(month,{fresh=false}={}){
+  const hit=saleMonthCache.get(month);
+  if(!fresh&&hit&&Date.now()-hit.at<SALE_CACHE_MS)return hit.doc;
+  const {doc}=await readSaleMonth(month);
+  saleMonthCache.set(month,{at:Date.now(),doc});
+  return doc
+}
+function isWriteConflict(e){
+  return e?.constructor?.name==='BlobPreconditionFailedError'||/precondition|already exists/i.test(String(e?.message||''))
+}
+// Read → change → write, retried when someone else wrote in between.
+async function updateSaleMonth(month,change){
+  const {put}=await blobApi();
+  for(let attempt=1;attempt<=5;attempt++){
+    const {doc,etag}=await readSaleMonth(month);
+    change(doc);
+    if(Object.keys(doc.entries).length>SALE_STAFF_MAX)throw saleError(400,'Quá nhiều tên Sale trong tháng này');
+    doc.updatedAt=new Date().toISOString();
+    try{
+      await put(salePath(month),JSON.stringify(doc),{
+        access:'private',contentType:'application/json',addRandomSuffix:false,cacheControlMaxAge:60,
+        // New file: refuse to replace one created a moment ago by someone else.
+        // Existing file: only replace the exact version read above.
+        ...(etag?{ifMatch:etag}:{allowOverwrite:false}),
+        abortSignal:AbortSignal.timeout(10000)
+      });
+      saleMonthCache.set(month,{at:Date.now(),doc});
+      return doc
+    }catch(e){
+      if(!isWriteConflict(e)||attempt===5)throw e;
+      await new Promise(r=>setTimeout(r,120*attempt+Math.floor(Math.random()*120)))
+    }
+  }
+}
+function setAdsEntry(doc,staff,date,value){
+  // One number per Sale per day, whichever spelling of the name it was saved under.
+  const key=staffKey(staff);
+  for(const name of Object.keys(doc.entries)){
+    if(staffKey(name)!==key)continue;
+    delete doc.entries[name][date];
+    if(!Object.keys(doc.entries[name]).length)delete doc.entries[name]
+  }
+  if(value!==null)(doc.entries[staff]??={})[date]={data:value,at:new Date().toISOString()}
+}
+function setDayRow(doc,kind,date,row){
+  if(Object.keys(row).length)doc[kind][date]={...row,at:new Date().toISOString()};
+  else delete doc[kind][date]
+}
+function parseSaleValue(v){
+  if(v===null||v===undefined||String(v).trim()==='')return null;
+  const n=Number(v);
+  if(!Number.isInteger(n)||n<0||n>SALE_DATA_MAX)throw saleError(400,'Data phải là số nguyên từ 0 đến '+SALE_DATA_MAX);
+  return n
+}
+async function handleSaleReport(action,body,res,startedAt){
+  try{
+    if(action==='saleReport'){
+      const month=String(body?.month||'').trim();
+      if(!validMonth(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+      const doc=await loadSaleMonth(month,{fresh:Boolean(body?.fresh)});
+      console.log(`[sale-report] read ${month} staff=${Object.keys(doc.entries).length} live=${Object.keys(doc.live).length} zalo=${Object.keys(doc.zalo).length} web=${Object.keys(doc.web).length} ${Date.now()-startedAt}ms`);
+      return res.status(200).json(doc)
+    }
+    const kind=String(body?.kind||'ads');
+    const date=String(body?.date||'').trim();
+    if(!validDay(date))return res.status(400).json({error:'Ngày không hợp lệ'});
+    let doc;
+    if(kind==='ads'){
+      const staff=cleanStaffName(body?.staff);
+      if(!staff)return res.status(400).json({error:'Chưa chọn tên Sale'});
+      const value=parseSaleValue(body?.value);
+      doc=await updateSaleMonth(date.slice(0,7),d=>setAdsEntry(d,staff,date,value));
+      console.log(`[sale-report] save ads ${date} staff=${JSON.stringify(staff)} value=${value??'(xoá)'} ${Date.now()-startedAt}ms`);
+    }else if(Object.hasOwn(SALE_ROW_FIELDS,kind)){
+      const row=cleanSaleRow(kind,body?.row,true);
+      doc=await updateSaleMonth(date.slice(0,7),d=>setDayRow(d,kind,date,row));
+      console.log(`[sale-report] save ${kind} ${date} ${JSON.stringify(row)} ${Date.now()-startedAt}ms`);
+    }else return res.status(400).json({error:'Loại báo cáo không hợp lệ'});
+    return res.status(200).json(doc)
+  }catch(e){
+    if(e?.saleStatus)return res.status(e.saleStatus).json({error:e.message});
+    const msg=String(e?.message||e);
+    console.error(`[sale-report] ${action} failed after ${Date.now()-startedAt}ms:`,e);
+    if(/No blob credentials|No read-write token|Cannot find (module|package) '@vercel\/blob'|ERR_MODULE_NOT_FOUND|store_not_found|BlobStoreNotFound/i.test(msg+' '+(e?.code||'')+' '+(e?.constructor?.name||''))){
+      return res.status(503).json({error:'Chưa cấu hình kho lưu Data trên Vercel (Blob store)'})
+    }
+    if(isWriteConflict(e))return res.status(409).json({error:'Có người vừa lưu cùng lúc, hãy bấm lưu lại'});
+    return res.status(502).json({error:action==='saleReport'?'Không đọc được Data đã lưu':'Không lưu được Data lúc này'})
+  }
+}
+
 function logServed(action,payload,startedAt,cached=false){
   const m=payload?.meta||{};
   console.log(`[pancake] ${action} ${m.from||'?'}→${m.to||'?'} orders=${m.count??payload?.orders?.length??0} passes=${m.fetchPasses??'-'} skipped=${m.skippedOrders??0} ${cached?'cache ':''}${Date.now()-startedAt}ms`);
@@ -616,6 +803,7 @@ export default async function handler(req,res){
     if(creds.shopId)SHOP_ID=creds.shopId;
 
     const action=String(req.body?.action||'live');
+    if(action==='saleReport'||action==='saleReportSave')return handleSaleReport(action,req.body,res,startedAt);
     if(action==='open'){
       // Fast path: use the encrypted snapshot when available. If Pages is
       // unavailable or its encrypted snapshot is stale/incompatible, fall back
