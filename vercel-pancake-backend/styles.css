@@ -505,8 +505,8 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .tablePanel table.reportTable{min-width:0}
   .reportTable th,.reportTable td{padding:5px 7px}
   .reportTable .rWeekCol,.reportTable .rYear{display:none}
-  .reportTable.kind-ads .rFull,.reportTable.kind-live .rFull{display:none}
-  .reportTable.kind-ads .rShort,.reportTable.kind-live .rShort{display:inline}
+  .reportTable.kind-ads .rFull{display:none}
+  .reportTable.kind-ads .rShort{display:inline}
   .reportTable .rWeek{display:block;font-size:11px;color:var(--muted);line-height:1.2}
   .reportInput{height:36px;font-size:16px;padding:0 7px}
   .reportDataInput{width:74px}
@@ -519,7 +519,8 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .reportTable.kind-zalo .rWeekCol,.reportTable.kind-web .rWeekCol{display:none}
   .reportKindGroup{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr)}
   .reportKindGroup .productPeriodBtn{min-width:0}
-  .tablePanel table.reportTable.kind-live{min-width:0}
+  .tablePanel table.reportTable.kind-live{min-width:700px}
+  .reportTable.kind-live .rWeekCol{display:none}
   .mobileBottomNav{position:fixed;left:0;right:0;bottom:0;z-index:75;display:grid;grid-template-columns:repeat(7,1fr);background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .mobileNavBtn{border:0;background:transparent;color:var(--muted);border-radius:10px;min-height:52px;display:grid;place-items:center;align-content:center;gap:2px;padding:4px 2px}
   .mobileNavBtn span{font-size:15px;line-height:1}
