@@ -588,7 +588,7 @@ function secureEqual(a,b){
 // Stored in a private Vercel Blob store, one JSON document per month:
 //   sale-report/v1/2026-11.json → {version,month,updatedAt,
 //     entries:{[staff]:{[date]:{data,at}}},            Ads: Data Ads per Sale
-//     live:{[date]:{data,at}},                          Live: Data Live per day
+//     live:{[date]:{data,orders,revenue,qty,at}},       Live: typed, one row per day
 //     zalo:{[date]:{staff,posts,interested,at}},        Zalo: one row per day
 //     web:{[date]:{staff,orders,revenue,qty,note,at}}}  Website: one row per day
 // Reads skip the CDN cache (useCache:false) so every device sees the newest
@@ -600,7 +600,7 @@ const SALE_NAME_MAX=60,SALE_DATA_MAX=1000000,SALE_STAFF_MAX=40,SALE_NOTE_MAX=200
 const SALE_CACHE_MS=8000;
 // Typed fields of the one-row-per-day reports: [min,max] for integers.
 const SALE_ROW_FIELDS={
-  live:{data:[0,1000000,'Data Live']},
+  live:{data:[0,1000000,'Data Live'],orders:[0,10000,'Đơn Live'],revenue:[0,100000000000,'Doanh số Live'],qty:[0,100000,'SP']},
   zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm']},
   web:{staff:'staff',orders:[0,10000,'Đơn Web'],revenue:[0,100000000000,'Doanh số Web'],qty:[0,100000,'SP'],note:'text'}
 };
@@ -626,7 +626,7 @@ function cleanStaffName(v){
 }
 // "Thu - SOL" and "Thu SOL" are the same Sale; accents still count (Thu ≠ Thư).
 function staffKey(v){return String(v??'').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'')}
-// One day of the Zalo / Website report. strict=true rejects bad numbers
+// One day of the Live / Zalo / Website report. strict=true rejects bad numbers
 // (a save); strict=false drops them (reading what is already stored).
 function cleanSaleRow(kind,row,strict){
   const spec=SALE_ROW_FIELDS[kind],out={};
