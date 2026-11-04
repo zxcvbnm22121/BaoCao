@@ -589,7 +589,7 @@ function secureEqual(a,b){
 //   sale-report/v1/2026-11.json → {version,month,updatedAt,
 //     entries:{[staff]:{[date]:{data,at}}},            Ads: Data Ads per Sale
 //     live:{[date]:{data,orders,revenue,qty,at}},       Live: typed, one row per day
-//     zalo:{[date]:{staff,posts,interested,at}},        Zalo: one row per day
+//     zalo:{[date]:{staff,posts,interested,orders,revenue,qty,at}}, Zalo: typed, one row per day
 //     web:{[date]:{staff,orders,revenue,qty,note,at}}}  Website: one row per day
 // Reads skip the CDN cache (useCache:false) so every device sees the newest
 // numbers, and each write is conditional on the ETag read just before it
@@ -601,7 +601,7 @@ const SALE_CACHE_MS=8000;
 // Typed fields of the one-row-per-day reports: [min,max] for integers.
 const SALE_ROW_FIELDS={
   live:{data:[0,1000000,'Data Live'],orders:[0,10000,'Đơn Live'],revenue:[0,100000000000,'Doanh số Live'],qty:[0,100000,'SP']},
-  zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm']},
+  zalo:{staff:'staff',posts:[0,10000,'Bài đăng'],interested:[0,1000000,'KH quan tâm'],orders:[0,10000,'Đơn Zalo'],revenue:[0,100000000000,'Doanh số Zalo'],qty:[0,100000,'SP']},
   web:{staff:'staff',orders:[0,10000,'Đơn Web'],revenue:[0,100000000000,'Doanh số Web'],qty:[0,100000,'SP'],note:'text'}
 };
 const saleMonthCache=new Map();
