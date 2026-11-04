@@ -514,7 +514,7 @@ dialog::backdrop{background:rgba(10,10,10,.45);backdrop-filter:blur(2px)}
   .reportMoneyInput{width:118px}
   .reportNoteInput{width:180px}
   select.reportStaffPick{width:118px}
-  .tablePanel table.reportTable.kind-zalo{min-width:760px}
+  .tablePanel table.reportTable.kind-zalo{min-width:900px}
   .tablePanel table.reportTable.kind-web{min-width:820px}
   .reportTable.kind-zalo .rWeekCol,.reportTable.kind-web .rWeekCol{display:none}
   .reportKindGroup{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr)}

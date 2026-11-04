@@ -385,7 +385,7 @@ function render(){
 
   // 9. Ghi chú
   const notes=[
-    `Pancake Ads + Zalo (bỏ huỷ / CSKH / đơn đổi): <b>${cur.pancakeUsed.orders} đơn – ${fmt(cur.pancakeUsed.revenue)}</b> · Live nhập tay: <b>${cur.live.orders} đơn – ${fmt(cur.live.revenue)}</b> · Website nhập tay: <b>${cur.web.orders} đơn – ${fmt(cur.web.revenue)}</b>.`,
+    `Pancake Ads (bỏ huỷ / CSKH / đơn đổi): <b>${cur.pancakeUsed.orders} đơn – ${fmt(cur.pancakeUsed.revenue)}</b> · Live nhập tay: <b>${cur.live.orders} đơn – ${fmt(cur.live.revenue)}</b> · Zalo nhập tay: <b>${cur.zalo.orders} đơn – ${fmt(cur.zalo.revenue)}</b> · Website nhập tay: <b>${cur.web.orders} đơn – ${fmt(cur.web.revenue)}</b>.`,
     cur.missing.length?`<span style="color:#d10f0f">Còn thiếu: <b>${esc(cur.missing.join(' · '))}</b>.</span>`:'Đã nhập đủ Data Ads, Live, Zalo và Website.'
   ];
   const oth=cur.others.filter(x=>x.orders);
