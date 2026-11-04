@@ -666,11 +666,21 @@ function cleanSaleDoc(doc,month){
   return out
 }
 function salePath(month){return SALE_REPORT_PREFIX+month+'.json'}
+// The ETag a read returns must be the exact one the write API compares
+// against. Once a month file grows past ~1 KB the CDN compresses it for
+// clients that accept gzip/br and sends a weak ETag (W/"…") that never
+// matches, so every save failed with "ETag mismatch". Asking for the plain
+// bytes keeps the strong ETag; stripping W/ covers any proxy that still
+// weakens it.
+function strongEtag(v){
+  const s=String(v??'').trim().replace(/^W\//i,'');
+  return s||null
+}
 async function readSaleMonth(month){
   const {get}=await blobApi();
   let res=null;
   try{
-    res=await get(salePath(month),{access:'private',useCache:false,abortSignal:AbortSignal.timeout(10000)});
+    res=await get(salePath(month),{access:'private',useCache:false,headers:{'accept-encoding':'identity'},abortSignal:AbortSignal.timeout(10000)});
   }catch(e){
     if(e?.constructor?.name==='BlobNotFoundError')res=null;else throw e
   }
@@ -678,7 +688,7 @@ async function readSaleMonth(month){
   const text=await new Response(res.stream).text();
   let parsed=null;
   try{parsed=JSON.parse(text)}catch{console.warn('[sale-report] stored month is not valid JSON:',month)}
-  return {doc:cleanSaleDoc(parsed,month),etag:res.blob?.etag||null}
+  return {doc:cleanSaleDoc(parsed,month),etag:strongEtag(res.blob?.etag),rawEtag:res.blob?.etag||null}
 }
 async function loadSaleMonth(month,{fresh=false}={}){
   const hit=saleMonthCache.get(month);
@@ -694,7 +704,7 @@ function isWriteConflict(e){
 async function updateSaleMonth(month,change){
   const {put}=await blobApi();
   for(let attempt=1;attempt<=5;attempt++){
-    const {doc,etag}=await readSaleMonth(month);
+    const {doc,etag,rawEtag}=await readSaleMonth(month);
     change(doc);
     if(Object.keys(doc.entries).length>SALE_STAFF_MAX)throw saleError(400,'Quá nhiều tên Sale trong tháng này');
     doc.updatedAt=new Date().toISOString();
@@ -709,6 +719,7 @@ async function updateSaleMonth(month,change){
       saleMonthCache.set(month,{at:Date.now(),doc});
       return doc
     }catch(e){
+      if(isWriteConflict(e))console.warn(`[sale-report] write conflict ${month} attempt=${attempt} etag=${JSON.stringify(rawEtag)}`);
       if(!isWriteConflict(e)||attempt===5)throw e;
       await new Promise(r=>setTimeout(r,120*attempt+Math.floor(Math.random()*120)))
     }
